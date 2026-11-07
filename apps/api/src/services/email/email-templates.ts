@@ -331,3 +331,21 @@ export function syncFailureEmailTemplate(
   `;
   return getBaseTemplate(content);
 }
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] ?? character);
+}
+
+export function trialAccessEmailTemplate(name: string, accessUrl: string): string {
+  const safeUrl = escapeHtml(accessUrl);
+  const content = `
+    ${eyebrow('Seu período de teste')}
+    ${heading(`Olá, ${escapeHtml(name)}!`)}
+    ${bodyText('Seu acesso ao Trial está pronto. Use o link abaixo para entrar na sua conta. Ele é válido por 15 minutos e pode ser usado uma única vez.', 'center')}
+    ${ctaButton(safeUrl, 'Acessar minha conta')}
+    ${bodyText('Se você não solicitou este acesso, pode ignorar este email.', 'center')}
+  `;
+  return getBaseTemplate(content);
+}

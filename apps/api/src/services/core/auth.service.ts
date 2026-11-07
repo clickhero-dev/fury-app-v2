@@ -27,6 +27,9 @@ export type MeResponse = UserDTO & {
   businessContext: string | null;
 };
 
+type PublicTrialSessionUser = NonNullable<Awaited<ReturnType<AuthRepository['findUserById']>>>;
+type PublicTrialSession = { user: UserDTO; tokens: { accessToken: string; refreshToken: string } };
+
 // ── helpers puros (sem dependência de repo) ──────────────────────────
 function generateSlug(companyName: string): string {
   return companyName
@@ -94,6 +97,7 @@ export class AuthService {
     private readonly deps: {
       jwt: { generateAccessToken: typeof generateAccessToken; generateRefreshToken: typeof generateRefreshToken; verifyRefreshToken: typeof verifyRefreshToken };
       email: { sendWelcomeEmail: EmailService['sendWelcomeEmail']; sendOtpEmail: EmailService['sendOtpEmail']; sendPasswordResetConfirmation: EmailService['sendPasswordResetConfirmation'] };
+      storeRefreshTokenHash: typeof storeRefreshTokenHash;
     } = {
       jwt: { generateAccessToken, generateRefreshToken, verifyRefreshToken },
       email: {
@@ -101,7 +105,12 @@ export class AuthService {
         sendOtpEmail: emailService.sendOtpEmail.bind(emailService),
         sendPasswordResetConfirmation: emailService.sendPasswordResetConfirmation.bind(emailService),
       },
+      storeRefreshTokenHash,
     },
+    private readonly withPublicTrialSessionUser: (
+      userId: string,
+      issueSession: (user: PublicTrialSessionUser) => Promise<PublicTrialSession>,
+    ) => Promise<PublicTrialSession | null> = async () => null,
   ) {}
 
   private repo(t: string): AuthRepository {
@@ -169,6 +178,20 @@ export class AuthService {
     await storeRefreshTokenHash(user.id, refreshToken);
 
     return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
+  }
+
+  /** Emite sessão somente para usuário vinculado ao fluxo público de Trial. */
+  async issuePublicTrialSessionForUser(userId: string): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
+    const session = await this.withPublicTrialSessionUser(userId, async (user) => {
+      const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+      const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
+      await this.deps.storeRefreshTokenHash(user.id, refreshToken);
+      return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
+    });
+    if (!session) {
+      throw new AppError(401, 'INVALID_ACCESS_LINK', 'Link inválido ou expirado.');
+    }
+    return session;
   }
 
   async refresh(data: { refreshToken: string }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {

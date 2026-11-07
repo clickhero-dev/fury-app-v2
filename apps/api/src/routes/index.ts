@@ -33,6 +33,7 @@ import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.m
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
 import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
 import { createV2Router } from "./v2.routes.js";
+import publicTrialRoutes from './public-trial.routes.js';
 import { controllers } from "../di.js";
 
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
@@ -41,6 +42,7 @@ const router = Router();
 
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
+router.use('/public/trial', publicTrialRoutes);
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
 router.use("/meta", metaRoutes);

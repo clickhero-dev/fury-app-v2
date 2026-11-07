@@ -9,7 +9,7 @@ function makeDb() {
     query: {
       users: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
       tenants: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
-      plans: { findFirst: vi.fn(async () => ({ id: 'plan-trial', name: 'Trial', isActive: true })) },
+      plans: { findFirst: vi.fn(async () => ({ id: 'plan-trial', name: 'Trial', isActive: true, priceCents: 0, features: { trialDays: 7, images: 5, revisionsPerImage: 3, videos: false }, limits: { creativesPerMonth: 5, modificationsPerCreative: 3, videosPerMonth: 0 } })) },
     },
     update, insert, delete: vi.fn(() => ({ where: async () => {} })),
   };

@@ -134,6 +134,8 @@ export function RegisterPage() {
             </p>
           )}
 
+          <Link to="/trial/solicitar" className="block text-center font-semibold text-[#17708A]">Solicitar Trial gratuito</Link>
+
           {/* Link para Login */}
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Já tem conta?{' '}

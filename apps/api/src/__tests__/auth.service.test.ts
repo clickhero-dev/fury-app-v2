@@ -1,3 +1,12 @@
+/*
+ * Funcionalidade: emitir sessão por magic link somente para usuários de Trial público.
+ * Cenários:
+ * - Dado usuário vinculado a Trial público, quando pede sessão, então recebe tokens normais.
+ * - Dado usuário sem conta Trial pública, quando pede sessão, então recebe rejeição genérica.
+ * - Dado conta Trial pública com email atual diferente do snapshot, quando pede sessão, então não recebe tokens.
+ * - Dado elegibilidade validada sob lock, quando emite sessão, então assina e persiste refresh antes de liberar o lock.
+ * - Dado email divergente ao adquirir lock, quando emite sessão, então rejeita sem gerar tokens.
+ */
 import { describe, it, expect, vi } from 'vitest';
 import { AuthService } from '../services/core/auth.service.js';
 
@@ -23,17 +32,109 @@ function makeRepo(override: Record<string, any> = {}) {
   } as any;
 }
 
-function makeSvc(repo: any) {
+type Session = { user: any; tokens: { accessToken: string; refreshToken: string } };
+type WithPublicTrialSessionUser = (userId: string, issueSession: (user: any) => Promise<Session>) => Promise<Session | null>;
+
+function makeSvc(repo: any, withPublicTrialSessionUser: WithPublicTrialSessionUser = async () => null) {
   return new AuthService(
     () => repo,
     {
       jwt: { generateAccessToken: vi.fn(() => 'at'), generateRefreshToken: vi.fn(() => 'rt'), verifyRefreshToken: vi.fn(() => ({ userId: 'u1' })) },
       email: { sendWelcomeEmail: vi.fn(async () => undefined), sendOtpEmail: vi.fn(async () => undefined), sendPasswordResetConfirmation: vi.fn(async () => undefined) },
+      storeRefreshTokenHash: vi.fn(async () => undefined),
     } as any,
+    withPublicTrialSessionUser,
   );
 }
 
 describe('AuthService (deep DI)', () => {
+  it('Dado usuário autenticado por link de acesso, quando cria sessão, então emite access e refresh tokens', async () => {
+    const svc = makeSvc(makeRepo(), async (_userId, issueSession) => issueSession(user));
+    await expect(svc.issuePublicTrialSessionForUser('u1')).resolves.toEqual({
+      user: expect.objectContaining({ id: 'u1', tenantId: 't1' }),
+      tokens: { accessToken: 'at', refreshToken: 'rt' },
+    });
+  });
+
+  it('Dado usuário sem conta Trial pública, quando tenta emitir sessão por link, então rejeita o acesso', async () => {
+    const withPublicTrialSessionUser = vi.fn(async () => null);
+    const svc = makeSvc(makeRepo(), withPublicTrialSessionUser);
+
+    await expect(svc.issuePublicTrialSessionForUser('u1')).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'INVALID_ACCESS_LINK',
+    });
+    expect(withPublicTrialSessionUser).toHaveBeenCalledWith('u1', expect.any(Function));
+  });
+
+  it('Dado conta Trial pública com email atual diferente do snapshot, quando pede sessão, então não recebe tokens', async () => {
+    const jwt = {
+      generateAccessToken: vi.fn(() => 'at'),
+      generateRefreshToken: vi.fn(() => 'rt'),
+      verifyRefreshToken: vi.fn(() => ({ userId: 'u1' })),
+    };
+    const storeRefreshTokenHash = vi.fn(async () => undefined);
+    const withPublicTrialSessionUser = vi.fn(async () => null);
+    const service = new AuthService(
+      () => makeRepo(),
+      {
+        jwt,
+        email: { sendWelcomeEmail: vi.fn(), sendOtpEmail: vi.fn(), sendPasswordResetConfirmation: vi.fn() },
+        storeRefreshTokenHash,
+      } as any,
+      withPublicTrialSessionUser,
+    );
+
+    await expect(service.issuePublicTrialSessionForUser('u1')).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'INVALID_ACCESS_LINK',
+    });
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
+    expect(jwt.generateRefreshToken).not.toHaveBeenCalled();
+    expect(storeRefreshTokenHash).not.toHaveBeenCalled();
+  });
+
+  it('Dado elegibilidade validada sob lock, quando emite sessão, então assina e persiste refresh antes de liberar o lock', async () => {
+    const currentUser = { ...user, email: 'snapshot@example.com' };
+    let lockHeld = false;
+    const jwt = {
+      generateAccessToken: vi.fn(() => { expect(lockHeld).toBe(true); return 'at'; }),
+      generateRefreshToken: vi.fn(() => { expect(lockHeld).toBe(true); return 'rt'; }),
+      verifyRefreshToken: vi.fn(() => ({ userId: 'u1' })),
+    };
+    const storeRefreshTokenHash = vi.fn(async () => { expect(lockHeld).toBe(true); });
+    const withPublicTrialSessionUser = vi.fn(async (_userId: string, issueSession: (value: any) => Promise<Session>) => {
+      lockHeld = true;
+      try { return await issueSession(currentUser); } finally { lockHeld = false; }
+    });
+    const service = makeSvc(makeRepo(), withPublicTrialSessionUser);
+    (service as any).deps.jwt = jwt;
+    (service as any).deps.storeRefreshTokenHash = storeRefreshTokenHash;
+
+    const session = await service.issuePublicTrialSessionForUser('u1');
+
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(expect.objectContaining({ email: currentUser.email }));
+    expect(session.user.email).toBe(currentUser.email);
+    expect(storeRefreshTokenHash).toHaveBeenCalledWith('u1', 'rt');
+    expect(lockHeld).toBe(false);
+  });
+
+  it('Dado email divergente ao adquirir lock, quando emite sessão, então rejeita sem gerar tokens', async () => {
+    const jwt = {
+      generateAccessToken: vi.fn(() => 'at'),
+      generateRefreshToken: vi.fn(() => 'rt'),
+      verifyRefreshToken: vi.fn(() => ({ userId: 'u1' })),
+    };
+    const withPublicTrialSessionUser = vi.fn(async () => null);
+    const service = makeSvc(makeRepo(), withPublicTrialSessionUser);
+    (service as any).deps.jwt = jwt;
+
+    await expect(service.issuePublicTrialSessionForUser('u1')).rejects.toMatchObject({ statusCode: 401, code: 'INVALID_ACCESS_LINK' });
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
+    expect(jwt.generateRefreshToken).not.toHaveBeenCalled();
+    expect(withPublicTrialSessionUser).toHaveBeenCalledWith('u1', expect.any(Function));
+  });
+
   it('getMe injeta dados do tenant via repo', async () => {
     const repo = makeRepo({ findTenant: vi.fn(async () => ({ name: 'Empresa', slug: 'emp', codigo: 'ABC12345', businessContext: 'restaurante' })) });
     const svc = makeSvc(repo);

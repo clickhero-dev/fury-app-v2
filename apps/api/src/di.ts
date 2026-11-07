@@ -74,6 +74,11 @@ import { MetaHealthcheckController } from './controllers/meta-healthcheck.contro
 import { DemoDashboardRepository } from './repository/demo-dashboard.repository.js';
 import { DemoDashboardService } from './services/dashboard/demo-dashboard.service.js';
 import { DemoDashboardController } from './controllers/demo-dashboard.controller.js';
+import { PublicTrialRepository } from './repository/public-trial.repository.js';
+import { PublicTrialFlowService } from './services/billing/public-trial-flow.service.js';
+import { buildPublicTrialAccessUrl } from './services/billing/public-trial.service.js';
+import { PublicTrialController } from './controllers/public-trial.controller.js';
+import { emailService } from './services/email/email.service.js';
 
 /**
  * Composition root (DI) da API.
@@ -103,7 +108,13 @@ export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
-export const authService = new AuthService();
+export const publicTrialRepository = new PublicTrialRepository();
+export const authService = new AuthService(undefined, undefined, (userId, issueSession) => publicTrialRepository.withPublicTrialSessionUser(userId, issueSession));
+export const publicTrialService = new PublicTrialFlowService(publicTrialRepository, {
+  issueSession: (userId) => authService.issuePublicTrialSessionForUser(userId),
+  sendAccessEmail: (to, name, url) => emailService.sendTrialAccessEmail(to, name, url),
+  accessUrl: buildPublicTrialAccessUrl(),
+});
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
@@ -152,6 +163,7 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  publicTrial: new PublicTrialController(publicTrialService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),
