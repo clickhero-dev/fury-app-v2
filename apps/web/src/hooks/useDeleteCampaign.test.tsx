@@ -1,3 +1,4 @@
+/* @vitest-environment jsdom */
 /*
  * Funcionalidade: excluir campanha indisponível
  * Cenário: a campanha já foi removida ou não está disponível no contexto atual
