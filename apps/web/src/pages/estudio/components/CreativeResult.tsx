@@ -57,7 +57,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [ratingVisible, setRatingVisible] = useState(false);
-  const ratingDismissedRef = useRef(false);
+  const ratingDismissedAssetRef = useRef<string | null>(null);
 
   // ponytail: máscara canvas — pintura contínua (mousedown + drag)
   const [hasMask, setHasMask] = useState(false);
@@ -71,14 +71,21 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const isVideo = currentResult.type === 'video';
   const [videoMeta, setVideoMeta] = useState(currentResult.videoMeta ?? null);
   const adjustVideo = useAdjustStudioVideo();
+  const currentAssetIdRef = useRef(currentResult.assetId);
+  currentAssetIdRef.current = currentResult.assetId;
 
   const ratingMutation = useMutation({
-    mutationFn: async (rating: number) => (await api.put(`/studio/assets/${currentResult.assetId}/rating`, { rating })).data,
-    onSuccess: () => { ratingDismissedRef.current = true; setRatingVisible(false); },
+    mutationFn: async ({ assetId, rating }: { assetId: string; rating: number }) => (await api.put(`/studio/assets/${assetId}/rating`, { rating })).data,
+    onSuccess: (_data, { assetId }) => {
+      if (currentAssetIdRef.current !== assetId) return;
+      ratingDismissedAssetRef.current = assetId;
+      setRatingVisible(false);
+    },
   });
 
   useEffect(() => {
-    if (!showVariationSuggestion || ratingDismissedRef.current) return;
+    setRatingVisible(false);
+    if (!showVariationSuggestion || ratingDismissedAssetRef.current === currentResult.assetId) return;
     const timer = window.setTimeout(() => setRatingVisible(true), 5_000);
     return () => window.clearTimeout(timer);
   }, [currentResult.assetId, showVariationSuggestion]);
@@ -286,8 +293,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
     <div className="space-y-6">
       {ratingVisible && (
         <CreativeRatingPrompt
-          onSubmit={(rating) => ratingMutation.mutate(rating)}
-          onClose={() => { ratingDismissedRef.current = true; setRatingVisible(false); }}
+          onSubmit={(rating) => ratingMutation.mutate({ assetId: currentResult.assetId, rating })}
+          onClose={() => { ratingDismissedAssetRef.current = currentResult.assetId; setRatingVisible(false); }}
           isSubmitting={ratingMutation.isPending}
           error={ratingMutation.isError ? 'Não foi possível enviar sua avaliação. Tente novamente.' : undefined}
         />
