@@ -214,6 +214,7 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
   'POST /api/admin/tickets': { summary: 'Abrir ticket no ClickUp', tags: ['Superadmin'], auth: true },
   'GET /api/admin/tickets': { summary: 'Listar tickets do ClickUp', tags: ['Superadmin'], auth: true },
   'GET /api/admin/tickets/assignees': { summary: 'Listar responsáveis ClickUp', tags: ['Superadmin'], auth: true },
+  'POST /api/admin/tickets/:id/review': { summary: 'Aprovar ou reprovar ticket em homologação', tags: ['Superadmin'], auth: true },
   'GET /api/admin/users/check-email/:email': { summary: 'Verificar disponibilidade de email', tags: ['Superadmin'], auth: true },
   'PATCH /api/admin/users/:id': { summary: 'Atualizar usuário', tags: ['Superadmin'], auth: true, requestSchema: 'UpdateUserRequest' },
   'DELETE /api/admin/users/:id': { summary: 'Excluir usuário', tags: ['Superadmin'], auth: true },
