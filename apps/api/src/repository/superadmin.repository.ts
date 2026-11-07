@@ -15,6 +15,7 @@ import {
 } from '@fury/db';
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
+import { provisionTrialSubscription } from '../services/billing/trial-signup.js';
 
 type Tenant = typeof tenants.$inferSelect;
 type User = typeof users.$inferSelect;
@@ -165,6 +166,14 @@ export class SuperAdminRepository extends TenantScopedRepository {
           passwordHash: data.passwordHash,
           role: data.userRole,
         }).returning();
+        await provisionTrialSubscription({
+          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: eq(plans.technicalKey, key) })) ?? null,
+          querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) })) ?? null,
+          insertSubscription: async (values) => {
+            const [subscription] = await tx.insert(subscriptions).values(values as typeof subscriptions.$inferInsert).returning({ id: subscriptions.id });
+            return subscription;
+          },
+        }, tenant.id, new Date());
         return { status: 'created' as const, tenant, user };
       });
     } catch (error) {
