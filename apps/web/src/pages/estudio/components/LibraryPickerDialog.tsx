@@ -22,7 +22,7 @@ interface Props {
 
 /** "Meus modelos" (só modelos, 1) e "Minhas fotos" (produtos/equipe, com filtro). */
 export function LibraryPickerDialog({ mode, selectedIds, maxArt, onClose, onConfirm, onUploadFiles, onUploadClick }: Props) {
-  const { data: photos = [], isLoading } = useStudioLibrary();
+  const { data: photos = [], isLoading, isError, refetch } = useStudioLibrary();
   const [picked, setPicked] = useState<string[]>([]);
   const [filter, setFilter] = useState<'todas' | LibraryKind>('todas');
 
@@ -74,6 +74,11 @@ export function LibraryPickerDialog({ mode, selectedIds, maxArt, onClose, onConf
           <div className="flex justify-center py-10">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
           </div>
+        ) : isError ? (
+          <div className="space-y-2 py-10 text-center text-xs text-error">
+            <p role="alert">Não foi possível carregar suas imagens.</p>
+            <button type="button" className="underline" onClick={() => void refetch()}>Tentar novamente</button>
+          </div>
         ) : (
           <div className="grid max-h-[50vh] grid-cols-4 gap-3 overflow-y-auto pr-1 sm:grid-cols-5">
             {isModelo ? (
@@ -117,7 +122,7 @@ export function LibraryPickerDialog({ mode, selectedIds, maxArt, onClose, onConf
           </div>
         )}
 
-        {!isLoading && visible.length === 0 && (
+        {!isLoading && !isError && visible.length === 0 && (
           <p className="text-center text-xs text-text-tertiary">
             {isModelo ? 'Você ainda não tem modelos. Envie um anúncio que gostou.' : 'Nenhuma foto aqui ainda.'}
           </p>
