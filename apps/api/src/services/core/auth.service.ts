@@ -342,12 +342,12 @@ export class AuthService {
   async setInitialPassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
     if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
-    if (user.passwordHash) {
+    if (user.passwordHash && !user.mustChangePassword) {
       throw new AppError(409, 'PASSWORD_ALREADY_SET', 'Esta conta já tem uma senha. Use "alterar senha".');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.repo('').patchUser(userId, { passwordHash });
+    await this.repo('').patchUser(userId, { passwordHash, mustChangePassword: false });
     await revokeRefreshToken(userId);
 
     this.deps.email.sendPasswordResetConfirmation(user.email).catch((error: any) => {

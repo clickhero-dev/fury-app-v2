@@ -26,8 +26,9 @@ export function TrialAccessPage() {
       localStorage.setItem('refreshToken', result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
       localStorage.setItem('fury-public-trial', 'true');
+      if (result.user.mustChangePassword) localStorage.setItem('fury-trial-password-pending', 'true');
       dispatch(login({ token: result.token, refreshToken: result.refreshToken, name: result.user.name, email: result.user.email, role: result.user.role, tenantId: result.user.tenantId }));
-      navigate('/estudio', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch {
       setState('error');
     }

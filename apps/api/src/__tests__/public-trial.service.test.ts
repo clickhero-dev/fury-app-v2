@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PublicTrialService } from '../services/core/public-trial.service.js';
 
 describe('PublicTrialService', () => {
-  it('mantém o fluxo idempotente no mesmo tenant e emite novo link', async () => {
+  it('retorna redirect_url temporário somente para conta criada', async () => {
     const repository = {
       createAccount: vi.fn().mockResolvedValue({ accountId: 'account-1', user: { id: 'user-1', tenantId: 'tenant-1', email: 'ana@example.com', name: 'Ana', role: 'owner' } }),
       issueMagicLink: vi.fn()
@@ -11,12 +11,19 @@ describe('PublicTrialService', () => {
     };
     const mailer = { sendPublicTrialMagicLink: vi.fn().mockResolvedValue(undefined) };
     const service = new PublicTrialService(repository as any, mailer as any);
-    await service.signup({ name: 'Ana', email: ' ANA@example.com ' });
-    await service.signup({ name: 'Ana', email: 'ana@example.com' });
-    expect(repository.createAccount).toHaveBeenCalledTimes(2);
-    expect(repository.issueMagicLink).toHaveBeenCalledTimes(2);
+    const result = await service.signup({ name: 'Ana', email: ' ANA@example.com ' });
+    expect(result).toMatchObject({ created: true, redirectUrl: expect.stringContaining('#token=') });
+    expect(repository.createAccount).toHaveBeenCalledTimes(1);
+    expect(repository.issueMagicLink).toHaveBeenCalledTimes(1);
     expect(mailer.sendPublicTrialMagicLink).toHaveBeenCalledTimes(1);
     expect(mailer.sendPublicTrialMagicLink.mock.calls[0][2]).toContain('#token=');
+  });
+
+  it('não emite nem retorna token quando o e-mail já existe', async () => {
+    const repository = { createAccount: vi.fn().mockResolvedValue({ accountId: '', user: { email: 'ana@example.com' } }), issueMagicLink: vi.fn() };
+    const service = new PublicTrialService(repository as any, { sendPublicTrialMagicLink: vi.fn() } as any);
+    await expect(service.signup({ name: 'Ana', email: 'ana@example.com' })).resolves.toEqual({ created: false, error: 'EMAIL_JA_CADASTRADO' });
+    expect(repository.issueMagicLink).not.toHaveBeenCalled();
   });
 
   it('não falha o aceite quando o provedor de email está indisponível', async () => {
@@ -25,6 +32,6 @@ describe('PublicTrialService', () => {
       issueMagicLink: vi.fn().mockResolvedValue({}),
     };
     const service = new PublicTrialService(repository as any, { sendPublicTrialMagicLink: vi.fn().mockRejectedValue(new Error('smtp')) } as any);
-    await expect(service.signup({ name: 'Ana', email: 'ana@example.com' })).resolves.toBeUndefined();
+    await expect(service.signup({ name: 'Ana', email: 'ana@example.com' })).resolves.toMatchObject({ created: true, redirectUrl: expect.any(String) });
   });
 });

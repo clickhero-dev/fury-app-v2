@@ -201,13 +201,14 @@ export function welcomeEmailTemplate(name: string): string {
   return getBaseTemplate(content);
 }
 
-export function publicTrialMagicLinkEmailTemplate(name: string, url: string): string {
+export function publicTrialMagicLinkEmailTemplate(name: string, url: string, temporaryPassword?: string): string {
   const safeName = name.replace(/[<&>"']/g, '');
   return getBaseTemplate(`
     ${eyebrow('Seu acesso está pronto')}
     ${bodyText(`Olá, <strong style="color: ${TEXT};">${safeName}</strong>! Sua conta trial foi criada.`, 'center')}
     ${ctaButton(url, 'Entrar no Ady')}
-    ${bodyText('Este link é de uso único e expira em 15 minutos. Se você não solicitou este acesso, ignore este email.', 'center')}
+    ${bodyText('Este link é de uso único e expira em 1 hora. Se você não solicitou este acesso, ignore este email.', 'center')}
+    ${temporaryPassword ? bodyText(`Senha temporária: <strong style="color: ${TEXT};">${temporaryPassword}</strong><br/>Troque-a no primeiro acesso.`, 'center') : ''}
   `);
 }
 

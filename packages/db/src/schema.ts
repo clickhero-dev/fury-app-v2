@@ -144,6 +144,7 @@ export const users = pgTable(
     name: varchar('name', { length: 255 }),
     email: varchar('email', { length: 255 }).notNull().unique(),
     passwordHash: text('password_hash'),
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),

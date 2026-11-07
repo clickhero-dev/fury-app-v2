@@ -166,6 +166,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
   { tag: '0058_public_trial_signup' },
+  { tag: '0059_public_trial_signup_limits' },
+  { tag: '0061_public_trial_first_access' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
