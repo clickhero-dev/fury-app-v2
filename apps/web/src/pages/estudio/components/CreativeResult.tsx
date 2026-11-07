@@ -629,9 +629,17 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       )}
 
       {variationsMutation.isError && (
-        <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
           <AlertCircle className="h-4 w-4" />
-          Não foi possível gerar as variações. Tente novamente mais tarde.
+          <span className="flex-1">Não foi possível gerar as variações. Tente novamente.</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => variationsMutation.mutate(currentResult.assetId)}
+            disabled={variationsMutation.isPending}
+          >
+            Tentar novamente
+          </Button>
         </div>
       )}
 
