@@ -39,6 +39,27 @@ describe('provisionTrialSubscription', () => {
     expect(tx.insertSubscription).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['ausente', null],
+    ['preço diferente de zero', { ...plan, priceCents: 1 }],
+    ['inativo', { ...plan, isActive: false }],
+    ['quota diferente de 5', { ...plan, limits: { creativesPerMonth: 4 } }],
+  ])('falha com diagnóstico operacional quando o plano está %s, antes de reaproveitar assinatura', async (_description, invalidPlan) => {
+    const tx = {
+      queryPlan: vi.fn().mockResolvedValue(invalidPlan),
+      querySubscription: vi.fn().mockResolvedValue({ id: 'existing' }),
+      insertSubscription: vi.fn(),
+    };
+
+    await expect(provisionTrialSubscription(tx, 'tenant-1', new Date())).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'INVALID_TRIAL_PLAN',
+      message: 'O plano de teste não está disponível.',
+    });
+    expect(tx.querySubscription).not.toHaveBeenCalled();
+    expect(tx.insertSubscription).not.toHaveBeenCalled();
+  });
+
   it('considera o instante exato do vencimento expirado', () => {
     const endsAt = new Date('2026-11-06T12:00:00.000Z');
     expect(isTrialExpired(new Date('2026-11-06T11:59:59.999Z'), endsAt)).toBe(false);
