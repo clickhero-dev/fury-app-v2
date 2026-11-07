@@ -420,11 +420,29 @@ describe('StudioAiService — fotos sem modelo (aprimoramento + frase)', () => {
     expect(out.enhancedPrompt).toBe('Venha experimentar');
   });
 
+  it('contexto descritivo gera headline derivada somente dos fatos informados', async () => {
+    reset();
+    (llm.chat as any).mockResolvedValueOnce(JSON.stringify({
+      scene: 'Retrato publicitário em consultório acolhedor, com a terapeuta em destaque e espaço limpo no topo.',
+      headline: 'Terapia de Dianética',
+    }));
+
+    const out = await svc.enhancePrompt('t-1', {
+      prompt: 'Sou terapeuta (Auditor) de Dianética. Dianética é uma ciência que explica como a mente funciona.',
+      type: 'image',
+      photo_kinds: ['equipe'],
+    });
+
+    expect((llm.chat as any).mock.calls[0][0][0].content).toContain('derive uma headline curta');
+    expect(out.enhancedPrompt).toContain('Texto na imagem (único texto, escrito exatamente assim): "Terapia de Dianética"');
+  });
+
   it('geração com fotos: diz o que é cada referência, FLUX sem texto e o Gemini escreve a frase uma vez', async () => {
     reset();
     const out = await svc.generateImage('t-1', { model: 'x', prompt: MARKED, aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID, PRODUTO_ID] });
     const flux = (llm.generateImageWithMeta as any).mock.calls[0][0];
-    expect(flux.prompt).toContain('imagem 1 = pessoa — coloque esta MESMA pessoa');
+    expect(flux.prompt).toContain('imagem 1 = pessoa — esta imagem é a fonte de verdade da identidade; coloque esta MESMA pessoa');
+    expect(flux.prompt).toContain('rosto, traços, cabelo, barba, óculos e tom de pele');
     expect(flux.prompt).toContain('imagem 2 = produto — use EXATAMENTE este produto');
     expect(flux.prompt).toContain('Não escreva nenhum texto na imagem');
     expect(flux.prompt).not.toContain('Venha experimentar');
@@ -433,6 +451,16 @@ describe('StudioAiService — fotos sem modelo (aprimoramento + frase)', () => {
     expect(llm.generateImageFromImages).toHaveBeenCalledTimes(1);
     expect((llm.generateImageFromImages as any).mock.calls[0][0].prompt).toContain('"Venha experimentar nossos hambúrgueres artesanais"');
     expect(out.costUsd).toBeCloseTo(0.04 + 0.07 + 0.005);
+  });
+
+  it('persiste IDs e tipos das referências para permitir auditoria do resultado', async () => {
+    reset();
+    await svc.generateImage('t-1', { model: 'x', prompt: 'Anúncio de hambúrguer artesanal', aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID, PRODUTO_ID] });
+
+    const calls = (repo.createAsset as any).mock.calls;
+    const notes = JSON.parse(calls[calls.length - 1][0].complianceNotes);
+    expect(notes.referencePhotoIds).toEqual([EQUIPE_ID, PRODUTO_ID]);
+    expect(notes.referencePhotoKinds).toEqual(['equipe', 'produto']);
   });
 
   it('frase repetida ou com erro na revisão: corrige uma vez', async () => {
