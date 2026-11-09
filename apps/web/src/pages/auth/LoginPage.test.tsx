@@ -1,31 +1,16 @@
-/*
-# Language: pt-BR
+// @vitest-environment jsdom
 
-Funcionalidade: acesso comercial direto à conta demo
-
-  Cenário: visitante abre a demonstração sem preencher credenciais
-    Dado que a API de sessão demo está disponível
-    Quando clica em "Conhecer o ady com uma conta demo"
-    Então a sessão demo é solicitada e o visitante é levado ao Dashboard
-
-  Cenário: indisponibilidade da demo informa uma alternativa
-    Dado que a API de sessão demo falha
-    Quando clica no acesso demo
-    Então vê uma mensagem amigável de indisponibilidade
-*/
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from './LoginPage';
 import { store } from '@/store';
 
-const mutateAsync = vi.hoisted(() => vi.fn());
 const loginMutateAsync = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useLogin', () => ({
-  useDemoLogin: () => ({ mutateAsync, isPending: false }),
   useLogin: () => ({ mutateAsync: loginMutateAsync, isPending: false }),
 }));
 vi.mock('@/components/auth/GoogleLoginButton', () => ({ GoogleLoginButton: () => null }));
@@ -55,32 +40,18 @@ function renderPage() {
   );
 }
 
-describe('BDD: LoginPage conta demo', () => {
+describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  it('Cenário: visitante abre a demonstração sem preencher credenciais', async () => {
-    mutateAsync.mockResolvedValueOnce({});
+  it('não oferece acesso direto à conta demo e mantém o formulário de login', () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/dashboard'));
-  });
-
-  it('Cenário: indisponibilidade da demo informa uma alternativa', async () => {
-    mutateAsync.mockRejectedValueOnce(new Error('offline'));
-    renderPage();
-
-    fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
-
-    expect(await screen.findByText(/conta demo está temporariamente indisponível/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /demo|demonstração/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /^entrar$/i })).not.toBeNull();
+    expect(screen.getByLabelText(/e-mail/i)).not.toBeNull();
+    expect(screen.getByLabelText(/^senha/i)).not.toBeNull();
   });
 });
-// @vitest-environment jsdom
-
-import '../../test/setup';
-
