@@ -1,137 +1,92 @@
-import crypto from 'node:crypto';
-import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
-import { db as defaultDb, type Database, plans, publicTrialAccounts, publicTrialMagicLinks, subscriptions, tenants, users } from '@fury/db';
-import { buildDefaultTrialSubscription } from '../lib/trial-plan.js';
+import { db as defaultDb, publicTrialAccounts, publicTrialMagicLinks, tenants, users, subscriptions, plans, type Database } from '@fury/db';
+import { and, eq, gt, gte, isNull, lt, sql } from 'drizzle-orm';
+import bcrypt from 'bcrypt';
+import { PUBLIC_TRIAL_IMAGE_LIMIT, PUBLIC_TRIAL_PLAN_KEY } from '../services/core/public-trial-signup.js';
+import { createTemporaryPassword, MAGIC_LINK_MAX_USES } from '../services/core/public-trial-signup.js';
 
-function matchesOriginalSignupEmail(account: { signupEmail: string | null } | undefined, email: string): boolean {
-  // The current users.email can be changed; only the original signup address may request a link.
-  return !!account?.signupEmail && account.signupEmail === email.toLowerCase();
-}
-
-/** Repositório global de aquisição: não há tenant antes do signup. */
 export class PublicTrialRepository {
   constructor(private readonly db: Database = defaultDb) {}
 
-  async withPublicTrialSessionUser<T>(
-    userId: string,
-    issueSession: (user: typeof users.$inferSelect) => Promise<T>,
-  ): Promise<T | null> {
-    return this.db.transaction(async (tx) => {
-      const [eligible] = await tx.select({ user: users, account: publicTrialAccounts })
-        .from(users)
-        .innerJoin(publicTrialAccounts, eq(publicTrialAccounts.userId, users.id))
-        .where(and(
-          eq(users.id, userId),
-          isNotNull(publicTrialAccounts.signupEmail),
-          sql`lower(${users.email}) = ${publicTrialAccounts.signupEmail}`,
-        ))
-        .for('update', { of: [users, publicTrialAccounts] });
-      if (!eligible) return null;
-      return issueSession(eligible.user);
-    });
+  async findUserByNormalizedEmail(email: string) {
+    return this.db.query.users.findFirst({ where: sql`lower(${users.email}) = ${email}` });
   }
 
-  async createOrFindAccount(input: { name: string; email: string; phone?: string }) {
-    const email = input.email.toLowerCase();
-    try {
-      return await this.db.transaction(async (tx) => {
-        const accountBySignupEmail = await tx.query.publicTrialAccounts.findFirst({
-          where: eq(publicTrialAccounts.signupEmail, email),
-        });
-        if (accountBySignupEmail) {
-          const user = await tx.query.users.findFirst({ where: eq(users.id, accountBySignupEmail.userId) });
-          const isPublicTrial = user?.email.toLowerCase() === email && matchesOriginalSignupEmail(accountBySignupEmail, email);
-          const deliveryEmail = isPublicTrial ? accountBySignupEmail.signupEmail : null;
-          return {
-            created: false as const,
-            accountId: isPublicTrial ? accountBySignupEmail.id : null,
-            user: user ?? null,
-            isPublicTrial,
-            deliveryEmail,
-          };
-        }
+  async findAccountByUserId(userId: string) {
+    return this.db.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.userId, userId) });
+  }
 
-        const existing = await tx.query.users.findFirst({ where: sql`lower(${users.email}) = ${email}` });
-        if (existing) {
-          const account = await tx.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.userId, existing.id) });
-          const deliveryEmail = existing.email.toLowerCase() === email && matchesOriginalSignupEmail(account, email) ? account?.signupEmail ?? null : null;
-          const isPublicTrial = deliveryEmail !== null;
-          return { created: false as const, accountId: isPublicTrial ? account?.id ?? null : null, user: existing, isPublicTrial, deliveryEmail };
-        }
-
-        const [tenant] = await tx.insert(tenants).values({ name: input.name, slug: `trial-${crypto.randomUUID()}` }).returning();
-        const [user] = await tx.insert(users).values({ tenantId: tenant.id, name: input.name, email, passwordHash: null, role: 'owner', emailVerified: false }).returning();
-        const trialPlan = await tx.query.plans.findFirst({ where: eq(plans.name, 'Trial') });
-        const now = new Date();
-        const subscription = buildDefaultTrialSubscription(tenant.id, trialPlan ?? null, now);
-        await tx.insert(subscriptions).values(subscription);
-        const [account] = await tx.insert(publicTrialAccounts).values({
-          tenantId: tenant.id,
-          userId: user.id,
-          signupEmail: email,
-          phone: input.phone ?? null,
-        }).returning({ id: publicTrialAccounts.id });
-        return { created: true as const, accountId: account.id, user, isPublicTrial: true as const, deliveryEmail: email };
-      });
-    } catch (error) {
-      const uniqueViolation = error as { code?: string; constraint?: string };
-      const recoverableEmailConstraint = uniqueViolation.constraint === 'users_email_unique'
-        || uniqueViolation.constraint === 'public_trial_accounts_signup_email_unique';
-      if (uniqueViolation.code !== '23505' || !recoverableEmailConstraint) throw error;
-      const accountBySignupEmail = await this.db.query.publicTrialAccounts.findFirst({
-        where: eq(publicTrialAccounts.signupEmail, email),
-      });
-      if (accountBySignupEmail) {
-        const user = await this.db.query.users.findFirst({ where: eq(users.id, accountBySignupEmail.userId) });
-        const isPublicTrial = user?.email.toLowerCase() === email && matchesOriginalSignupEmail(accountBySignupEmail, email);
-        const deliveryEmail = isPublicTrial ? accountBySignupEmail.signupEmail : null;
-        return {
-          created: false as const,
-          accountId: isPublicTrial ? accountBySignupEmail.id : null,
-          user: user ?? null,
-          isPublicTrial,
-          deliveryEmail,
-        };
+  async createAccount(input: { name: string; email: string; phone?: string }): Promise<{ accountId: string; user: typeof users.$inferSelect; temporaryPassword?: string }> {
+    return this.db.transaction(async (tx) => {
+      const existing = await tx.query.users.findFirst({ where: sql`lower(${users.email}) = ${input.email}` });
+      if (existing) {
+        return { accountId: '', user: existing };
       }
 
-      const user = await this.db.query.users.findFirst({ where: sql`lower(${users.email}) = ${email}` });
-      if (!user) throw error;
-      const account = await this.db.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.userId, user.id) });
-      const deliveryEmail = user.email.toLowerCase() === email && matchesOriginalSignupEmail(account, email) ? account?.signupEmail ?? null : null;
-      const isPublicTrial = deliveryEmail !== null;
-      return { created: false as const, accountId: isPublicTrial ? account?.id ?? null : null, user, isPublicTrial, deliveryEmail };
-    }
-  }
-
-  async issueToken(accountId: string, tokenHash: string, expiresAt: Date): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx.update(publicTrialMagicLinks).set({ revokedAt: new Date() }).where(and(
-        eq(publicTrialMagicLinks.accountId, accountId),
-        isNull(publicTrialMagicLinks.consumedAt),
-        isNull(publicTrialMagicLinks.revokedAt),
-      ));
-      await tx.insert(publicTrialMagicLinks).values({ accountId, tokenHash, expiresAt });
+      const slug = `${input.email.split('@')[0].replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'trial'}-${Date.now().toString(36)}`;
+      const [tenant] = await tx.insert(tenants).values({ name: input.name, slug }).returning();
+      const temporaryPassword = createTemporaryPassword();
+      const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+      const [user] = await tx.insert(users).values({
+        tenantId: tenant.id,
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        mustChangePassword: true,
+        role: 'owner',
+        emailVerified: true,
+      }).returning();
+      const plan = await tx.query.plans.findFirst({ where: eq(plans.technicalKey, PUBLIC_TRIAL_PLAN_KEY) });
+      if (!plan) throw new Error('public_trial_signup plan is not configured');
+      await tx.insert(subscriptions).values({
+        tenantId: tenant.id,
+        planId: plan.id,
+        status: 'trial',
+        // A janela de sete dias começa no primeiro acesso bem-sucedido, não no
+        // recebimento do webhook nem no envio do e-mail.
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        creativesRemaining: PUBLIC_TRIAL_IMAGE_LIMIT,
+      });
+      const [account] = await tx.insert(publicTrialAccounts).values({ tenantId: tenant.id, userId: user.id, phone: input.phone ?? null }).returning({ id: publicTrialAccounts.id });
+      return { accountId: account.id, user, temporaryPassword };
     });
   }
 
-  async consumeToken(tokenHash: string, now: Date) {
+  async issueMagicLink(accountId: string, tokenHash: string, expiresAt: Date) {
     return this.db.transaction(async (tx) => {
-      const [link] = await tx.update(publicTrialMagicLinks).set({ consumedAt: now }).where(and(
-        eq(publicTrialMagicLinks.tokenHash, tokenHash),
-        isNull(publicTrialMagicLinks.consumedAt),
-        isNull(publicTrialMagicLinks.revokedAt),
-        gt(publicTrialMagicLinks.expiresAt, now),
-      )).returning({ accountId: publicTrialMagicLinks.accountId });
-      if (!link) return null;
-      const account = await tx.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.id, link.accountId) });
-      if (!account) return null;
-      const currentUser = await tx.query.users.findFirst({ where: eq(users.id, account.userId) });
-      if (!account.signupEmail || !currentUser || !matchesOriginalSignupEmail(account, currentUser.email)) return null;
-      const [user] = await tx.update(users).set({ emailVerified: true }).where(and(
-        eq(users.id, account.userId),
-        sql`lower(${users.email}) = ${account.signupEmail.toLowerCase()}`,
-      )).returning();
-      return user ?? null;
+      const cooldownSince = new Date(Date.now() - 5 * 60 * 1000);
+      const recent = await tx.query.publicTrialMagicLinks.findFirst({
+        where: and(
+          eq(publicTrialMagicLinks.accountId, accountId),
+          gte(publicTrialMagicLinks.createdAt, cooldownSince),
+          isNull(publicTrialMagicLinks.consumedAt),
+          isNull(publicTrialMagicLinks.revokedAt),
+        ),
+      });
+      if (recent) return null;
+
+      await tx.update(publicTrialMagicLinks).set({ revokedAt: new Date() }).where(and(eq(publicTrialMagicLinks.accountId, accountId), isNull(publicTrialMagicLinks.consumedAt), isNull(publicTrialMagicLinks.revokedAt)));
+      const [link] = await tx.insert(publicTrialMagicLinks).values({ accountId, tokenHash, expiresAt }).returning();
+      return link;
     });
+  }
+
+  async consumeMagicLink(tokenHash: string) {
+    const now = new Date();
+    const [link] = await this.db.update(publicTrialMagicLinks)
+      .set({ useCount: sql`${publicTrialMagicLinks.useCount} + 1`, consumedAt: sql`CASE WHEN ${publicTrialMagicLinks.useCount} + 1 >= ${MAGIC_LINK_MAX_USES} THEN ${now.toISOString()}::timestamptz ELSE NULL END` })
+      .where(and(eq(publicTrialMagicLinks.tokenHash, tokenHash), gt(publicTrialMagicLinks.expiresAt, now), isNull(publicTrialMagicLinks.consumedAt), lt(publicTrialMagicLinks.useCount, MAGIC_LINK_MAX_USES), isNull(publicTrialMagicLinks.revokedAt)))
+      .returning({ accountId: publicTrialMagicLinks.accountId });
+    if (!link) return null;
+    const account = await this.db.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.id, link.accountId) });
+    if (!account) return null;
+    const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Só a primeira troca bem-sucedida do link inicia a janela; o UPDATE
+    // condicional preserva a data em sessões/login posteriores.
+    await this.db.update(subscriptions)
+      .set({ trialEndsAt: trialEnd, currentPeriodEnd: trialEnd, updatedAt: now })
+      .where(and(eq(subscriptions.tenantId, account.tenantId), eq(subscriptions.status, 'trial'), isNull(subscriptions.trialEndsAt)));
+    const user = await this.db.query.users.findFirst({ where: eq(users.id, account.userId) });
+    return user ? { account, user } : null;
   }
 }

@@ -1,8 +1,21 @@
+/*
+Funcionalidade: avisar no sino quando o vídeo estiver pronto
+Cenário: o vídeo concluído gera uma notificação para quem iniciou a geração
+Dado que um usuário iniciou uma geração de vídeo
+Quando o worker conclui e salva o vídeo
+Então o usuário recebe uma notificação idempotente de vídeo pronto
+
+Cenário: uma geração com falha não gera falso positivo
+Dado que a geração do vídeo falha
+Quando o worker encerra o job com erro
+Então nenhuma notificação de vídeo pronto é criada
+*/
 import { describe, it, expect, vi } from 'vitest';
 import { StudioVideoService, buildVideoPrompt, parseScenes, resolveVideoLimits } from '../services/studio/studio-video.service.js';
 import { DEFAULT_AD_VIDEO_MODEL } from '../services/studio/studio-model-catalog.js';
 
 const TENANT = 'tenant-1';
+const USER_ID = 'user-1';
 const PHOTO_ID = '11111111-1111-4111-8111-111111111111';
 const SCENES = [
   { start: 0, end: 5, visual: 'Close no produto', narration: 'Conheça o novo café' },
@@ -32,7 +45,7 @@ function makeJobRepo() {
 
 type Limits = { videosPerMonth: number | null; modificationsPerVideo: number | null };
 
-function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?: Limits } = {}) {
+function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?: Limits; notifyVideoReady?: ReturnType<typeof vi.fn>; notifyVideoFailed?: ReturnType<typeof vi.fn> } = {}) {
   const jobRepo = makeJobRepo();
   const studioRepo = {
     createAsset: vi.fn(async (d: any) => ({ id: 'asset-new', ...d })),
@@ -64,6 +77,8 @@ function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?:
     brand: async () => ({ businessName: 'Café Bom' }),
     limits: async () => ({ ...(opts.limits ?? { videosPerMonth: 10, modificationsPerVideo: 3 }), periodStart: new Date(0) }),
     modQuota,
+    notifyVideoReady: opts.notifyVideoReady,
+    notifyVideoFailed: opts.notifyVideoFailed,
     enqueue,
     sleep: async () => undefined,
     store: vi.fn(async () => 'https://cdn/video.mp4') as any,
@@ -226,6 +241,30 @@ describe('StudioVideoService', () => {
     const status = await svc.getJob(TENANT, jobId);
     expect(status).toMatchObject({ status: 'done', assetId: 'asset-new' });
     expect((status as any).debug).toBeUndefined();
+  });
+
+  it('notifica o usuário iniciador uma única vez quando o vídeo fica pronto', async () => {
+    const notifyVideoReady = vi.fn(async () => undefined);
+    const { svc, jobRepo } = build({ notifyVideoReady });
+    const { jobId } = await svc.createJob(TENANT, baseInput, USER_ID);
+
+    expect(jobRepo.jobs.get(jobId).metadata.initiatedByUserId).toBe(USER_ID);
+    await svc.processJob(jobId);
+
+    expect(notifyVideoReady).toHaveBeenCalledTimes(1);
+    expect(notifyVideoReady).toHaveBeenCalledWith(TENANT, USER_ID, jobId, 'asset-new');
+  });
+
+  it('não notifica quando a geração falha', async () => {
+    const notifyVideoReady = vi.fn(async () => undefined);
+    const notifyVideoFailed = vi.fn(async () => undefined);
+    const { svc } = build({ notifyVideoReady, notifyVideoFailed, states: [{ status: 'failed', costUsd: null, error: 'safety', unsignedUrls: [] }] });
+    const { jobId } = await svc.createJob(TENANT, baseInput, USER_ID);
+
+    await svc.processJob(jobId);
+
+    expect(notifyVideoReady).not.toHaveBeenCalled();
+    expect(notifyVideoFailed).toHaveBeenCalledWith(TENANT, USER_ID, jobId);
   });
 
   it('falha de filtro de conteúdo vira mensagem clara, sem reenvio', async () => {

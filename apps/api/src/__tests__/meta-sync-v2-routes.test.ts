@@ -65,11 +65,6 @@ Funcionalidade: Endpoints v2 de dados Meta (direto do banco, fallback stale)
     Quando GET /api/v2/metrics/daily e /api/v2/dashboard/instagram-insights
     Então 200 com os agregados e syncedAt
 
-  Cenário: rota de dashboard demo montada
-    Dado o router v2 com controller de dashboard demo
-    Quando GET /api/v2/dashboard/demo com auth + tenant
-    Então 200 com a resposta do controller de dashboard demo
-
   Cenário: alterar status de um lead (manual, transições livres)
     Dado lead persistido no tenant
     Quando PATCH /api/v2/leads/:id/status com { status: "negociando" }
@@ -197,12 +192,7 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
 function buildApp(controller: MetaSyncV2Controller) {
   const app = express();
   app.use(express.json());
-  const demoController = {
-    getDashboardDemo: (_req: unknown, res: { json: (body: unknown) => unknown }) => {
-      res.json({ success: true, data: { mode: 'demo' } });
-    },
-  };
-  app.use('/api/v2', authMiddleware, tenantMiddleware, createV2Router(controller, demoController as never));
+  app.use('/api/v2', authMiddleware, tenantMiddleware, createV2Router(controller));
   app.use(errorHandler);
   return app;
 }
@@ -233,17 +223,6 @@ describe('BDD: Endpoints v2', () => {
       .set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe('VALIDATION_ERROR');
-  });
-
-  it('Cenário: rota de dashboard demo montada → 200 com resposta do controller', async () => {
-    const app = buildApp(makeFakes().controller);
-
-    const res = await request(app)
-      .get('/api/v2/dashboard/demo')
-      .set('Authorization', `Bearer ${authToken(TENANT)}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ success: true, data: { mode: 'demo' } });
   });
 
   it('Cenário: intervalo de campanha com data malformada → 400', async () => {
@@ -511,6 +490,41 @@ describe('BDD: Endpoints v2', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data[0].conversions).toBe(3);
+  });
+
+  it('Cenário: campanha de leads com pixel externo preserva conversões dos Insights', async () => {
+    const { controller, repo } = makeFakes({
+      repo: {
+        findCampaignSnapshots: vi.fn(async () => ({
+          items: [
+            {
+              id: 's-pixel', tenantId: TENANT, metaCampaignId: 'pixel-camp', name: 'Campanha Pixel Externo',
+              status: 'ACTIVE', objective: 'OUTCOME_LEADS', budget: {}, hasLeadForm: false, lastInsightsAt: new Date(),
+              metrics: { spend: 12.5, impressions: 400, clicks: 24, conversions: 7, cpa: 1.79 },
+            },
+          ],
+          total: 1,
+        })),
+        findCampaignDailyInsights: vi.fn(async () => [
+          { metaCampaignId: 'pixel-camp', date: '2026-09-29', metrics: { spend: 12.5, conversions: 9, clicks: 24, impressions: 400 } },
+        ]),
+        countLeadsByCampaign: vi.fn(async () => new Map<string, number>()),
+      },
+    });
+    const app = buildApp(controller);
+
+    const total = await request(app)
+      .get('/api/v2/campaigns')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+    const period = await request(app)
+      .get('/api/v2/campaigns?startDate=2026-09-29&endDate=2026-09-29')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(total.status).toBe(200);
+    expect(total.body.data[0]).toMatchObject({ conversions: 7, cpa: 1.79 });
+    expect(period.status).toBe(200);
+    expect(period.body.data[0]).toMatchObject({ conversions: 9, cpa: 12.5 / 9 });
+    expect(repo.countLeadsByCampaign).toHaveBeenCalled();
   });
 
   it('Cenário: alterar status de um lead → 200 + update no repo', async () => {

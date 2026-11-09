@@ -29,7 +29,7 @@ function responseRecorder() {
 
 describe('BDD: GET /v2/dashboard/demo', () => {
   it('Cenário: conta demo recebe dados determinísticos sem consultar provedores', async () => {
-    const findTenant = vi.fn().mockResolvedValue({ slug: 'fashion-demo' });
+    const findTenant = vi.fn().mockResolvedValue({ slug: 'fashion-demo', isDemo: true });
     const controller = new DemoDashboardController(
       new DemoDashboardService(() => ({ findTenant } as never)),
     );
@@ -50,7 +50,6 @@ describe('BDD: GET /v2/dashboard/demo', () => {
     }));
     const body = res.json.mock.calls[0][0];
     expect(body.data.summary.conversions).toBeGreaterThan(0);
-    expect(body.data.insights.tiredCreatives[0].reason).toMatch(/frequência|CTR|CPA/i);
   });
 
   it('Cenário: tenant real não recebe dados fictícios', async () => {

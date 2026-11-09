@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { db } from '../../lib/db.js';
-import { tenants, users } from '../../lib/db.js';
+import { tenants, users, subscriptions } from '../../lib/db.js';
 import { eq } from 'drizzle-orm';
 import { getRedis } from '../../lib/redis.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -14,10 +14,12 @@ import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 import { slugify } from '../../lib/slug.js';
+import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+export const DEMO_TENANT_SLUG = 'fashion-demo';
 
 export type MeResponse = UserDTO & {
   hasPassword: boolean;
@@ -26,9 +28,6 @@ export type MeResponse = UserDTO & {
   tenantCodigo: string;
   businessContext: string | null;
 };
-
-type PublicTrialSessionUser = NonNullable<Awaited<ReturnType<AuthRepository['findUserById']>>>;
-type PublicTrialSession = { user: UserDTO; tokens: { accessToken: string; refreshToken: string } };
 
 // ── helpers puros (sem dependência de repo) ──────────────────────────
 function generateSlug(companyName: string): string {
@@ -55,6 +54,8 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    type: user.type === 'demo' || user.role === 'demo' ? 'demo' : 'user',
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
@@ -97,7 +98,6 @@ export class AuthService {
     private readonly deps: {
       jwt: { generateAccessToken: typeof generateAccessToken; generateRefreshToken: typeof generateRefreshToken; verifyRefreshToken: typeof verifyRefreshToken };
       email: { sendWelcomeEmail: EmailService['sendWelcomeEmail']; sendOtpEmail: EmailService['sendOtpEmail']; sendPasswordResetConfirmation: EmailService['sendPasswordResetConfirmation'] };
-      storeRefreshTokenHash: typeof storeRefreshTokenHash;
     } = {
       jwt: { generateAccessToken, generateRefreshToken, verifyRefreshToken },
       email: {
@@ -105,12 +105,7 @@ export class AuthService {
         sendOtpEmail: emailService.sendOtpEmail.bind(emailService),
         sendPasswordResetConfirmation: emailService.sendPasswordResetConfirmation.bind(emailService),
       },
-      storeRefreshTokenHash,
     },
-    private readonly withPublicTrialSessionUser: (
-      userId: string,
-      issueSession: (user: PublicTrialSessionUser) => Promise<PublicTrialSession>,
-    ) => Promise<PublicTrialSession | null> = async () => null,
   ) {}
 
   private repo(t: string): AuthRepository {
@@ -144,10 +139,16 @@ export class AuthService {
         .insert(users)
         .values({ tenantId: tenant.id, email: data.email, passwordHash, role: 'owner' })
         .returning();
+      await provisionTrialSubscription({
+        queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+        querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, tenantId) })) ?? null,
+        insertSubscription: async (values) => {
+          const [subscription] = await tx.insert(subscriptions).values(values as any).returning({ id: subscriptions.id });
+          return subscription;
+        },
+      }, tenant.id, new Date());
       return { tenant: { ...tenant, codigo }, user };
     });
-
-    await this.repo(result.user.tenantId).provisionDefaultTrial();
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: result.user.id,
@@ -167,6 +168,8 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
     if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    // conta excluída responde igual a senha errada (não revela que existe)
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -180,18 +183,22 @@ export class AuthService {
     return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
   }
 
-  /** Emite sessão somente para usuário vinculado ao fluxo público de Trial. */
-  async issuePublicTrialSessionForUser(userId: string): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
-    const session = await this.withPublicTrialSessionUser(userId, async (user) => {
-      const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
-      const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
-      await this.deps.storeRefreshTokenHash(user.id, refreshToken);
-      return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
-    });
-    if (!session) {
-      throw new AppError(401, 'INVALID_ACCESS_LINK', 'Link inválido ou expirado.');
+  /** Emite uma sessão limitada à conta comercial demo, sem expor credenciais ao cliente. */
+  async demoLogin(): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
+    const repo = this.repoFactory('');
+    const tenant = await repo.findTenantBySlug(DEMO_TENANT_SLUG);
+    if (!tenant || tenant.isDemo !== true) {
+      throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
     }
-    return session;
+    const user = await this.repoFactory(tenant.id).findUserByTenant();
+    if (!user || !(await repo.isAccountActive(user.id))) {
+      throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
+    }
+
+    const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: 'demo' });
+    const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
+    await storeRefreshTokenHash(user.id, refreshToken);
+    return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
   }
 
   async refresh(data: { refreshToken: string }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
@@ -204,7 +211,7 @@ export class AuthService {
 
     const user = await this.repo('').findUserById(payload.userId);
     const t3 = Date.now();
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
 
     await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({
@@ -355,12 +362,12 @@ export class AuthService {
   async setInitialPassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
     if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
-    if (user.passwordHash) {
+    if (user.passwordHash && !user.mustChangePassword) {
       throw new AppError(409, 'PASSWORD_ALREADY_SET', 'Esta conta já tem uma senha. Use "alterar senha".');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.repo('').patchUser(userId, { passwordHash });
+    await this.repo('').patchUser(userId, { passwordHash, mustChangePassword: false });
     await revokeRefreshToken(userId);
 
     this.deps.email.sendPasswordResetConfirmation(user.email).catch((error: any) => {

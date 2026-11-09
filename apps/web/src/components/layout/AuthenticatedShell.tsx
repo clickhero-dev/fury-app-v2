@@ -4,9 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
 import { AnnouncementsModal } from './AnnouncementsModal';
+import { NotificationsBell } from '../notifications/NotificationsBell';
 import { FabActions } from '../fab/FabActions';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
+import { useBlockedViews } from '../../hooks/useBlockedViews';
+import { viewKeyForPath } from '../../lib/rbac-views';
+import { NotFoundPage } from '../../pages/NotFoundPage';
+import { TrialPasswordModal } from './TrialPasswordModal';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
@@ -52,7 +58,18 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const isDemoUser = false;
+  const storedUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') ?? '{}') as { type?: string }; } catch { return {}; }
+  })();
+  // A flag antiga só mantém compatibilidade com sessões já abertas; APIs e
+  // datasets demo continuam protegidos pela identidade persistida no backend.
+  const isDemoUser = storedUser.type === 'demo' || localStorage.getItem('ady-demo-session') === 'true';
+  // O role vem da sessão assinada pelo backend; o frontend apenas espelha o
+  // modo para evitar gates de onboarding/Meta que não existem na demonstração.
+  const userRole = useAppSelector(selectUserRole);
+  const isDemoSession = userRole === 'demo' || isDemoUser;
+  const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
+  const [showTrialPasswordModal, setShowTrialPasswordModal] = useState(() => localStorage.getItem('fury-trial-password-pending') === 'true');
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -64,8 +81,10 @@ export function AuthenticatedShell() {
   // /policy/current uma única vez para decidir (sem loop: /politica é isenta).
   const isPolicyRoute = location.pathname.startsWith('/politica');
   const isPolicyExempt =
-    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
+    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding || isDemoSession;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
+  const { isBlocked } = useBlockedViews();
+  const viewKey = viewKeyForPath(location.pathname);
 
   const shouldCheckPolicy = !!token && !isPolicyExempt;
 
@@ -89,16 +108,8 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
-  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
-
-  const {
-    data: subscription,
-    isLoading: subLoading,
-    isFetched: subFetched,
-    isError: subError,
-  } = useSubscription();
-  const subscriptionChecked = !subLoading && subFetched;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoSession && !isPublicTrial;
+  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoSession;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
@@ -125,10 +136,6 @@ export function AuthenticatedShell() {
   });
 
   useEffect(() => {
-    // Trial é reconhecido somente pela assinatura persistida retornada pela API.
-    // Aguarda sua resolução antes de redirecionar, evitando corrida no primeiro login.
-    if (subscriptionChecked && !subError && subscription?.status === 'trial') return;
-    if (!subscriptionChecked) return;
     if (!isLoading && isFetched && shouldCheck && Array.isArray(connections)) {
       if (connections.length > 0) {
         dispatch(setMetaId(connections[0].id ?? null));
@@ -141,18 +148,26 @@ export function AuthenticatedShell() {
         navigate('/onboarding/selecionar-conta', { replace: true });
       }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch, subscription, subscriptionChecked, subError]);
+  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
 
   // ── Verificação de assinatura ──────
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    isFetched: subFetched,
+    isError: subError,
+  } = useSubscription();
+
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
-  const userRole = useAppSelector(selectUserRole);
-  // Admin/superadmin isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
-  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+  // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
+  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),
     [subscription]
   );
+
+  const subscriptionChecked = !subLoading && subFetched;
 
   // Persiste o plano (ou sua ausência) no Redux apenas quando o fetch de assinatura
   // resolveu e NÃO foi erro — assim registra o estado real sem sobrescrever um valor
@@ -188,6 +203,7 @@ export function AuthenticatedShell() {
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">
+      {showTrialPasswordModal && <TrialPasswordModal onComplete={() => { localStorage.removeItem('fury-trial-password-pending'); setShowTrialPasswordModal(false); }} />}
       {/* Overlay escuro ao abrir sidebar no mobile */}
       {mobileOpen && (
         <div
@@ -196,13 +212,18 @@ export function AuthenticatedShell() {
         />
       )}
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <NotificationsBell />
       <SnackHost />
       <AnnouncementsModal enabled={!isOnboarding} />
       {/* Ações flutuantes de criação (fora das rotas: sobrevivem à navegação).
           FabActions retorna null em telas onde não fazem sentido. */}
       <FabActions />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
-      <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      {(viewKey && isBlocked(viewKey)) || (hasLifetimeAccess() && isBillingPath(location.pathname)) ? (
+        <div className="flex-1"><NotFoundPage /></div>
+      ) : (
+        <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      )}
     </div>
   );
 }

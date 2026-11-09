@@ -3,6 +3,20 @@ import type { Request, Response, NextFunction } from 'express';
 import { CampaignsController } from '../controllers/campaigns.controller.js';
 import type { CampaignsService } from '../services/campaigns/campaigns.service.js';
 
+/*
+Funcionalidade: criação de campanha do wizard com lote de criativos
+
+Cenário: aceitar mais de quatro criativos
+  Dado um pedido autenticado com dezesseis criativos válidos
+  Quando o endpoint create-wizard valida e encaminha o pedido
+  Então o serviço recebe os dezesseis itens na mesma ordem
+
+Cenário: rejeitar criativo sem mídia
+  Dado um pedido com um item de creatives sem uma mídia válida
+  Quando o endpoint valida o pedido
+  Então responde com erro de validação seguro
+*/
+
 vi.mock('../services/email/notify.js', () => ({
   sendToTenant: vi.fn().mockResolvedValue(undefined),
 }));
@@ -202,12 +216,13 @@ describe('CampaignsController', () => {
       );
     });
 
-    it('400 quando creatives tem 5 itens (cap 4) → ZodError', async () => {
-      const ctrl = makeController();
+    it('201 quando creatives tem 16 itens → service recebe o lote completo em ordem', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
       const req = makeReq({
         body: {
           ...baseBody,
-          creatives: Array.from({ length: 5 }, (_, i) => ({
+          creatives: Array.from({ length: 16 }, (_, i) => ({
             creative_upload_url: `https://example.com/${i}.jpg`,
             headline: `T${i}`,
             primary_text: `P${i}`,
@@ -218,9 +233,12 @@ describe('CampaignsController', () => {
 
       await ctrl.createWizardCampaign(req, res, next);
 
-      expect(res.status).not.toHaveBeenCalledWith(201);
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(createCampaignFromWizard).toHaveBeenCalledWith(expect.objectContaining({
+        creatives: expect.arrayContaining([expect.objectContaining({ creativeUploadUrl: 'https://example.com/15.jpg', headline: 'T15' })]),
+      }));
+      expect((createCampaignFromWizard.mock.calls[0][0] as any).creatives).toHaveLength(16);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(next).not.toHaveBeenCalled();
     });
 
     it('400 quando creatives ausente e legacy sem imagem → mantém mensagem atual', async () => {
@@ -499,6 +517,55 @@ describe('CampaignsController', () => {
 
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CREATIVE_ASSET_NOT_FOUND' }));
       expect(mockChat).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('suggestText com imagem', () => {
+    function makeImageController() {
+      const repo = {
+        findBrandKit: vi.fn().mockResolvedValue(null),
+        findTenant: vi.fn().mockResolvedValue({ businessContext: 'Padaria' }),
+      };
+      return new CampaignsController({} as CampaignsService, (() => repo) as any);
+    }
+
+    it('usa um modelo de visão dedicado para gerar copy contextualizada', async () => {
+      mockChat.mockResolvedValueOnce('{"headline":"Pão artesanal","primaryText":"Experimente o sabor feito hoje na nossa padaria."}');
+      const ctrl = makeImageController();
+      const res = makeRes();
+
+      await ctrl.suggestText(
+        makeReq({ body: { imageUrl: 'https://cdninstagram.com/creative.jpg' } }),
+        res,
+        next,
+      );
+
+      expect(mockChat).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        data: { headline: 'Pão artesanal', primaryText: 'Experimente o sabor feito hoje na nossa padaria.' },
+      }));
+    });
+
+    it('retorna erro quando os modelos não conseguem analisar a imagem em vez de usar copy genérica', async () => {
+      mockChat.mockRejectedValue(new Error('provider unavailable'));
+      const ctrl = makeImageController();
+
+      await ctrl.suggestText(
+        makeReq({ body: { imageUrl: 'https://cdninstagram.com/creative.jpg' } }),
+        makeRes(),
+        next,
+      );
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'AD_COPY_SUGGESTION_UNAVAILABLE',
+        statusCode: 503,
+      }));
+      expect(next).not.toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('Promoção imperdível'),
+      }));
     });
   });
 });

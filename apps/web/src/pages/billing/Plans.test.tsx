@@ -1,65 +1,61 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+/*
+Funcionalidade: tela de planos do cliente
+
+Cenário: cliente de parceiro
+  Dado que o cliente é de um parceiro (user_partner)
+  Então vê os planos do parceiro com o botão desativado, sem textos de Asaas e de trial
+
+Cenário: parceiro sem planos
+  Então aparece o aviso, sem os planos de exemplo
+
+Cenário: cliente ady
+  Então o botão de assinar abre o pagamento, como hoje
+*/
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Plans } from './Plans';
 
-/*
- * Funcionalidade: plano Trial disponível na página Planos
- * Cenário: pessoa consulta os limites do Trial
- * Dado que a API disponibiliza o plano Trial, quando abre Planos,
- * então vê a duração, as cinco imagens, as três revisões e a ausência de vídeos.
- */
-const { mockBilling } = vi.hoisted(() => ({
-  mockBilling: {
-    plans: [] as Array<Record<string, unknown>>,
-  },
-}));
-
+const mockPlans = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useBilling', () => ({
-  usePlans: () => ({ data: mockBilling.plans, isLoading: false }),
+  usePlans: mockPlans,
   useSubscription: () => ({ data: null }),
-  useSubscribe: () => ({ mutate: vi.fn(), isPending: false }),
+  useSubscribe: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('@/components/layout/AppLayout', () => ({
-  AppLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}));
-vi.mock('@/components/PageHeader', () => ({
-  PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
-}));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { name: 'Ana', email: 'ana@x.com' } }) }));
+vi.mock('@/components/layout/AppLayout', () => ({ AppLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
-function renderPlans() {
-  return render(
-    <MemoryRouter>
-      <Plans />
-    </MemoryRouter>,
-  );
+const partnerPlan = { id: 'pl-1', name: 'Básico Parceiro', priceCents: 5000, interval: 'monthly', features: ['Suporte'], isActive: true, createdAt: '' };
+
+function renderAs(platformRole: string, plans: unknown[]) {
+  localStorage.setItem('user', JSON.stringify({ platformRole }));
+  mockPlans.mockReturnValue({ data: plans, isLoading: false });
+  render(<MemoryRouter><Plans /></MemoryRouter>);
 }
 
-describe('Planos — apresentação do Trial', () => {
-  beforeEach(() => {
-    mockBilling.plans = [{
-      id: 'trial-plan',
-      name: 'Trial',
-      priceCents: 0,
-      interval: 'monthly',
-      features: { trialDays: 7, images: 5, revisionsPerImage: 3, videos: false },
-      isActive: true,
-      createdAt: '2026-11-06T00:00:00.000Z',
-    }];
+afterEach(() => localStorage.clear());
+
+describe('Plans', () => {
+  it('cliente de parceiro: botão desativado e sem Asaas/trial', () => {
+    renderAs('user_partner', [partnerPlan]);
+    expect(screen.getByText('Básico Parceiro')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fale com seu parceiro' })).toBeDisabled();
+    expect(screen.queryByText(/Asaas/)).toBeNull();
+    expect(screen.queryByText(/7 dias de trial/)).toBeNull();
   });
 
-  it('exibe os limites do Trial recebidos da API', () => {
-    renderPlans();
+  it('parceiro sem planos: aviso, sem planos de exemplo', () => {
+    renderAs('user_partner', []);
+    expect(screen.getByText('Seu parceiro ainda não publicou planos.')).toBeInTheDocument();
+    expect(screen.queryByText('Starter')).toBeNull();
+  });
 
-    expect(screen.getByText('Trial')).toBeInTheDocument();
-    expect(screen.getByText('7 dias de acesso')).toBeInTheDocument();
-    expect(screen.getByText('5 criações de imagem')).toBeInTheDocument();
-    expect(screen.getByText('Até 3 revisões por criação')).toBeInTheDocument();
-    expect(screen.getByText('Geração de vídeo não incluída')).toBeInTheDocument();
-    expect(screen.getByText('O plano Trial oferece 7 dias gratuitos para novas contas.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Automático no cadastro' })).toBeDisabled();
-    expect(screen.getByText(/assinaturas pagas são processadas com segurança via Asaas/i)).toBeInTheDocument();
+  it('cliente ady: assinar abre o pagamento', async () => {
+    renderAs('user', [{ ...partnerPlan, name: 'Pro' }]);
+    expect(screen.getByText(/Asaas/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Assinar agora' }));
+    expect(screen.getByText('Assinar plano Pro')).toBeInTheDocument();
   });
 });

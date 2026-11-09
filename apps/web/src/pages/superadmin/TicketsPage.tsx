@@ -7,7 +7,7 @@ import { z } from 'zod';
 import api from '@/lib/api';
 import { showSnack } from '@/lib/snack';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 10;
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
@@ -35,6 +35,7 @@ type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
 type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
 type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
+type TicketStatus = { value: string; label: string; type: string; color?: string };
 type Assignee = { id: number; name: string; email: string | null };
 type Queue = 'open' | 'resolved';
 
@@ -60,10 +61,10 @@ const statusLabels: Record<string, string> = {
   'aberto': 'Aberto', 'em progresso': 'Em progresso', 'concluído': 'Concluído', 'fechado': 'Fechado', 'pendente': 'Pendente',
 };
 const priorityStyles: Record<string, { label: string; chip: string }> = {
-  low: { label: 'Baixa', chip: 'text-[#9CA3AF] bg-[#9CA3AF]/10' },
-  normal: { label: 'Normal', chip: 'text-[#5cc5e4] bg-[#5cc5e4]/10' },
-  high: { label: 'Alta', chip: 'text-[#FBBF24] bg-[#FBBF24]/10' },
-  urgent: { label: 'Urgente', chip: 'text-[#F87171] bg-[#F87171]/10' },
+  low: { label: 'Baixa', chip: 'text-text-secondary bg-surface-secondary' },
+  normal: { label: 'Normal', chip: 'text-[#17708A] dark:text-[#5cc5e4] bg-brand/10' },
+  high: { label: 'Alta', chip: 'text-[#B45309] dark:text-[#FBBF24] bg-warning/10' },
+  urgent: { label: 'Urgente', chip: 'text-[#DC2626] dark:text-[#F87171] bg-error/10' },
 };
 
 /** Idade relativa em pt-BR ("há 3 dias", "agora"). Fallback vazio quando a data é inválida. */
@@ -87,18 +88,21 @@ function statusLabel(status: string): string {
 }
 
 function Chip({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={`inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${className ?? 'bg-[#5cc5e4]/10 text-[#5cc5e4]'}`}>{children}</span>;
+  return <b className={`inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${className ?? 'bg-brand/10 text-[#17708A] dark:text-[#5cc5e4]'}`}>{children}</b>;
 }
 
-function TicketRow({ ticket }: { ticket: Ticket }) {
+function TicketRow({ ticket, onStatusChange, onReview }: { ticket: Ticket; onStatusChange: (ticket: Ticket) => void; onReview: (ticket: Ticket) => void }) {
   const priority = ticket.priority ? priorityStyles[ticket.priority.toLowerCase()] : undefined;
   const age = ticket.createdAt ? formatRelativeDate(ticket.createdAt) : '';
-  return <li className="rounded-lg bg-[#0C0D0A] px-3 py-2.5 transition-colors hover:bg-[#11120E]">
+  const needsReview = ticket.status.trim().toLocaleLowerCase() === 'homologação';
+  return <li role="listitem" tabIndex={0} onClick={(event) => { if (!(event.target as HTMLElement).closest('a,button')) onStatusChange(ticket); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onStatusChange(ticket); } }} aria-label={`Alterar status de ${ticket.name}`} className="rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
     <div className="flex items-start justify-between gap-3">
-      <p className="min-w-0 break-words text-sm font-medium">{ticket.name}</p>
-      <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#5cc5e4] transition-colors hover:bg-[#5cc5e4]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+      {needsReview
+        ? <button type="button" onClick={() => onReview(ticket)} aria-label={`Revisar ticket: ${ticket.name}`} className="min-w-0 break-words text-left text-sm font-medium text-text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">{ticket.name}</button>
+        : <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>}
+      <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4] transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
     </div>
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[#8A8F8B]">
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
       <Chip>{statusLabel(ticket.status)}</Chip>
       {priority && <Chip className={priority.chip}>{priority.label}</Chip>}
       {ticket.labels?.map((label) => <Chip key={label}>{allLabels.find(([value]) => value === label)?.[1] ?? label}</Chip>)}
@@ -114,18 +118,46 @@ const queueEmpty: Record<Queue, string> = {
 };
 
 /** Lista única com abas por fila, altura limitada com scroll e paginação local. */
-function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean }) {
+const EMPTY_STATUS = '__empty_status__';
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
+}
+
+function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: TicketLists; loading: boolean; onStatusChange: (ticket: Ticket) => void; onReview: (ticket: Ticket) => void }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
-  const tickets = lists[queue];
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const statusOptions = Array.from(new Map(
+    [...lists.open, ...lists.resolved].map((ticket) => {
+      const value = normalizeStatus(ticket.status);
+      return [value, { value, label: value === EMPTY_STATUS ? 'Sem status' : statusLabel(ticket.status) }] as const;
+    }),
+  ).values());
+  if (statusFilter && !statusOptions.some((option) => option.value === statusFilter)) {
+    statusOptions.push({ value: statusFilter, label: statusFilter === EMPTY_STATUS ? 'Sem status' : statusLabel(statusFilter) });
+  }
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredLists = (Object.keys(queueLabels) as Queue[]).reduce((result, key) => {
+    result[key] = lists[key].filter((ticket) => {
+      const matchesSearch = !normalizedSearch || ticket.name.toLocaleLowerCase().includes(normalizedSearch);
+      const matchesStatus = !statusFilter || normalizeStatus(ticket.status) === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    return result;
+  }, { open: [], resolved: [] } as TicketLists);
+  const tickets = filteredLists[queue];
   const pageCount = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const visible = tickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const selectQueue = (next: Queue) => { setQueue(next); setPage(0); };
+  const updateSearch = (value: string) => { setSearch(value); setPage(0); };
+  const updateStatus = (value: string) => { setStatusFilter(value); setPage(0); };
 
-  return <section className="rounded-xl border border-[#2A2D27] bg-[#161714]">
-    <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-[#2A2D27] p-2">
+  return <section className="rounded-xl border border-border bg-surface">
+    <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-border p-2">
       {(Object.keys(queueLabels) as Queue[]).map((key) => {
         const selected = queue === key;
         return <button
@@ -136,37 +168,106 @@ function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean 
           aria-selected={selected}
           aria-controls={`panel-${key}`}
           onClick={() => selectQueue(key)}
-          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] ${
-            selected ? 'bg-[#1E88A8]/15 text-[#5cc5e4]' : 'text-[#8A8F8B] hover:bg-[#0C0D0A] hover:text-[#ECEDEF]'
+          className={`ady-btn inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] ${
+            selected ? 'bg-brand/15 text-[#17708A] dark:text-[#5cc5e4]' : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
           }`}
         >
           {queueLabels[key]}
-          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-[#1E88A8]/25 text-[#5cc5e4]' : 'bg-[#0C0D0A] text-[#8A8F8B]'}`}>{loading ? '…' : lists[key].length}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-brand/25 text-[#17708A] dark:text-[#5cc5e4]' : 'bg-admin-bg text-text-secondary'}`}>{loading ? '…' : filteredLists[key].length}</span>
         </button>;
       })}
     </div>
     <div role="tabpanel" id={`panel-${queue}`} aria-labelledby={`tab-${queue}`} className="p-5 pt-4">
-      {loading ? <p className="text-sm text-[#8A8F8B]" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
-        <div className="flex items-start gap-2 rounded-lg bg-[#0C0D0A] px-3 py-2.5">
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#8A8F8B]" aria-hidden="true" />
-          <p className="text-sm text-[#8A8F8B]">{queueEmpty[queue]}</p>
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)_auto] sm:items-end">
+        <label className="block text-sm text-text-secondary">
+          Pesquisar por assunto
+          <input type="search" aria-label="Pesquisar por assunto" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Digite parte do assunto" className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+        </label>
+        <label className="block text-sm text-text-secondary">
+          Status
+          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+            <option value="">Todos os status</option>
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => { updateSearch(''); updateStatus(''); }} disabled={!search && !statusFilter} className="ady-btn rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
+      </div>
+      {loading ? <p className="text-sm text-text-secondary" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
+        <div className="flex items-start gap-2 rounded-lg bg-admin-bg px-3 py-2.5">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+          <p className="text-sm text-text-secondary">{search || statusFilter ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
         </div>
       ) : (
         <>
           <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
-            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)}
+            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} onStatusChange={onStatusChange} onReview={onReview} />)}
           </ul>
-          <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-[#8A8F8B]">
+          <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-text-secondary">
             <span role="status">Página {safePage + 1} de {pageCount}</span>
             <span className="flex gap-2">
-              <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
-              <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="ady-btn inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
+              <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="ady-btn inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
             </span>
           </nav>
         </>
       )}
     </div>
   </section>;
+}
+
+function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
+  ticket: Ticket | null;
+  statuses: TicketStatus[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [status, setStatus] = useState(() => ticket ? (statuses.find((option) => option.value.toLocaleLowerCase() === ticket.status.toLocaleLowerCase())?.value ?? ticket.status) : '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!ticket || !status || status.toLocaleLowerCase() === ticket.status.toLocaleLowerCase()) return;
+    setSaving(true); setError(null);
+    try {
+      await api.patch(`/admin/tickets/${encodeURIComponent(ticket.id)}/status`, { expectedStatus: ticket.status, status });
+      onOpenChange(false);
+      showSnack('Status do ticket atualizado.', 'success');
+      onSaved();
+    } catch (reason) {
+      const response = reason as { response?: { status?: number; data?: { error?: { message?: string } } } };
+      if (response.response?.status === 409) {
+        showSnack('O status do ticket mudou no ClickUp. Os chamados foram recarregados.', 'error');
+        onOpenChange(false);
+        onSaved();
+      } else {
+        setError(response.response?.data?.error?.message ?? 'Não foi possível atualizar o status agora. Tente novamente.');
+      }
+    } finally { setSaving(false); }
+  };
+
+  return <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)' }}>
+        <DialogPrimitive.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div><DialogPrimitive.Title className="text-lg font-semibold">Alterar status</DialogPrimitive.Title><p className="mt-1 break-words text-sm text-text-secondary">{ticket?.name}</p></div>
+            <DialogPrimitive.Close className="ady-btn rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><X className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Fechar</span></DialogPrimitive.Close>
+          </div>
+          <label className="mt-5 block text-sm font-medium" htmlFor="ticket-status">Novo status
+            <select id="ticket-status" aria-label="Novo status" value={status} onChange={(event) => setStatus(event.target.value)} disabled={saving || statuses.length === 0} className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+              {statuses.length === 0 ? <option value="">Status indisponíveis</option> : statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          {error && <p role="alert" className="mt-3 text-sm text-[#DC2626] dark:text-red-300">{error}</p>}
+          <div className="mt-5 flex justify-end gap-2">
+            <DialogPrimitive.Close disabled={saving} className="ady-btn rounded-lg border border-border px-3 py-2 text-sm text-text-primary disabled:opacity-50">Cancelar</DialogPrimitive.Close>
+            <button type="button" onClick={() => void submit()} disabled={saving || !status || status.toLocaleLowerCase() === ticket?.status.toLocaleLowerCase()} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Salvando…' : 'Confirmar alteração'}</button>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Overlay>
+    </DialogPrimitive.Portal>
+  </DialogPrimitive.Root>;
 }
 
 /** Modal de abertura de chamado (Radix Dialog: focus trap, Esc e lock de scroll de graça). */
@@ -248,7 +349,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
     setAttachments((current) => [...current, ...nextFiles]);
   };
 
-  const fieldClass = 'mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
+  const fieldClass = 'mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
   const summaryEntries = (Object.keys(fieldErrors) as Array<keyof TicketForm>)
     .filter((name) => Boolean(errors[name]?.message))
     .map((name) => ({ name, message: errors[name]?.message as string }));
@@ -256,22 +357,23 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+        {/* conteúdo dentro do overlay: o CSS do tema claro não pinta o fundo */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.6)" }}>
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[#2A2D27] bg-[#161714] p-5 shadow-xl sm:p-6"
+          className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6"
         >
           <div className="flex items-start justify-between gap-3">
             <DialogPrimitive.Title className="text-lg font-semibold">Abrir novo chamado</DialogPrimitive.Title>
-            <DialogPrimitive.Close className="rounded-lg p-1.5 text-[#8A8F8B] transition-colors hover:bg-[#0C0D0A] hover:text-[#ECEDEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
+            <DialogPrimitive.Close className="ady-btn rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
               <X className="h-4 w-4" aria-hidden="true" />
               <span className="sr-only">Fechar</span>
             </DialogPrimitive.Close>
           </div>
-          <form className="mt-5 space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+          <form className="ady-form-plain mt-5 space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
             {summaryEntries.length > 0 && (
-              <div role="alert" tabIndex={-1} aria-labelledby="ticket-error-title" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">
-                <h3 id="ticket-error-title" className="font-medium">Revise os campos destacados</h3>
+              <div role="alert" tabIndex={-1} aria-labelledby="ticket-error-title" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-[#B91C1C] dark:text-red-100">
+                <h3 id="ticket-error-title" className="font-medium text-[#B91C1C] dark:text-red-100">Revise os campos destacados</h3>
                 <ul className="mt-2 list-inside space-y-1">
                   {summaryEntries.map((entry) => (
                     <li key={entry.name}><a href={`#${fieldErrors[entry.name].field}`} className="underline">{fieldErrors[entry.name].link}: {entry.message}</a></li>
@@ -281,20 +383,20 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
             )}
             <div>
               <label className="text-sm font-medium" htmlFor="ticket-email">E-mail do usuário</label>
-              <p className="mt-0.5 text-xs text-[#8A8F8B]">Conta do usuário afetado pelo chamado.</p>
+              <p className="mt-0.5 text-xs text-text-secondary">Conta do usuário afetado pelo chamado.</p>
               <input id="ticket-email" type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'ticket-email-error' : 'ticket-email-hint'} className={fieldClass} {...register('email')} />
-              {errors.email ? <p id="ticket-email-error" className="mt-1 text-xs text-red-300">{errors.email?.message}</p> : <p id="ticket-email-hint" className="sr-only">Informe o e-mail da conta do usuário afetado.</p>}
+              {errors.email ? <div id="ticket-email-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.email?.message}</div> : <p id="ticket-email-hint" className="sr-only">Informe o e-mail da conta do usuário afetado.</p>}
             </div>
             <div>
               <label className="text-sm font-medium" htmlFor="ticket-subject">Assunto</label>
-              <p className="mt-0.5 text-xs text-[#8A8F8B]">Resumo curto do problema em uma linha (até 160 caracteres).</p>
+              <p className="mt-0.5 text-xs text-text-secondary">Resumo curto do problema em uma linha (até 160 caracteres).</p>
               <input id="ticket-subject" aria-invalid={Boolean(errors.subject)} aria-describedby={errors.subject ? 'ticket-subject-error' : undefined} className={fieldClass} maxLength={160} {...register('subject')} />
-              {errors.subject && <p id="ticket-subject-error" className="mt-1 text-xs text-red-300">{errors.subject?.message}</p>}
+              {errors.subject && <div id="ticket-subject-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.subject?.message}</div>}
             </div>
             <div>
               <label className="text-sm font-medium" htmlFor="ticket-description">Descrição</label>
               <textarea id="ticket-description" aria-invalid={Boolean(errors.description)} aria-describedby={errors.description ? 'ticket-description-error' : 'ticket-description-counter'} className={`${fieldClass} min-h-36 resize-y`} maxLength={5_000} {...register('description')} />
-              {errors.description ? <p id="ticket-description-error" className="mt-1 text-xs text-red-300">{errors.description?.message}</p> : <p id="ticket-description-counter" className="mt-1 text-xs text-[#8A8F8B]"><span aria-live="polite">{descriptionValue.length}/5000</span></p>}
+              {errors.description ? <div id="ticket-description-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.description?.message}</div> : <p id="ticket-description-counter" className="mt-1 text-xs text-text-secondary"><span aria-live="polite">{descriptionValue.length}/5000</span></p>}
             </div>
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
@@ -318,66 +420,139 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               </div>
             </div>
             <fieldset id="ticket-labels">
-              <legend className="text-sm font-medium">Etiquetas <span className="text-xs font-normal text-[#8A8F8B]">(opcional)</span></legend>
-              <p className="mt-0.5 text-xs text-[#8A8F8B]">Classifique o chamado, se fizer sentido. Você pode deixar tudo sem seleção.</p>
+              <legend className="text-sm font-medium">Etiquetas <span className="text-xs font-normal text-text-secondary">(opcional)</span></legend>
+              <p className="mt-0.5 text-xs text-text-secondary">Classifique o chamado, se fizer sentido. Você pode deixar tudo sem seleção.</p>
               <div className="mt-3 space-y-3">
                 <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
                 <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
               </div>
-              {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
+              {errors.labels && <div className="mt-2 text-xs text-[#DC2626] dark:text-red-300">{errors.labels.message}</div>}
             </fieldset>
             <fieldset>
               <legend className="text-sm font-medium">Anexos (imagens ou vídeos)</legend>
-              <p className="mt-0.5 text-xs text-[#8A8F8B]">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
+              <p className="mt-0.5 text-xs text-text-secondary">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
               <input
                 id="ticket-attachments"
                 aria-label="Anexos (imagens ou vídeos)"
                 type="file"
                 multiple
                 accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
-                className="mt-2 block w-full text-sm text-[#8A8F8B] file:mr-3 file:rounded-lg file:border-0 file:bg-[#1E88A8]/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#5cc5e4] hover:file:bg-[#1E88A8]/25"
+                className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-brand/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#17708A] dark:text-[#5cc5e4] hover:file:bg-brand/25"
                 onChange={(event) => { addAttachments(event.target.files); event.target.value = ''; }}
               />
-              {attachmentError && <p role="alert" className="mt-2 text-xs text-red-300">{attachmentError}</p>}
+              {attachmentError && <div role="alert" className="mt-2 text-xs text-[#DC2626] dark:text-red-300">{attachmentError}</div>}
               {attachments.length > 0 && <ul className="mt-3 space-y-2" aria-label="Anexos selecionados">
-                {attachments.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-[#0C0D0A] px-3 py-2 text-sm">
-                  <span className="flex min-w-0 items-center gap-2"><Paperclip className="h-4 w-4 shrink-0 text-[#5cc5e4]" aria-hidden="true" /><span className="truncate">{file.name}</span></span>
-                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))} aria-label={`Remover ${file.name}`} className="rounded p-1 text-[#8A8F8B] hover:bg-[#2A2D27] hover:text-[#ECEDEF]"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+                {attachments.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-admin-bg px-3 py-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2"><Paperclip className="h-4 w-4 shrink-0 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" /><span className="truncate">{file.name}</span></span>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))} aria-label={`Remover ${file.name}`} className="ady-btn rounded p-1 text-text-secondary hover:bg-surface-secondary hover:text-text-primary"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
                 </li>)}
               </ul>}
             </fieldset>
-            <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161714] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={isSubmitting} className="ady-btn inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#17708A]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60">
               <Send className="h-4 w-4" aria-hidden="true" />
               {isSubmitting ? 'Abrindo ticket…' : 'Abrir ticket'}
             </button>
           </form>
         </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
 }
 
 function LabelGroup({ title, labels, selected, register }: { title: string; labels: readonly (readonly [TicketLabel, string])[]; selected: TicketLabel[]; register: ReturnType<typeof useForm<TicketForm>>['register'] }) {
-  return <div><p className="text-xs font-medium text-[#8A8F8B]">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
-    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-[#1E88A8] bg-[#1E88A8]/15 text-[#5cc5e4]' : 'border-[#2A2D27] text-[#ECEDEF]'}`}>
-      <input className="sr-only" type="checkbox" value={value} {...register('labels')} />{label}
+  return <div><p className="text-xs font-medium text-text-secondary">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
+    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-brand bg-brand/15' : 'border-border'}`}>
+      <input className="sr-only" type="checkbox" value={value} {...register('labels')} /><b className={`font-normal ${selected.includes(value) ? 'text-[#17708A] dark:text-[#5cc5e4]' : 'text-text-primary'}`}>{label}</b>
     </label>)}
   </div></div>;
+}
+
+function ReviewTicketDialog({ ticket, onClose, onComplete }: {
+  ticket: Ticket | null;
+  onClose: () => void;
+  onComplete: (decision: 'approve' | 'reject') => void;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (decision: 'approve' | 'reject') => {
+    if (!ticket || submitting) return;
+    const trimmedReason = reason.trim();
+    if (decision === 'reject' && !trimmedReason) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.post(`/admin/tickets/${encodeURIComponent(ticket.id)}/review`, decision === 'approve'
+        ? { decision }
+        : { decision, reason: trimmedReason });
+      onComplete(decision);
+    } catch (cause) {
+      const responseError = (cause as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
+      setError(responseError?.message ?? 'Não foi possível atualizar o ticket. Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <DialogPrimitive.Root open={Boolean(ticket)} onOpenChange={(open) => { if (!open && !submitting) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <DialogPrimitive.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogPrimitive.Title className="text-lg font-semibold">Revisar ticket</DialogPrimitive.Title>
+                <p className="mt-1 break-words text-sm text-text-secondary">{ticket?.name}</p>
+              </div>
+              <DialogPrimitive.Close disabled={submitting} aria-label="Fechar" className="ady-btn rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><X className="h-4 w-4" aria-hidden="true" /></DialogPrimitive.Close>
+            </div>
+            {!rejecting ? <>
+              <p className="mt-5 text-sm text-text-primary">Deseja aprovar ou reprovar este ticket?</p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <DialogPrimitive.Close disabled={submitting} className="ady-btn rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary">Cancelar</DialogPrimitive.Close>
+                <button type="button" disabled={submitting} onClick={() => setRejecting(true)} className="ady-btn rounded-lg border border-error/40 px-4 py-2 text-sm text-error hover:bg-error/10">Reprovar</button>
+                <button type="button" disabled={submitting} onClick={() => void submit('approve')} className="ady-btn rounded-lg bg-[#17708A] px-4 py-2 text-sm font-medium text-white hover:bg-[#17708A]/90 disabled:opacity-60">{submitting ? 'Salvando…' : 'Aprovar'}</button>
+              </div>
+            </> : <>
+              <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="ticket-review-reason">Motivo da reprovação</label>
+              <textarea id="ticket-review-reason" value={reason} maxLength={5_000} onChange={(event) => setReason(event.target.value)} className="mt-1 min-h-28 w-full resize-y rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+              {error && <p role="alert" className="mt-2 text-sm text-error">{error}</p>}
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" disabled={submitting} onClick={() => { setRejecting(false); setError(null); }} className="ady-btn rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary">Voltar</button>
+                <button type="button" disabled={submitting || !reason.trim()} onClick={() => void submit('reject')} className="ady-btn rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-60">{submitting ? 'Salvando…' : 'Confirmar reprovação'}</button>
+              </div>
+            </>}
+            {!rejecting && error && <p role="alert" className="mt-3 text-sm text-error">{error}</p>}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
 }
 
 export function TicketsPage() {
   const [lists, setLists] = useState<TicketLists>({ open: [], resolved: [] });
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [statuses, setStatuses] = useState<TicketStatus[]>([]);
+  const [statusTicket, setStatusTicket] = useState<Ticket | null>(null);
+  const [reviewingTicket, setReviewingTicket] = useState<Ticket | null>(null);
   const [listWarning, setListWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [ticketsResponse, assigneesResponse] = await Promise.all([api.get('/admin/tickets'), api.get('/admin/tickets/assignees')]);
-      setLists(ticketsResponse.data.data ?? { open: [], resolved: [] });
-      setAssignees(assigneesResponse.data.data ?? []);
-      if (ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
+      const [ticketsResult, assigneesResult, statusesResult] = await Promise.allSettled([api.get('/admin/tickets'), api.get('/admin/tickets/assignees'), api.get('/admin/tickets/statuses')]);
+      const ticketsResponse = ticketsResult.status === 'fulfilled' ? ticketsResult.value : null;
+      const assigneesResponse = assigneesResult.status === 'fulfilled' ? assigneesResult.value : null;
+      const statusesResponse = statusesResult.status === 'fulfilled' ? statusesResult.value : null;
+      setLists(ticketsResponse?.data.data ?? { open: [], resolved: [] });
+      setAssignees(assigneesResponse?.data.data ?? []);
+      setStatuses(statusesResponse?.data.data ?? []);
+      if (!ticketsResponse || !assigneesResponse || !statusesResponse || ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar todos os dados dos chamados agora. Tente novamente.');
     } catch {
       setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
     } finally { setLoading(false); }
@@ -386,7 +561,7 @@ export function TicketsPage() {
   const refresh = useCallback(() => {
     setListWarning(null);
     setLists({ open: [], resolved: [] });
-    setAssignees([]);
+    setAssignees([]); setStatuses([]);
     void load();
     setLoading(true);
   }, [load]);
@@ -400,39 +575,50 @@ export function TicketsPage() {
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-2xl font-bold">Chamados</h1>
-        <p className="mt-1 text-sm text-[#8A8F8B]">Acompanhe e abra chamados na fila de suporte da Ady.</p>
+        <p className="mt-1 text-sm text-text-secondary">Acompanhe e abra chamados na fila de suporte da Ady.</p>
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={refresh} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-[#2A2D27] px-3 py-2 text-sm transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:opacity-60">
+        <button type="button" onClick={refresh} disabled={loading} className="ady-btn inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:opacity-60">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           {loading ? 'Atualizando…' : 'Atualizar'}
         </button>
-        <button type="button" onClick={() => setModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0C0D0A]">
+        <button type="button" onClick={() => setModalOpen(true)} className="ady-btn inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#17708A]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           <Plus className="h-4 w-4" aria-hidden="true" />
           Abrir chamado
         </button>
       </div>
     </header>
-    <p role="status" aria-busy={loading} className={loading ? 'text-sm text-[#8A8F8B]' : 'sr-only'}>
+    <p role="status" aria-busy={loading} className={loading ? 'text-sm text-text-secondary' : 'sr-only'}>
       {loading ? 'Carregando chamados…' : 'Chamados carregados.'}
     </p>
-    {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-100">{listWarning}</div>}
-    <TicketsTabs lists={lists} loading={loading} />
-    <details className="group rounded-xl border border-[#2A2D27] bg-[#161714]">
-      <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
-        <Users className="h-4 w-4 text-[#5cc5e4]" aria-hidden="true" />
+    {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
+    <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} onReview={setReviewingTicket} />
+    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
+    <details className="group rounded-xl border border-border bg-surface">
+      <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
+        <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />
         Como escolher o nível
-        <ChevronDown className="ml-auto h-4 w-4 text-[#8A8F8B] transition-transform group-open:rotate-180" aria-hidden="true" />
+        <ChevronDown className="ml-auto h-4 w-4 text-text-secondary transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="grid gap-3 px-5 pb-5 sm:grid-cols-2">
         {levelHelp.map(([title, description]) => (
-          <div key={title} className="rounded-lg bg-[#0C0D0A] px-3 py-2.5">
-            <p className="text-sm font-medium">{title}</p>
-            <p className="mt-0.5 text-xs text-[#8A8F8B]">{description}</p>
+          <div key={title} className="rounded-lg bg-admin-bg px-3 py-2.5">
+            <div className="text-sm font-medium text-text-primary">{title}</div>
+            <p className="mt-0.5 text-xs text-text-secondary">{description}</p>
           </div>
         ))}
       </div>
     </details>
+    <ReviewTicketDialog
+      key={reviewingTicket?.id ?? 'closed'}
+      ticket={reviewingTicket}
+      onClose={() => setReviewingTicket(null)}
+      onComplete={(decision) => {
+        setReviewingTicket(null);
+        showSnack(decision === 'approve' ? 'Ticket aprovado.' : 'Ticket reprovado e devolvido para implementação.', 'success');
+        void load();
+      }}
+    />
     <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load()} />
   </div>;
 }

@@ -8,6 +8,7 @@ import { BrandKitPhotoRepository } from '../../repository/brand-kit-photo.reposi
 import { openrouterService } from '../llms/openrouter.service.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
 import { openrouterVideoClient, type OpenRouterVideoClient, type VideoSubmitParams } from '../../lib/openrouter-video.js';
+import { runWithTenant } from '../../lib/ai-key-context.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
 import { AD_VIDEO_MODELS, DEFAULT_AD_VIDEO_MODEL } from './studio-model-catalog.js';
@@ -74,6 +75,8 @@ interface VideoJobMetadata {
   startedAt: string;
   submittedAt: string | null;
   log: LogEntry[];
+  /** Usuário que iniciou a geração; usado para avisos assíncronos. */
+  initiatedByUserId?: string;
 }
 
 export interface CreateVideoInput {
@@ -240,6 +243,8 @@ type Deps = {
   modQuota: { consume: (rootAssetId: string) => Promise<void>; refund: (rootAssetId: string) => Promise<void> };
   sleep: (ms: number) => Promise<void>;
   store: typeof storeFile;
+  notifyVideoReady: (tenantId: string, userId: string, jobId: string, assetId: string) => Promise<void>;
+  notifyVideoFailed: (tenantId: string, userId: string, jobId: string) => Promise<void>;
   now: () => number;
 };
 
@@ -262,6 +267,8 @@ export class StudioVideoService {
       modQuota: { consume: consumeModificationQuota, refund: refundModificationQuota },
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       store: storeFile,
+      notifyVideoReady: async () => undefined,
+      notifyVideoFailed: async () => undefined,
       now: () => Date.now(),
       ...deps,
     };
@@ -329,7 +336,7 @@ export class StudioVideoService {
     return { scenes: result.scenes };
   }
 
-  async createJob(tenantId: string, input: CreateVideoInput): Promise<{ jobId: string }> {
+  async createJob(tenantId: string, input: CreateVideoInput, initiatedByUserId?: string): Promise<{ jobId: string }> {
     if (!(VIDEO_DURATIONS as readonly number[]).includes(input.duration)) {
       throw new AppError(400, 'INVALID_DURATION', 'Duração inválida.');
     }
@@ -351,13 +358,14 @@ export class StudioVideoService {
         rootAssetId: null,
         feedback: null,
         modificationsLimit: limits.modificationsPerVideo,
+        initiatedByUserId,
       },
       limits.videosPerMonth === null ? undefined : { since: limits.periodStart, limit: limits.videosPerMonth },
     );
   }
 
   /** Ajuste pós-geração: o LLM reescreve o roteiro com o pedido e gera uma nova versão do grupo. */
-  async adjustVideo(tenantId: string, assetId: string, feedback: string): Promise<{ jobId: string }> {
+  async adjustVideo(tenantId: string, assetId: string, feedback: string, initiatedByUserId?: string): Promise<{ jobId: string }> {
     const asset = await this.deps.studioRepo(tenantId).findAssetById(assetId);
     if (!asset || asset.type !== 'video') throw new AppError(404, 'VIDEO_NOT_FOUND', 'Vídeo não encontrado.');
     let notes: any;
@@ -397,6 +405,7 @@ export class StudioVideoService {
         scriptCostUsd: result.costUsd,
         rootAssetId,
         feedback,
+        initiatedByUserId,
       });
     } catch (err) {
       await this.deps.modQuota.refund(rootAssetId);
@@ -509,9 +518,14 @@ export class StudioVideoService {
 
   /** Executado pelo worker: envia ao OpenRouter, acompanha, salva na biblioteca. Retomável pelo openrouterJobId. */
   async processJob(jobId: string): Promise<void> {
-    const { jobRepo, video } = this.deps;
-    const job = await jobRepo.getWorkflowJob(jobId);
+    const job = await this.deps.jobRepo.getWorkflowJob(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
+    // IA do vídeo usa a chave do dono do cliente
+    return runWithTenant(job.tenantId, () => this.processLoadedJob(jobId, job));
+  }
+
+  private async processLoadedJob(jobId: string, job: NonNullable<Awaited<ReturnType<Deps['jobRepo']['getWorkflowJob']>>>): Promise<void> {
+    const { jobRepo, video } = this.deps;
     const meta = { ...(job.metadata as unknown as VideoJobMetadata) };
     meta.log = [...(meta.log ?? [])];
     const startedAt = new Date(meta.startedAt).getTime();
@@ -525,6 +539,10 @@ export class StudioVideoService {
     const fail = async (message: string) => {
       await save({ status: 'error', error: message });
       if (meta.rootAssetId) await this.deps.modQuota.refund(meta.rootAssetId);
+      if (meta.initiatedByUserId) {
+        try { await this.deps.notifyVideoFailed(job.tenantId, meta.initiatedByUserId, jobId); }
+        catch (notificationError) { console.error('[studio-video] falha ao criar notificação de erro', { jobId, error: (notificationError as Error).message }); }
+      }
     };
 
     await save({ status: 'running' });
@@ -640,6 +658,17 @@ export class StudioVideoService {
       if (meta.rootAssetId) await repo.setActiveAsset(meta.rootAssetId, asset.id);
       log('concluído', `asset ${asset.id}`);
       await save({ status: 'done', currentStage: 'done', artifacts: { assetId: asset.id, videoUrl } });
+      if (meta.initiatedByUserId) {
+        try {
+          await this.deps.notifyVideoReady(job.tenantId, meta.initiatedByUserId, jobId, asset.id);
+        } catch (notificationError) {
+          // A falha no sino não pode transformar um vídeo já salvo em erro.
+          console.error('[studio-video] falha ao criar notificação de vídeo pronto', {
+            jobId,
+            error: (notificationError as Error).message,
+          });
+        }
+      }
     } catch (err) {
       log('erro', (err as Error).message);
       console.error('[studio-video] job falhou', { jobId, error: (err as Error).message });

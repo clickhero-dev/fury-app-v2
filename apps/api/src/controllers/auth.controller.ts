@@ -270,8 +270,30 @@ export class AuthController {
             id: result.user.id,
             email: result.user.email,
             role: result.user.role,
+            // o admin decide quem entra por aqui (super_admin / admin_partner)
+            platformRole: result.user.platformRole,
             tenantId: result.user.tenantId,
           },
+          ...(policy ? { policy } : {}),
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  demoLogin = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.authService.demoLogin();
+      const policy = await this.policyState(result.user.id);
+      res.status(200).json({
+        success: true,
+        data: {
+          token: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, type: result.user.type, tenantId: result.user.tenantId },
+          demo: true,
           ...(policy ? { policy } : {}),
         },
         timestamp: new Date().toISOString(),
@@ -559,6 +581,7 @@ export class AuthController {
           email: result.user.email,
           name: result.user.name,
           role: result.user.role,
+          platformRole: result.user.platformRole,
           tenantId: result.user.tenantId,
         },
         isNewUser: result.isNewUser,

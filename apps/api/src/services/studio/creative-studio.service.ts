@@ -160,7 +160,6 @@ export class StudioService {
   }
 
   async generateCopyLegacy(body: any, type: CopyType, quantidade: number) {
-    if (!process.env.OPENROUTER_API_KEY) return { variacoes: getMockVariations(body, quantidade) };
     const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram. Gere variações de copy persuasivas, claras e em português brasileiro. Respeite RIGOROSAMENTE os limites de caracteres especificados. Responda APENAS em JSON válido sem texto adicional.`;
     const userPrompt = `Produto: ${body.produto}\nPúblico: ${body.publico}\nObjetivo: ${body.objetivo}\nTom: ${body.tom}\n\nGere ${quantidade} variações de ${type} em português, limite máximo ${COPY_LIMITS[type] ?? 300} caracteres.\n\nRetorne APENAS:\n{"variacoes": [{"texto": "..."}]}`;
     const text = await this.deps.llm.chat(

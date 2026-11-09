@@ -87,7 +87,7 @@ export function RegisterFormPage() {
       localStorage.setItem('token', response.token);
       localStorage.setItem('refreshToken', response.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.user));
-      navigate('/dashboard');
+      navigate('/onboarding/conectar-meta');
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : 'Código inválido');
     }

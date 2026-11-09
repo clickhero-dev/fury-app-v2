@@ -64,6 +64,19 @@ export class DemoDashboardService {
 
   async getForTenant(tenantId: string): Promise<{ demo: false } | DemoDashboardData> {
     const tenant = await this.repoFactory(tenantId).findTenant();
-    return tenant?.slug === DEMO_TENANT_SLUG ? DEMO_DASHBOARD : { demo: false };
+    return tenant?.isDemo === true ? DEMO_DASHBOARD : { demo: false };
+  }
+
+  async campaignDataForTenant(tenantId: string) {
+    const data = await this.getForTenant(tenantId);
+    if (!data.demo) return null;
+    const campaigns = data.campaigns.map((campaign) => ({
+      ...campaign,
+      objective: 'OUTCOME_SALES', budget: { daily: 1200 }, hasLeadForm: false,
+      impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0,
+      metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa },
+      lastInsightsAt: null,
+    }));
+    return { ...data, campaigns };
   }
 }

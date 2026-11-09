@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Info, Loader2, Play, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Image as ImageIcon, Info, Loader2, Play, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import { UsageBadge } from '@/components/UsageBadge';
 import type { LibraryPhoto } from '@/hooks/useStudioLibrary';
 import api from '@/lib/api';
+import { downloadStudioAsset } from '@/lib/download-studio-asset';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { StudioAsset, GenerateCreativeResponse, StudioVideoJob } from '@/types/studio';
@@ -20,6 +21,14 @@ import { VideoCreateForm } from './components/VideoCreateForm';
 import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
 import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
+import {
+  completeGeneration,
+  failGeneration,
+  startGeneration,
+  tickGeneration,
+  type GenerationProgressState,
+} from './creative-generation-progress';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create' | 'video-progress';
 
@@ -30,6 +39,30 @@ const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
 const CARD_HOVER = 'transition-all duration-300 ease-in-out hover:border-brand/50 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
+function GenerationProgressIndicator({ state }: { state: GenerationProgressState }) {
+  const waiting = state.progress >= 95 && state.phase === 'generating';
+  const label = state.phase === 'completing'
+    ? 'Finalizando a geração...'
+    : waiting
+      ? 'A geração ainda está em andamento. A confirmação pode levar mais alguns instantes.'
+      : 'O ady está criando sua imagem...';
+
+  return (
+    <div className="w-full max-w-md space-y-3 text-left" aria-live="polite">
+      <div className="flex items-center justify-between gap-4 text-sm font-semibold text-text-primary">
+        <span>{label}</span>
+        <span className="text-brand">{state.progress}%</span>
+      </div>
+      <div role="progressbar" aria-label="Progresso estimado da geração da imagem" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.progress} className="h-2.5 overflow-hidden rounded-full bg-brand/15">
+        <div className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${state.progress}%` }} />
+      </div>
+      {state.phase === 'completing' && (
+        <p className="text-sm text-text-tertiary">A imagem foi recebida. Preparando o resultado.</p>
+      )}
+    </div>
+  );
+}
 
 const CHIP_ON = 'bg-brand text-white font-semibold shadow-sm';
 const CHIP_OFF = 'text-text-tertiary hover:text-text-primary hover:bg-surface-hover font-medium';
@@ -46,6 +79,7 @@ export function EstudioHome() {
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [isNewGeneration, setIsNewGeneration] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
@@ -54,9 +88,10 @@ export function EstudioHome() {
   const [createMode, setCreateMode] = useState<'image' | 'video'>('image');
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const { data: activeVideoJobs = [] } = useActiveStudioVideoJobs();
-  // plano com cota de vídeo 0: sem criação nem filtro de vídeo
+  // cota de vídeo 0 ou vídeo bloqueado no RBAC: sem criação nem filtro de vídeo
   const { data: videoOptions } = useStudioVideoOptions();
-  const videoEnabled = videoOptions?.enabled === true;
+  const { isBlocked } = useBlockedViews();
+  const videoEnabled = videoOptions?.enabled === true && !isBlocked('studio.video');
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
@@ -68,18 +103,39 @@ export function EstudioHome() {
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
-  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(null);
+  const generationPhase = generationProgress?.phase;
+  const generationStartedAtForProgress = generationProgress?.startedAt;
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-
+    if (generationPhase !== 'generating') return;
+    const update = () => setGenerationProgress((current) => current ? tickGeneration(current, Date.now()) : current);
+    update();
+    const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [generationPhase, generationStartedAtForProgress]);
 
-  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+  useEffect(() => {
+    if (generationPhase !== 'completing') return;
+    const completionStartedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const progress = Math.min(100, 95 + Math.round(((Date.now() - completionStartedAt) / 400) * 5));
+      setGenerationProgress((current) => current ? { ...current, progress } : current);
+      if (progress >= 100) {
+        window.clearInterval(timer);
+        setGenerationProgress((current) => current ? { ...current, phase: 'complete', progress: 100 } : current);
+      }
+    }, 50);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [generationPhase]);
+
+  useEffect(() => {
+    if (generationPhase !== 'complete') return;
+    const revealTimer = window.setTimeout(() => setView((current) => current === 'loading' ? 'result' : current), 50);
+    return () => window.clearTimeout(revealTimer);
+  }, [generationPhase]);
 
   const modelsQuery = useQuery({
     queryKey: ['studio-ai', 'models'],
@@ -120,6 +176,7 @@ export function EstudioHome() {
       return res.data;
     },
     onSuccess: (data: { creativeAssetId: string; imageUrl: string; modificationsRemaining?: number | null }) => {
+      setIsNewGeneration(true);
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -127,13 +184,12 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
-      setGenerationStartedAt(null);
-      setView('result');
+      setGenerationProgress((current) => current ? completeGeneration(current) : current);
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
     onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
-      setGenerationStartedAt(null);
+      setGenerationProgress((current) => current ? failGeneration(current) : current);
       setView('error');
       setProgressMessage('');
       setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
@@ -235,7 +291,8 @@ export function EstudioHome() {
     if (finalPrompt.length < 10) return;
     setView('loading');
     // cronômetro começa no clique — cobre enhance-prompt + geração
-    setGenerationStartedAt(Date.now());
+    const startedAt = Date.now();
+    setGenerationProgress(startGeneration(startedAt));
     const photo_ids = artPhotos.length ? artPhotos.map((p) => p.id) : undefined;
 
     // com modelo: o texto é "o que muda" — vai direto, sem aprimorar
@@ -269,6 +326,11 @@ export function EstudioHome() {
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
+    setIsNewGeneration(false);
+  };
+  const handleNewCreative = () => {
+    setIsNewGeneration(false);
+    handleStartQuickCreate();
   };
 
   const handleViewDetails = (asset: StudioAsset) => {
@@ -299,8 +361,19 @@ export function EstudioHome() {
       complianceNotes: asset.complianceNotes,
       modificationsRemaining: asset.modificationsRemaining ?? null,
     });
+    setIsNewGeneration(false);
     setView('result');
   };
+
+  const assetParam = searchParams.get('assetId');
+  useEffect(() => {
+    if (!assetParam || !assetList.length) return;
+    const asset = assetList.find((item) => item.id === assetParam);
+    if (asset) handleViewDetails(asset);
+    const next = new URLSearchParams(searchParams);
+    next.delete('assetId');
+    setSearchParams(next, { replace: true });
+  }, [assetParam, assetList, searchParams, setSearchParams]);
 
   const handleTrackVideo = (jobId: string) => {
     setVideoJobId(jobId);
@@ -327,6 +400,7 @@ export function EstudioHome() {
       videoMeta: parseVideoMeta(complianceNotes),
       modificationsRemaining,
     });
+    setIsNewGeneration(true);
     // usuário pode ter saído da tela de progresso durante o await
     setView((v) => (v === 'video-progress' ? 'result' : v));
   };
@@ -859,11 +933,8 @@ export function EstudioHome() {
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
                 {progressMessage || 'O ady está criando sua imagem...'}
-                {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
               </h2>
-              <p className="mt-2 text-sm text-text-tertiary">
-                A geração com IA e a renderização podem levar de 1 a 2 minutos
-              </p>
+              {generationProgress && <GenerationProgressIndicator state={generationProgress} />}
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
               {templatePhoto ? (
@@ -895,7 +966,8 @@ export function EstudioHome() {
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
-              onNewCreative={handleStartQuickCreate}
+              onNewCreative={handleNewCreative}
+              showVariationSuggestion={isNewGeneration}
               onTrackVideo={handleTrackVideo}
               onPublish={() => {
                 const isVideo = generationResult.type === 'video';
@@ -1008,6 +1080,22 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
 export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onUseInCampaign, onRestore, restorePending }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
+  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const canDownload = !archived && !!imageUrl && (asset.type === 'image' || asset.type === 'video');
+  // pending_compliance é análise posterior: o arquivo final já existe.
+  const downloadReady = canDownload && asset.complianceStatus !== 'pending';
+
+  const downloadAsset = async () => {
+    if (!downloadReady || downloadState === 'loading') return;
+    setDownloadState('loading');
+    try {
+      await downloadStudioAsset(asset.id);
+      setDownloadState('idle');
+    } catch {
+      setDownloadState('error');
+    }
+  };
+
   const isVideo = asset.type === 'video';
   const videoMeta = isVideo ? parseVideoMeta(asset.complianceNotes) : null;
   const duration = formatDuration(videoMeta?.durationSeconds);
@@ -1021,6 +1109,18 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             <Play className="h-3 w-3 fill-current" />
             {duration ? `Vídeo · ${duration}` : 'Vídeo'}
           </span>
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? 'anúncio de vídeo'}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
         </div>
       ) : imageUrl && asset.type === 'image' ? (
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
@@ -1032,6 +1132,18 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? `anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
           {badge.tone === 'approved' && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -1093,6 +1205,22 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             </TooltipProvider>
           )}
         </div>
+      ) : imageUrl && asset.type === 'video' ? (
+        <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
+          <video src={imageUrl} className="h-full w-full object-cover" muted preload="metadata" aria-label={asset.name ?? 'Vídeo gerado'} />
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? 'vídeo'}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
       ) : (
         <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-brand/10 to-background">
           <Sparkles className="h-10 w-10 text-brand/50 transition-transform duration-300 group-hover:scale-110" />
@@ -1100,6 +1228,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
       )}
 
       <div className="space-y-3 p-4">
+        {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {videoMeta?.prompt ?? asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}

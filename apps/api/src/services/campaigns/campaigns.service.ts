@@ -69,6 +69,26 @@ export interface CampaignListItem {
 export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
+export function resolveMessagingDestinationType(destinations: WizardMessagingDestination[]): string | undefined {
+  const selected = new Set(destinations);
+  if (selected.size === 0) return undefined;
+  if (selected.size === 1) {
+    if (selected.has('whatsapp')) return 'WHATSAPP';
+    if (selected.has('instagram_direct')) return 'INSTAGRAM_DIRECT';
+    return 'MESSENGER';
+  }
+  if (selected.has('instagram_direct') && selected.has('messenger') && selected.has('whatsapp')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER_WHATSAPP';
+  }
+  if (selected.has('instagram_direct') && selected.has('messenger')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER';
+  }
+  if (selected.has('instagram_direct') && selected.has('whatsapp')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_WHATSAPP';
+  }
+  return 'MESSAGING_MESSENGER_WHATSAPP';
+}
+
 export interface CreateWizardCampaignArgs {
   tenantId: string; objective: WizardObjective; creativeAssetId?: string;
   creativeUploadUrl?: string; creativeInstagramMediaId?: string;
@@ -478,7 +498,8 @@ export class CampaignsService {
 
   private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
     let byId: CampaignRecord | null = null;
-    try { byId = await this.repo.findCampaignById(campaignId); }
+    // só campanha do próprio tenant
+    try { byId = await this.repo.findCampaignByTenantAndId(tenantId, campaignId); }
     catch { /* not a UUID — skip local lookup */ }
     if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
     const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
@@ -699,16 +720,25 @@ export class CampaignsService {
     // Check if already deleted on Meta before calling update.
     // If this fails (e.g. already removed by Meta), fall through to local archive.
     let campaignMeta: Record<string, unknown> | undefined;
+    let metaCampaignUnavailable = false;
     try {
       campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
     } catch (err) {
-      const code = (err as AppError)?.code;
-      if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
-        throw err;
+      // Normaliza a resposta bruta da Graph API antes de decidir se o
+      // arquivamento local pode continuar. Sem isso, code 100/803 escapava
+      // como erro não tratado quando a campanha já havia sido removida.
+      try {
+        this.handleMetaError(err);
+      } catch (mappedErr) {
+        const code = (mappedErr as AppError)?.code;
+        if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
+          throw mappedErr;
+        }
+        metaCampaignUnavailable = true;
       }
     }
     const metaStatus = campaignMeta?.status as string | undefined;
-    if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
+    if (!metaCampaignUnavailable && metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
       try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
       catch (err) { this.handleMetaError(err); }
     }
@@ -1072,9 +1102,7 @@ export class CampaignsService {
     if (args.objective === 'whatsapp') {
       promotedObject = { page_id: args.whatsappPageId };
       if (messagingDestinations.includes('whatsapp')) promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
-      messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
-        : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
-        : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
+      messagingDestinationType = resolveMessagingDestinationType(messagingDestinations);
     } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
       promotedObject = { page_id: pageId };
     }
@@ -1456,7 +1484,8 @@ export class CampaignsService {
   async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
     leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
   }> {
-    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    // leads são dados pessoais: só com o token do próprio tenant
+    const accessToken = await this.getAccessToken(args.tenantId);
 
     // 1) Campanha local com lead_form_id → caminho direto pelo form.
     // O `campaignId` pode ser um META id (campanha criada fora do Fury) — a

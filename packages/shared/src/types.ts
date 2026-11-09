@@ -13,6 +13,8 @@ export interface User {
   email: string;
   passwordHash: string;
   role: UserRole;
+  /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+  type: 'user' | 'demo';
   createdAt: Date;
 }
 
@@ -93,6 +95,9 @@ export interface UserDTO {
   name: string | null;
   email: string;
   role: UserRole;
+  /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+  type: 'user' | 'demo';
+  platformRole: string;
   notificationPrefs: NotificationPrefs;
   audienceDefaults?: {
     city?: string;

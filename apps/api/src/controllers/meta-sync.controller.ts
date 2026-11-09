@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { MetaSyncService, type PartialFailure } from '../services/meta/meta-sync.service.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
-import { isLeadObjective } from '../utils/meta-conversion-events.js';
+import type { DemoDashboardService } from '../services/dashboard/demo-dashboard.service.js';
+import { demoCampaign, demoCampaigns, demoDaily, demoGoals, demoInstagramInsights, demoLeads, demoSummary } from '../services/demo/demo-data.js';
 
 const STALE_MS = 3 * 60 * 60 * 1000;
 
@@ -116,18 +117,21 @@ function toSnapshotView(s: {
 }
 
 /**
- * Campanha de captação (formulário/mensagem): o número exibido como "clientes"
- * E o envio de formulário. Fonte única = `meta_leads` (mesma origem da página
- * Clientes e do card "Pessoas" do detalhe). Insights/`conversions` do cache
- * Meta NÃO entram — o fallback antigo contava clique como cliente.
+ * Campanha de formulário instantâneo: o número exibido como "clientes" é o
+ * total de envios persistidos em `meta_leads` (mesma fonte da página Clientes
+ * e do card "Pessoas" do detalhe).
+ *
+ * Campanhas de leads sem formulário podem usar pixel externo. Nelas, a Meta
+ * reporta `offsite_conversion.fb_pixel_lead` em `metrics.conversions`, então
+ * não podemos substituir os Insights por uma contagem vazia de `meta_leads`.
  */
-function isLeadCampaign(view: Pick<SnapshotView, 'objective' | 'hasLeadForm'>): boolean {
-  return isLeadObjective(view.objective) || view.hasLeadForm === true;
+function usesPersistedLeadCounts(view: Pick<SnapshotView, 'hasLeadForm'>): boolean {
+  return view.hasLeadForm === true;
 }
 
 function withLeadCounts(views: SnapshotView[], leadCounts: Map<string, number>): SnapshotView[] {
   return views.map((view) => {
-    if (!isLeadCampaign(view)) return view;
+    if (!usesPersistedLeadCounts(view)) return view;
     const conversions = leadCounts.get(view.id) ?? 0;
     const spend = view.spend;
     const metrics = { ...view.metrics, conversions };
@@ -188,12 +192,26 @@ export class MetaSyncV2Controller {
     private metaSyncService: MetaSyncService,
     private repoFactory: (tenantId: string) => MetaSyncRepository,
     private enqueueMetaSync: (args: { tenantId: string; reason: string }) => Promise<void> = async () => {},
+    private demoDashboardService?: DemoDashboardService,
   ) {}
+
+  /** Dataset demo é resolvido antes do snapshot/sync: nunca agenda ou chama Meta. */
+  private async demoFor(tenantId: string) {
+    return this.demoDashboardService?.campaignDataForTenant(tenantId) ?? null;
+  }
 
   private tenantOf(req: Request): string {
     const tenantId = req.tenant?.tenantId ?? '';
     if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
     return tenantId;
+  }
+
+  private isDemo(req: Request): boolean {
+    return req.user?.role === 'demo';
+  }
+
+  private demoFields() {
+    return { syncedAt: null, staleForMs: 0, degraded: false, firstSyncPending: false, partial_failures: [], demo: true };
   }
 
   /** Lê sempre do snapshot; stale só enfileira refresh, nunca bloqueia a request com Meta. */
@@ -226,6 +244,12 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const query = listSchema.parse(req.query);
+      const demo = await this.demoFor(tenantId);
+      if (demo || this.isDemo(req)) {
+        const items = demo ? demo.campaigns : demoCampaigns(query.status);
+        const filtered = query.status && demo ? items.filter((campaign) => campaign.status === query.status) : items;
+        return res.json({ success: true, data: filtered.slice(query.offset, query.offset + query.limit), pagination: { total: filtered.length, limit: query.limit, offset: query.offset }, ...this.demoFields(), timestamp: new Date().toISOString() });
+      }
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -291,6 +315,12 @@ export class MetaSyncV2Controller {
       const tenantId = this.tenantOf(req);
       const { id } = req.params;
       if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+      const demo = await this.demoFor(tenantId);
+      if (demo || this.isDemo(req)) {
+        const campaign = demo ? demo.campaigns.find((item) => item.id === id) : demoCampaign(id);
+        if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada.');
+        return res.json({ success: true, data: { ...campaign, syncedAt: null }, ...this.demoFields(), timestamp: new Date().toISOString() });
+      }
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -313,6 +343,7 @@ export class MetaSyncV2Controller {
       const tenantId = this.tenantOf(req);
       const { id } = req.params;
       if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+      if (this.isDemo(req)) return res.json({ success: true, data: demoLeads(id), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -332,6 +363,7 @@ export class MetaSyncV2Controller {
   getAllLeads = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = this.tenantOf(req);
+      if (this.isDemo(req)) return res.json({ success: true, data: demoLeads(), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -357,6 +389,7 @@ export class MetaSyncV2Controller {
   getLeadCampaigns = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = this.tenantOf(req);
+      if (this.isDemo(req)) return res.json({ success: true, data: demoCampaigns().filter((campaign) => campaign.hasLeadForm).map(({ id, name, objective }) => ({ id, name, objective })), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -382,6 +415,11 @@ export class MetaSyncV2Controller {
 
       const { status } = updateLeadStatusSchema.parse(req.body);
 
+      if (this.isDemo(req)) {
+        if (!demoLeads().some((lead) => lead.id === id)) throw new AppError(404, 'LEAD_NOT_FOUND', 'Lead não encontrado.');
+        return res.json({ success: true, data: { id, status }, ...this.demoFields(), timestamp: new Date().toISOString() });
+      }
+
       const repo = this.repoFactory(tenantId);
       const changed = await repo.updateLeadStatus(id, status);
       if (!changed) throw new AppError(404, 'LEAD_NOT_FOUND', 'Lead não encontrado.');
@@ -399,6 +437,8 @@ export class MetaSyncV2Controller {
   getMetricsSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = this.tenantOf(req);
+      const demo = await this.demoFor(tenantId);
+      if (demo || this.isDemo(req)) return res.json({ success: true, data: { summary: demo ? { ...demo.summary, impressions: 110500, clicks: 4091 } : demoSummary() }, ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -435,6 +475,8 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const query = dateRangeSchema.parse(req.query);
+      const demo = await this.demoFor(tenantId);
+      if (demo || this.isDemo(req)) return res.json({ success: true, data: demo ? demo.daily : demoDaily(query.startDate, query.endDate), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -492,6 +534,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const query = dateRangeSchema.parse(req.query);
+      if (this.isDemo(req)) return res.json({ success: true, data: demoGoals(), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 
@@ -572,6 +615,7 @@ export class MetaSyncV2Controller {
   getInstagramInsights = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = this.tenantOf(req);
+      if (this.isDemo(req)) return res.json({ success: true, data: demoInstagramInsights, ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
 

@@ -3,23 +3,24 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, BookmarkCheck, Download, Loader2, RefreshCw, Upload, Video, X } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
+import { downloadStudioAsset } from '@/lib/download-studio-asset';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
-import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail } from '@/types/studio';
+import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail, StudioVariationBatchResponse } from '@/types/studio';
 import { VersionCarousel } from './VersionCarousel';
 import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
+import { CreativeRatingPrompt } from './CreativeRatingPrompt';
 
 interface Props {
   result: GenerateCreativeResponse;
   onBack: () => void;
   onNewCreative: () => void;
-  // ponytail: quando presente, "Publicar no Meta" abre o wizard (imagem presetada)
-  // em vez de publicar direto — alinha com o botão "Usar em campanha".
   onPublish?: () => void;
   /** Vídeo: ajuste gera um job novo; a tela de progresso acompanha. */
   onTrackVideo?: (jobId: string) => void;
+  showVariationSuggestion?: boolean;
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
@@ -29,11 +30,14 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   const tiny = document.createElement('canvas');
   tiny.width = SIZE;
   tiny.height = SIZE;
-  tiny.getContext('2d')!.drawImage(source, 0, 0, SIZE, SIZE);
+  const tinyContext = tiny.getContext('2d');
+  if (!tinyContext) return null;
+  tinyContext.drawImage(source, 0, 0, SIZE, SIZE);
   const mask = document.createElement('canvas');
   mask.width = SIZE;
   mask.height = SIZE;
-  const ctx = mask.getContext('2d')!;
+  const ctx = mask.getContext('2d');
+  if (!ctx) return null;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.globalCompositeOperation = 'destination-out';
@@ -42,11 +46,18 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo }: Props) {
+export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo, showVariationSuggestion = false }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
+  const [showVariationPrompt, setShowVariationPrompt] = useState(showVariationSuggestion);
+  const [variations, setVariations] = useState<GenerateCreativeResponse[]>([]);
+  const [variationWarning, setVariationWarning] = useState<string | null>(null);
+  const variationBatchId = useRef<string | null>(null);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
+  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [ratingVisible, setRatingVisible] = useState(false);
+  const ratingDismissedAssetRef = useRef<string | null>(null);
 
   // ponytail: máscara canvas — pintura contínua (mousedown + drag)
   const [hasMask, setHasMask] = useState(false);
@@ -60,6 +71,24 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const isVideo = currentResult.type === 'video';
   const [videoMeta, setVideoMeta] = useState(currentResult.videoMeta ?? null);
   const adjustVideo = useAdjustStudioVideo();
+  const currentAssetIdRef = useRef(currentResult.assetId);
+  currentAssetIdRef.current = currentResult.assetId;
+
+  const ratingMutation = useMutation({
+    mutationFn: async ({ assetId, rating }: { assetId: string; rating: number }) => (await api.put(`/studio/assets/${assetId}/rating`, { rating })).data,
+    onSuccess: (_data, { assetId }) => {
+      if (currentAssetIdRef.current !== assetId) return;
+      ratingDismissedAssetRef.current = assetId;
+      setRatingVisible(false);
+    },
+  });
+
+  useEffect(() => {
+    setRatingVisible(false);
+    if (!showVariationSuggestion || ratingDismissedAssetRef.current === currentResult.assetId) return;
+    const timer = window.setTimeout(() => setRatingVisible(true), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [currentResult.assetId, showVariationSuggestion]);
 
   // Histórico do grupo (versões/evidência/arquivado) — carregado à parte do
   // resultado da criação/modificação em si, porque cada versão tem seu
@@ -111,12 +140,24 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
     ? (activeVersion?.url ?? currentResult.videoUrl ?? currentResult.imageUrl)
     : (activeVersion?.url ?? currentResult.imageUrl);
   const displayComplianceStatus = activeVersion?.complianceStatus ?? currentResult.complianceStatus;
+  const downloadReady = !!displayUrl && !isArchived && displayComplianceStatus !== 'pending';
+
+  const handleDownload = async () => {
+    if (!downloadReady || downloadState === 'loading') return;
+    setDownloadState('loading');
+    try {
+      await downloadStudioAsset(selectedVersionId);
+      setDownloadState('idle');
+    } catch {
+      setDownloadState('error');
+    }
+  };
 
   const clearMask = useCallback(() => {
     const c = maskCanvasRef.current;
     if (c) {
-      const ctx = c.getContext('2d')!;
-      ctx.clearRect(0, 0, c.width, c.height);
+      const ctx = c.getContext('2d');
+      ctx?.clearRect(0, 0, c.width, c.height);
     }
     setHasMask(false);
   }, []);
@@ -143,7 +184,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       paintingRef.current = true;
       const c = maskCanvasRef.current!;
       const rect = c.getBoundingClientRect();
-      const ctx = c.getContext('2d')!;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
       ctx.beginPath();
       ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
     },
@@ -151,7 +193,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       if (!paintingRef.current) return;
       const c = maskCanvasRef.current!;
       const rect = c.getBoundingClientRect();
-      const ctx = c.getContext('2d')!;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
       ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
       ctx.strokeStyle = 'rgba(232,99,26,1.0)';
       ctx.lineWidth = 40;
@@ -203,6 +246,36 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
     onSuccess: (data) => setPublishFeedback(data),
   });
 
+  const variationsMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      const batchId = variationBatchId.current ?? crypto.randomUUID();
+      variationBatchId.current = batchId;
+      const res = await api.post<StudioVariationBatchResponse>('/studio/creative/variations', { batchId, assetId });
+      const generated = res.data.slots
+        .filter((slot) => slot.status === 'succeeded' && slot.assetId && slot.imageUrl)
+        .map((slot) => ({
+          assetId: slot.assetId!,
+          imageUrl: slot.imageUrl!,
+          creativeData: {},
+        }));
+      if (generated.length === 0 && res.data.status !== 'partial') throw new Error('Não foi possível gerar variações.');
+      return { generated, partial: res.data.status === 'partial' };
+    },
+    onSuccess: (data) => {
+      setVariations(data.generated);
+      setVariationWarning(data.partial ? 'Algumas variações não puderam ser concluídas. O resultado disponível foi preservado.' : null);
+      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
+  });
+
+  const cancelVariationsMutation = useMutation({
+    mutationFn: async () => {
+      if (!variationBatchId.current) return;
+      const res = await api.post<StudioVariationBatchResponse>(`/studio/creative/variations/${variationBatchId.current}/cancel`);
+      return res.data;
+    },
+  });
+
   const handleSaveToLibrary = () => {
     void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     onBack();
@@ -218,6 +291,14 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
 
   return (
     <div className="space-y-6">
+      {ratingVisible && (
+        <CreativeRatingPrompt
+          onSubmit={(rating) => ratingMutation.mutate({ assetId: currentResult.assetId, rating })}
+          onClose={() => { ratingDismissedAssetRef.current = currentResult.assetId; setRatingVisible(false); }}
+          isSubmitting={ratingMutation.isPending}
+          error={ratingMutation.isError ? 'Não foi possível enviar sua avaliação. Tente novamente.' : undefined}
+        />
+      )}
       {/* Selo de compliance desativado
       {(() => {
         // ponytail: o selo segue a versão selecionada no carrossel
@@ -491,18 +572,19 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
               <BookmarkCheck className="h-4 w-4 shrink-0" />
               Salvar na Biblioteca
             </Button>
-            {isVideo && displayUrl && (
-              <a
-                href={displayUrl}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E8631A] px-3 py-2 text-sm font-medium text-white hover:bg-[#D45714]"
+            {(isVideo || currentResult.type === 'image') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownload}
+                disabled={!downloadReady || downloadState === 'loading'}
+                className="w-full flex items-center justify-center gap-2"
               >
-                <Download className="h-4 w-4 shrink-0" />
-                Baixar vídeo
-              </a>
+                {downloadState === 'loading' ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Download className="h-4 w-4 shrink-0" />}
+                {downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${isVideo ? 'vídeo' : 'imagem'}`}
+              </Button>
             )}
+            {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
             {isVideo && !onPublish ? (
               <Button size="sm" variant="outline" disabled className="w-full border-dashed">
                 Publicar no Meta · em breve
@@ -530,6 +612,90 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
           </div>
         </div>
       </div>
+
+      {showVariationPrompt && !isLegacy && (
+        <section className="rounded-2xl border border-[#F5C9AF] bg-[#FFF7F2] p-5" aria-live="polite">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-[#101828]">Deseja gerar variações deste criativo?</p>
+              <p className="mt-1 text-sm text-[#7A4A27]">A IA criará três novas abordagens para você comparar.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setShowVariationPrompt(false);
+                  variationsMutation.mutate(currentResult.assetId);
+                }}
+                disabled={variationsMutation.isPending}
+                className="bg-[#E8631A] hover:bg-[#D45714] text-white"
+              >
+                Sim, gerar variações
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowVariationPrompt(false)} disabled={variationsMutation.isPending}>
+                Agora não
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {variationsMutation.isPending && (
+        <div className="flex items-center gap-3 rounded-2xl border border-[#E6E8EC] bg-[#FCFCFD] p-4 text-sm text-[#667085]" role="status">
+          <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
+          Gerando variações do seu criativo...
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => cancelVariationsMutation.mutate()} disabled={cancelVariationsMutation.isPending}>
+            Cancelar
+          </Button>
+        </div>
+      )}
+
+      {variationWarning && (
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="status">
+          <AlertCircle className="h-4 w-4" />
+          {variationWarning}
+        </div>
+      )}
+
+      {variationsMutation.isError && (
+        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+          <AlertCircle className="h-4 w-4" />
+          <span className="flex-1">Não foi possível gerar as variações. Tente novamente.</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => variationsMutation.mutate(currentResult.assetId)}
+            disabled={variationsMutation.isPending}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      )}
+
+      {variations.length > 0 && (
+        <section className="space-y-3" aria-labelledby="creative-variations-title">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">Mais opções</p>
+            <h2 id="creative-variations-title" className="text-xl font-bold text-[#101828]">Variações geradas</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {variations.map((variation, index) => (
+              <button
+                key={variation.assetId}
+                type="button"
+                onClick={() => setCurrentResult(variation)}
+                className="overflow-hidden rounded-2xl border border-[#E6E8EC] bg-white text-left transition hover:border-[#E8631A] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#E8631A]/30"
+              >
+                <img src={variation.imageUrl} alt={`Variação ${index + 1} do criativo`} className="aspect-square w-full object-cover" />
+                <div className="p-3">
+                  <p className="text-sm font-semibold text-[#101828]">Variação {index + 1}</p>
+                  <p className="mt-1 text-xs text-[#667085]">Clique para selecionar e editar</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

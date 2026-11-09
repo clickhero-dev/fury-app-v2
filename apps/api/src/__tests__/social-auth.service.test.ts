@@ -1,3 +1,11 @@
+/*
+Funcionalidade: cadastro social com Trial sem fricção
+
+Cenário: uma pessoa cria a conta pelo Facebook
+  Dado que o catálogo possui o plano técnico Trial válido
+  Quando o tenant e o usuário forem criados
+  Então a assinatura Trial de sete dias será gravada na mesma transação
+*/
 import { describe, it, expect, vi } from 'vitest';
 import { SocialAuthService } from '../services/core/social-auth.service.js';
 
@@ -6,7 +14,7 @@ vi.mock('../lib/redis.js', () => ({
 }));
 
 function makeRepo() {
-  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn(), provisionDefaultTrial: vi.fn(async () => {}) } as any;
+  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn(), isAccountActive: vi.fn(async () => true) } as any;
 }
 
 function makeSvc() {
@@ -46,7 +54,7 @@ function makeFbSvc(repoOverrides: Record<string, unknown> = {}, userInfo?: Recor
     findUserByEmail: vi.fn(async () => null),
     findTenantBySlug: vi.fn(async () => null),
     patchUser: vi.fn(async () => {}),
-    provisionDefaultTrial: vi.fn(async () => {}),
+    isAccountActive: vi.fn(async () => true),
     ...repoOverrides,
   } as any;
   const svc = new SocialAuthService(
@@ -73,11 +81,19 @@ describe('SocialAuthService.issueSession', () => {
 });
 
 function fakeTxDb() {
+  const insertedValues: any[] = [];
   const tx = {
-    insert: vi.fn(() => ({ values: (v: any) => ({ returning: async () => [{ id: v.slug ? 't1' : 'u1', ...v }] }) })),
+    insert: vi.fn(() => ({ values: (v: any) => {
+      insertedValues.push(v);
+      return { returning: async () => [{ id: v.slug ? 't1' : 'u1', ...v }] };
+    } })),
     update: vi.fn(() => ({ set: () => ({ where: async () => {} }) })),
+    query: {
+      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'public_trial_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } })) },
+      subscriptions: { findFirst: vi.fn(async () => null) },
+    },
   };
-  return { transaction: vi.fn(async (cb: any) => cb(tx)) } as any;
+  return { transaction: vi.fn(async (cb: any) => cb(tx)), tx, insertedValues } as any;
 }
 
 describe('SocialAuthService.generateFacebookLoginUrl', () => {
@@ -112,9 +128,12 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(r.isNewUser).toBe(true);
     expect(r.user.email).toBe('ana@example.com');
-    expect(repo.provisionDefaultTrial).toHaveBeenCalledWith();
     // não emite tokens aqui — isso é feito em issueSession/handoff
     expect(r).not.toHaveProperty('tokens');
+    const subscriptionValues = db.insertedValues.find((values: any) => values?.status === 'trial');
+    expect(subscriptionValues).toMatchObject({
+      tenantId: 't1', planId: 'trial-plan', status: 'trial', creativesRemaining: 5,
+    });
   });
 
   it('loga usuário já vinculado por facebookId sem tocar em e-mail nem criar tenant', async () => {
@@ -126,6 +145,15 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(repo.findUserByEmail).not.toHaveBeenCalled();
     expect(db.transaction).not.toHaveBeenCalled();
     expect(r.isNewUser).toBe(false);
+  });
+
+  it('conta excluída (soft-delete) não entra pelo Facebook', async () => {
+    const existing = { id: 'u9', tenantId: 't9', email: 'x@y.com', role: 'owner' };
+    for (const found of [{ findUserByFacebookId: vi.fn(async () => existing) }, { findUserByEmail: vi.fn(async () => existing) }]) {
+      const { svc, repo } = makeFbSvc({ ...found, isAccountActive: vi.fn(async () => false) });
+      await expect(svc.handleFacebookSocialLogin('code', 'http://cb', fakeTxDb())).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED' });
+      expect(repo.patchUser).not.toHaveBeenCalled();
+    }
   });
 
   it('vincula facebookId a conta comum existente com o mesmo e-mail', async () => {

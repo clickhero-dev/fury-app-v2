@@ -3,13 +3,10 @@ import {
   type Database,
   users,
   tenants,
-  plans,
-  subscriptions,
 } from '@fury/db';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import { slugify } from '../lib/slug.js';
-import { buildDefaultTrialSubscription } from '../lib/trial-plan.js';
 
 type User = typeof users.$inferSelect;
 type Tenant = typeof tenants.$inferSelect;
@@ -65,6 +62,17 @@ export class AuthRepository extends TenantScopedRepository {
     return this.db.query.users.findFirst({ where: eq(users.id, id) });
   }
 
+  // false se o usuário ou o cliente (tenant) foi excluído (soft-delete)
+  async isAccountActive(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .innerJoin(tenants, eq(tenants.id, users.tenantId))
+      .where(and(eq(users.id, userId), isNull(users.deletedAt), isNull(tenants.deletedAt)))
+      .limit(1);
+    return !!row;
+  }
+
   async createTenant(data: Partial<Tenant>): Promise<Tenant> {
     const [row] = await this.db.insert(tenants).values(data as any).returning();
     return row;
@@ -78,13 +86,6 @@ export class AuthRepository extends TenantScopedRepository {
   async createUser(data: Partial<User>): Promise<User> {
     const [row] = await this.db.insert(users).values(data as any).returning();
     return row;
-  }
-
-  /** Provisiona o Trial padrão para uma conta recém-criada. */
-  async provisionDefaultTrial(now = new Date()): Promise<void> {
-    const plan = await this.db.query.plans.findFirst({ where: eq(plans.name, 'Trial') });
-    const subscription = buildDefaultTrialSubscription(this.tenantId, plan ?? null, now);
-    await this.db.insert(subscriptions).values(subscription);
   }
 
   async patchUser(id: string, data: Partial<User>) {

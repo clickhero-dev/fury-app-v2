@@ -6,7 +6,6 @@ import { setPolicyAccepted, selectPolicy } from '../../store/slices/authSlice';
 import { selectIsAuthenticated } from '../../store/slices/authSlice';
 import api from '../../lib/api';
 import { captureEvent } from '../../lib/posthog';
-import { useSubscription } from '../../hooks/useBilling';
 
 interface PolicyCurrentResponse {
   success: boolean;
@@ -40,7 +39,6 @@ export function PoliticaDeUsoPage() {
   const queryClient = useQueryClient();
   const authed = useAppSelector(selectIsAuthenticated);
   const storedPolicy = useAppSelector(selectPolicy);
-  const { data: subscription } = useSubscription();
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,9 +66,7 @@ export function PoliticaDeUsoPage() {
       void queryClient.invalidateQueries({ queryKey: ['policy-current'] });
       // Novo usuário → onboarding; antigo → destino original/dashboard.
       const hasMeta = localStorage.getItem('ady-meta-connected') === 'true';
-      if (subscription?.status === 'trial') {
-        navigate('/dashboard', { replace: true });
-      } else if (!hasMeta) {
+      if (!hasMeta) {
         navigate('/onboarding/conectar-meta', { replace: true });
       } else {
         navigate('/dashboard', { replace: true });

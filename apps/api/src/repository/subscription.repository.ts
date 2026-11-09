@@ -2,13 +2,15 @@ import {
   db as defaultDb,
   type Database,
   subscriptions,
+  renewalEvents,
   plans,
   invoices,
   budgetOptimizations,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
+import { isTrialExpired } from '../services/billing/trial-signup.js';
 
 type Subscription = typeof subscriptions.$inferSelect;
 
@@ -63,9 +65,10 @@ export class SubscriptionRepository extends TenantScopedRepository {
 
   // ── Planos (catálogo GLOBAL + plano do tenant) ────────────────────
 
-  async listActivePlans() {
+  // partnerId null = planos da ady; senão só os daquele parceiro
+  async listActivePlans(partnerId: string | null = null) {
     return this.db.query.plans.findMany({
-      where: eq(plans.isActive, true),
+      where: and(eq(plans.isActive, true), partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId)),
       orderBy: [plans.priceCents],
     });
   }
@@ -74,6 +77,12 @@ export class SubscriptionRepository extends TenantScopedRepository {
     const filters = [eq(plans.id, id)];
     if (activeOnly) filters.push(eq(plans.isActive, true));
     return this.db.query.plans.findFirst({ where: and(...filters) });
+  }
+
+  async findActivePlanByTechnicalKey(technicalKey: string) {
+    return this.db.query.plans.findFirst({
+      where: and(eq(plans.technicalKey, technicalKey), eq(plans.isActive, true)),
+    });
   }
 
   // ── Invoices ─────────────────────────────────────────────────────
@@ -120,6 +129,7 @@ export class SubscriptionRepository extends TenantScopedRepository {
   async consumeCreativeQuota(): Promise<boolean> {
     const sub = await this.findSubscription();
     if (!sub || sub.creativesRemaining === null) return true;
+    if (sub.status === 'trial' && isTrialExpired(new Date(), sub.trialEndsAt)) return false;
     const updated = await this.db
       .update(subscriptions)
       .set({ creativesRemaining: sql`${subscriptions.creativesRemaining} - 1`, updatedAt: new Date() })
@@ -217,22 +227,31 @@ export class SubscriptionRepository extends TenantScopedRepository {
 
   /** Avança o ciclo (nextPeriodEnd já calculado) e reseta a cota ao teto (null = sem teto). */
   async renewSubscription(id: string, expectedPeriodEnd: Date, nextPeriodEnd: Date, creativesLimit: number | null): Promise<boolean> {
-    const updated = await this.db
-      .update(subscriptions)
-      .set({
-        currentPeriodEnd: nextPeriodEnd,
-        creativesRemaining: creativesLimit,
-        updatedAt: new Date(),
-      })
-      .where(and(
-        eq(subscriptions.id, id),
-        eq(subscriptions.status, 'active'),
-        eq(subscriptions.isNonExpirable, false),
-        eq(subscriptions.currentPeriodEnd, expectedPeriodEnd),
-        lte(subscriptions.currentPeriodEnd, expectedPeriodEnd),
-      ))
-      .returning({ id: subscriptions.id });
-    return updated.length === 1;
+    return this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(subscriptions)
+        .set({
+          currentPeriodEnd: nextPeriodEnd,
+          creativesRemaining: creativesLimit,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(subscriptions.id, id),
+          eq(subscriptions.status, 'active'),
+          eq(subscriptions.isNonExpirable, false),
+          eq(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+          lte(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+        ))
+        .returning({ id: subscriptions.id, tenantId: subscriptions.tenantId });
+      if (!updated) return false;
+
+      await tx.insert(renewalEvents).values({
+        subscriptionId: updated.id,
+        tenantId: updated.tenantId,
+        previousPeriodEnd: expectedPeriodEnd,
+      });
+      return true;
+    });
   }
 }
 

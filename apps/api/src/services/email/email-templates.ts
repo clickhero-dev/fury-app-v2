@@ -201,6 +201,34 @@ export function welcomeEmailTemplate(name: string): string {
   return getBaseTemplate(content);
 }
 
+function escapeTrialHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
+}
+
+export function publicTrialMagicLinkEmailTemplate(name: string, url: string, temporaryPassword: string | undefined, email: string, baseUrl: string): string {
+  const firstName = escapeTrialHtml(name.trim().split(/\s+/)[0]);
+  const loginUrl = escapeTrialHtml(`${baseUrl.replace(/\/$/, '')}/login`);
+  return getBaseTemplate(`
+    ${eyebrow('Seu acesso está pronto')}
+    ${bodyText(`Oi, ${firstName}! Sua conta no ady foi criada. É só clicar no botão para entrar:`)}
+    ${ctaButton(escapeTrialHtml(url), 'Entrar no ady')}
+    ${bodyText('O link vale por 1 hora e pode ser usado até 3 vezes. Seus 7 dias de teste começam no primeiro acesso.')}
+    ${bodyText(`Se o link vencer, entre em <a href="${loginUrl}">ady</a> com:<br/>E-mail: ${escapeTrialHtml(email)}<br/>Senha temporária: ${escapeTrialHtml(temporaryPassword || '')}`)}
+    ${bodyText('No primeiro acesso, o ady pede para você criar sua própria senha.')}
+  `);
+}
+
+export function publicTrialExistingAccountEmailTemplate(baseUrl: string): string {
+  const base = escapeTrialHtml(baseUrl.replace(/\/$/, ''));
+  return getBaseTemplate(`
+    ${eyebrow('Seu e-mail já tem conta no ady')}
+    ${bodyText('Alguém tentou criar um teste grátis com este e-mail, mas ele já tem uma conta. Seu teste não foi reiniciado e nada foi alterado.')}
+    ${ctaButton(`${base}/login`, 'Entrar no ady')}
+    ${bodyText(`Esqueceu a senha? <a href="${base}/forgot-password">Criar uma nova senha</a>.`)}
+    ${bodyText('Se não foi você, pode ignorar este e-mail. Sua conta continua segura.')}
+  `);
+}
+
 export function passwordResetConfirmationTemplate(): string {
   const loginUrl = process.env.APP_URL ? `${process.env.APP_URL}/login` : 'https://app.clickhero.com/login';
 
@@ -328,24 +356,6 @@ export function syncFailureEmailTemplate(
       `<strong style="color: ${TEXT};">Detalhe:</strong> ${message || 'sem detalhes'}`,
     ])}
     ${bodyText('Os próximos ciclos continuarão tentando sincronizar automaticamente. Se o problema persistir, verifique a conexão da conta Meta em Configurações → Integrações.')}
-  `;
-  return getBaseTemplate(content);
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[character] ?? character);
-}
-
-export function trialAccessEmailTemplate(name: string, accessUrl: string): string {
-  const safeUrl = escapeHtml(accessUrl);
-  const content = `
-    ${eyebrow('Seu período de teste')}
-    ${heading(`Olá, ${escapeHtml(name)}!`)}
-    ${bodyText('Seu acesso ao Trial está pronto. Use o link abaixo para entrar na sua conta. Ele é válido por 15 minutos e pode ser usado uma única vez.', 'center')}
-    ${ctaButton(safeUrl, 'Acessar minha conta')}
-    ${bodyText('Se você não solicitou este acesso, pode ignorar este email.', 'center')}
   `;
   return getBaseTemplate(content);
 }

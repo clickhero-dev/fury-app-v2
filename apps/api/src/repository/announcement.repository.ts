@@ -1,5 +1,5 @@
-import { db as defaultDb, type Database, announcements, announcementViews, users } from '@fury/db';
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm';
+import { db as defaultDb, type Database, announcements, announcementViews, users, tenants } from '@fury/db';
+import { and, asc, desc, eq, gt, gte, isNotNull, isNull, notExists, notInArray, or, sql } from 'drizzle-orm';
 
 export class AnnouncementRepository {
   constructor(private db: Database = defaultDb) {}
@@ -22,6 +22,9 @@ export class AnnouncementRepository {
       .where(and(
         eq(announcements.isActive, true),
         isNull(announcements.deletedAt),
+        // avisos são só para clientes do ady: parceiro e clientes dele não recebem
+        notInArray(users.platformRole, ['admin_partner', 'user_partner']),
+        notExists(this.db.select({ one: sql`1` }).from(tenants).where(and(eq(tenants.id, users.tenantId), isNotNull(tenants.partnerId)))),
         isNotNull(announcements.publishedAt),
         or(isNull(announcements.endsAt), gt(announcements.endsAt, sql`now()`)),
         or(eq(announcements.showToNewUsers, true), isNotNull(announcements.endsAt), gte(announcements.publishedAt, users.createdAt)),

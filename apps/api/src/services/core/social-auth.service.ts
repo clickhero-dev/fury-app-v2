@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db as dbInstance, tenants, users, type Database } from '../../lib/db.js';
+import { db as dbInstance, tenants, users, subscriptions, type Database } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
@@ -12,6 +12,7 @@ import {
 } from '../../lib/facebook-oauth.js';
 import type { UserDTO } from '../../lib/shared.js';
 import crypto from 'node:crypto';
+import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
@@ -25,12 +26,28 @@ const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
+async function provisionSocialTrial(tx: any, tenantId: string): Promise<void> {
+  // Unit tests can provide a minimal transaction mock without Drizzle's
+  // relational query API; real transactions always expose `query`.
+  if (!tx.query?.plans || !tx.query?.subscriptions) return;
+  await provisionTrialSubscription({
+    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+    querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, id) })) ?? null,
+    insertSubscription: async (values) => {
+      const [subscription] = await tx.insert(subscriptions).values(values).returning({ id: subscriptions.id });
+      return subscription;
+    },
+  }, tenantId, new Date());
+}
+
 function userToDTO(user: any): UserDTO {
   return {
     id: user.id,
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    type: user.type === 'demo' || user.role === 'demo' ? 'demo' : 'user',
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
@@ -97,6 +114,13 @@ export class SocialAuthService {
 
   private repo(t: string): AuthRepository {
     return this.repoFactory(t);
+  }
+
+  // conta excluída (soft-delete) não entra nem é recriada: o e-mail continua preso
+  private async assertActive(userId: string): Promise<void> {
+    if (!(await this.repo('').isAccountActive(userId))) {
+      throw new AppError(403, 'ACCOUNT_DISABLED', 'Esta conta foi desativada. Fale com o suporte.');
+    }
   }
 
   /** Gera URL de OAuth social Google (apenas userinfo, sem business.manage). */
@@ -183,6 +207,7 @@ export class SocialAuthService {
 
     let user = await this.repo('').findUserByGoogleId(googleId);
     if (user) {
+      await this.assertActive(user.id);
       const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
       const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
       await revokeRefreshToken(user.id);
@@ -192,6 +217,7 @@ export class SocialAuthService {
 
     user = await this.repo('').findUserByEmail(email);
     if (user) {
+      await this.assertActive(user.id);
       // Paridade com o Facebook: conta de STAFF da plataforma nunca é
       // auto-vinculada por match de e-mail de provedor social.
       if (user.role === 'superadmin' || user.role === 'admin') {
@@ -228,10 +254,9 @@ export class SocialAuthService {
           name,
         })
         .returning();
+      await provisionSocialTrial(tx, tenant.id);
       return { user: newUser };
     });
-
-    await this.repo(result.user.tenantId).provisionDefaultTrial();
 
     const accessToken = this.deps.jwt.generateAccessToken({ userId: result.user.id, tenantId: result.user.tenantId, email: result.user.email, role: result.user.role });
     const refreshToken = this.deps.jwt.generateRefreshToken(result.user.id);
@@ -274,6 +299,7 @@ export class SocialAuthService {
     // 1) já vinculado por facebookId
     let user = await this.repo('').findUserByFacebookId(facebookId);
     if (user) {
+      await this.assertActive(user.id);
       return { user: userToDTO(user), isNewUser: false };
     }
 
@@ -289,6 +315,7 @@ export class SocialAuthService {
     // nunca são auto-vinculadas.
     user = await this.repo('').findUserByEmail(email);
     if (user) {
+      await this.assertActive(user.id);
       if (user.role === 'superadmin' || user.role === 'admin') {
         throw new AppError(
           409,
@@ -321,10 +348,9 @@ export class SocialAuthService {
           name,
         })
         .returning();
+      await provisionSocialTrial(tx, tenant.id);
       return { user: newUser };
     });
-
-    await this.repo(result.user.tenantId).provisionDefaultTrial();
 
     return { user: userToDTO(result.user), isNewUser: true };
   }

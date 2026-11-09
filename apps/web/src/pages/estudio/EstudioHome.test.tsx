@@ -106,6 +106,30 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(screen.queryByTestId('usage-badge')).not.toBeInTheDocument();
   });
 
+  it('baixa o arquivo final pelo endpoint autorizado sem sair da biblioteca', async () => {
+    mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
+    const createObjectURL = vi.fn(() => 'blob:creative');
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/studio/ai/models')) return Promise.resolve({ data: MOCK_MODELS });
+      if (url === '/studio/assets/asset-1/download') {
+        return Promise.resolve({ data: new Blob(['arquivo final']), headers: { 'content-disposition': 'attachment; filename="criativo-asset-1.png"' } });
+      }
+      return Promise.resolve({ data: MOCK_ASSETS });
+    });
+
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /baixar anúncio de imagem/i }));
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/asset-1/download', { responseType: 'blob' }));
+    expect(click).toHaveBeenCalledOnce();
+    expect(screen.getByText('Biblioteca de anúncios')).toBeInTheDocument();
+    click.mockRestore();
+  });
+
   it('badge em tom de erro + CTA upgrade quando cota zerada', async () => {
     mockApiGet.mockResolvedValue({
       data: { assets: [], creativesRemaining: 0, creativesLimit: 20 },
@@ -118,7 +142,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(screen.getByTestId('usage-upgrade-cta')).toBeInTheDocument();
   });
 
-  it('exibe o novo texto de duração (1 a 2 minutos) na tela de loading', async () => {
+  it('mantém a tela de loading sem textos de prazo ou estimativa de percentual', async () => {
     const user = userEvent.setup();
     renderWithProviders();
 
@@ -131,15 +155,85 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     const generateBtn = screen.getByRole('button', { name: /gerar imagem/i });
     await user.click(generateBtn);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(/a geração com ia e a renderização podem levar de 1 a 2 minutos/i)
-      ).toBeInTheDocument();
-    });
+    expect(screen.queryByText(/a geração com ia e a renderização podem levar de 1 a 2 minutos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/o percentual é uma estimativa visual/i)).not.toBeInTheDocument();
 
     expect(
       screen.queryByText(/levar até 15 segundos/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('AssetCard — download da Biblioteca', () => {
+  const cardProps = {
+    onViewDetails: vi.fn(),
+    onDeleteRequest: vi.fn(),
+    onUseInCampaign: vi.fn(),
+  };
+
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:download'),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * Funcionalidade: baixar criativos da Biblioteca do Estúdio
+   * Cenário: usuário baixa imagem ou vídeo pela própria thumbnail
+   * Dado que o asset está disponível
+   * Quando clica no botão de download
+   * Então uma única requisição baixa o arquivo e o usuário permanece na Biblioteca
+   */
+  it.each([
+    ['image', 'image-1', 'https://example.com/ad1.png', 'Anúncio de imagem'],
+    ['video', 'video-1', 'https://example.com/video.mp4', 'Anúncio de vídeo'],
+  ] as const)('oferece download acessível para %s e evita cliques duplicados', async (type, id, url, name) => {
+    const user = userEvent.setup();
+    mockApiGet.mockResolvedValue({ data: new Blob(['final-image'], { type: 'image/png' }) });
+    const { AssetCard } = await import('./EstudioHome');
+    render(
+      <AssetCard
+        asset={{ ...MOCK_ASSETS.assets[0], id, type, url, name }}
+        {...cardProps}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: new RegExp(`baixar ${name}`, 'i') });
+    await user.click(button);
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1));
+    expect(mockApiGet).toHaveBeenCalledWith(`/studio/assets/${id}/download`, { responseType: 'blob' });
+    expect(screen.getByRole('button', { name: new RegExp(`baixar ${name}`, 'i') })).toBeInTheDocument();
+  });
+
+  it('mostra carregamento, bloqueia novo clique e informa falha client-safe', async () => {
+    const user = userEvent.setup();
+    let rejectDownload!: (reason?: unknown) => void;
+    mockApiGet.mockReturnValue(new Promise((_, reject) => { rejectDownload = reject; }));
+    const { AssetCard } = await import('./EstudioHome');
+    render(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], id: 'image-2' }} {...cardProps} />);
+
+    const button = screen.getByRole('button', { name: /baixar anúncio de imagem/i });
+    await user.click(button);
+    expect(screen.getByRole('button', { name: /baixando criativo/i })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /baixando criativo/i }));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+
+    rejectDownload(new Error('private details'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível baixar/i);
+  });
+
+  it('desabilita download de asset sem URL ou ainda processando', async () => {
+    const { AssetCard } = await import('./EstudioHome');
+    const { rerender } = render(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], url: null }} {...cardProps} />);
+    expect(screen.queryByRole('button', { name: /baixar criativo/i })).not.toBeInTheDocument();
+
+    rerender(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], complianceStatus: 'pending' }} {...cardProps} />);
+    expect(screen.getByRole('button', { name: /baixar anúncio de imagem/i })).toBeDisabled();
   });
 });
 
@@ -407,7 +501,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     expect(screen.getByText(/limite de 2 fotos na arte/i)).toBeInTheDocument();
   });
 
-  it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {
+  it('exibe progresso visual desde o clique, mesmo durante o enhance-prompt', async () => {
     vi.useFakeTimers();
     mockApiPost.mockImplementation(() => new Promise(() => {})); // enhance nunca resolve
     renderWithProviders();
@@ -419,12 +513,12 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     act(() => { vi.advanceTimersByTime(3000); });
 
-    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Progresso estimado da geração da imagem' })).toBeInTheDocument();
   });
 
-  it('mostra cronômetro (Xs) na tela de loading enquanto gera', async () => {
+  it('exibe progresso visual na tela de loading enquanto gera', async () => {
     vi.useFakeTimers();
-    // enhance-prompt resolve; generate-image fica pendente (cronômetro ativo)
+    // enhance-prompt resolve; generate-image fica pendente (progresso ativo)
     mockApiPost.mockImplementation((url: string) =>
       url.includes('/enhance-prompt')
         ? Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } })
@@ -437,12 +531,12 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
-    // flush microtasks: enhance → mutate → onMutate (startedAt)
+    // flush microtasks: enhance → mutate → onMutate (progresso iniciado)
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     act(() => { vi.advanceTimersByTime(3000); });
 
-    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Progresso estimado da geração da imagem' })).toBeInTheDocument();
   });
 
   it('não exibe tempo de processamento nem custo na tela de resultado', async () => {

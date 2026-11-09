@@ -3,14 +3,6 @@ import request from 'supertest';
 import app from '../index.js';
 import { db } from '@fury/db';
 import { tenants, users } from '@fury/db';
-import { eq } from 'drizzle-orm';
-
-/*
- * Funcionalidade: trial padrão para novas contas
- * Cenário: cadastro recebe o plano Trial limitado automaticamente
- * Dado um plano Trial ativo, quando alguém conclui o cadastro,
- * então a assinatura dura sete dias, libera cinco imagens e três revisões, sem vídeos.
- */
 
 describe('Auth Endpoints', () => {
   const uniqueId = () => Date.now().toString().slice(-8);
@@ -47,16 +39,6 @@ describe('Auth Endpoints', () => {
       );
       expect(response.body.data).not.toHaveProperty('tokens');
       expect(response.body.data.user).not.toHaveProperty('passwordHash');
-
-      // Dado que uma nova conta é criada, quando o cadastro termina,
-      // então deve existir um trial de 7 dias no plano Trial com os limites exatos.
-      const { db: database, subscriptions, plans } = await import('@fury/db');
-      const [subscription] = await database.select().from(subscriptions).where(eq(subscriptions.tenantId, response.body.data.user.tenantId));
-      expect(subscription.status).toBe('trial');
-      expect(subscription.trialEndsAt.getTime() - subscription.createdAt.getTime()).toBeGreaterThanOrEqual(7 * 24 * 60 * 60 * 1000 - 1000);
-      const [plan] = await database.select().from(plans).where(eq(plans.id, subscription.planId));
-      expect(plan.name).toBe('Trial');
-      expect(plan.limits).toMatchObject({ creativesPerMonth: 5, modificationsPerCreative: 3, videosPerMonth: 0 });
     });
 
     it('should return 409 if email already exists', async () => {

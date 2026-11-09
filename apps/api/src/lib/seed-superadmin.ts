@@ -3,6 +3,8 @@
 import crypto from 'node:crypto';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
+import { RBAC_SERVICES } from './rbac-services.js';
+import { RBAC_VIEWS } from './rbac-views.js';
 
 const connectionString =
   process.env.NODE_ENV === 'test'
@@ -14,6 +16,7 @@ interface SeedUser {
   password: string;
   name: string;
   role: string;
+  platformRole: string;
   tenantName: string;
   tenantSlug: string;
 }
@@ -26,7 +29,32 @@ export async function seedStartup(): Promise<void> {
     await sql.unsafe(`ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'superadmin';`);
     console.log('  ✓ user_role enum includes superadmin');
 
-    // 2. Seed users from env vars
+    // 2. Sync RBAC service catalog from lib/rbac-services.ts
+    const byKey = new Map<string, { routes: string[]; description: string }>();
+    for (const entry of RBAC_SERVICES) {
+      const item = byKey.get(entry.key) ?? { routes: [], description: entry.description };
+      item.routes.push(entry.prefix);
+      byKey.set(entry.key, item);
+    }
+    for (const [key, item] of byKey) {
+      const route = item.routes.join(', ');
+      await sql`
+        INSERT INTO "ady_rbac_services" (key, route, description)
+        VALUES (${key}, ${route}, ${item.description})
+        ON CONFLICT (key) DO UPDATE SET route = EXCLUDED.route, description = EXCLUDED.description
+      `;
+    }
+    console.log(`  ✓ rbac service catalog synced (${byKey.size} keys)`);
+    for (const view of RBAC_VIEWS) {
+      await sql`
+        INSERT INTO "ady_rbac_views" (key, description)
+        VALUES (${view.key}, ${view.description})
+        ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description
+      `;
+    }
+    console.log(`  ✓ rbac view catalog synced (${RBAC_VIEWS.length} keys)`);
+
+    // 3. Seed users from env vars
     const superadminEmail = process.env.SUPERADMIN_EMAIL;
     const superadminPass = process.env.SUPERADMIN_PASSWORD;
 
@@ -41,6 +69,7 @@ export async function seedStartup(): Promise<void> {
         password: superadminPass,
         name: 'FURY Admin',
         role: 'superadmin',
+        platformRole: 'super_admin',
         tenantName: 'FURY Superadmin',
         tenantSlug: 'fury-superadmin',
       });
@@ -53,6 +82,7 @@ export async function seedStartup(): Promise<void> {
       password: demoPassword,
       name: 'Fashion Demo',
       role: 'owner',
+      platformRole: 'user',
       tenantName: 'Fashion Demo',
       tenantSlug: 'fashion-demo',
     });
@@ -106,8 +136,8 @@ export async function seedStartup(): Promise<void> {
       // Create user with bcrypt
       const bcryptHash = await bcrypt.hash(seed.password, 10);
       await sql`
-        INSERT INTO "users" (tenant_id, email, password_hash, role, name)
-        VALUES (${tenant.id}, ${seed.email}, ${bcryptHash}, ${seed.role}, ${seed.name})
+        INSERT INTO "users" (tenant_id, email, password_hash, role, platform_role, name)
+        VALUES (${tenant.id}, ${seed.email}, ${bcryptHash}, ${seed.role}, ${seed.platformRole}, ${seed.name})
       `;
 
       console.log(`  ✓ user ${seed.email} created (${seed.role})`);

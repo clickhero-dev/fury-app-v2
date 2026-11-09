@@ -18,8 +18,6 @@ import type { AuthState } from '../../store/slices/authSlice';
 
 // mock da api: roteia por URL — /policy/current configurável por teste
 const apiGet = vi.fn();
-let subscriptionData: unknown = undefined;
-let subscriptionError = false;
 apiGet.mockImplementation((url: string) => {
   if (url === '/policy/current') {
     return Promise.resolve({
@@ -35,14 +33,14 @@ vi.mock('../../lib/api', () => ({
 }));
 
 vi.mock('../../hooks/useBilling', () => ({
-  useSubscription: () => ({ data: subscriptionData, isLoading: false, isFetched: subscriptionData !== undefined, isError: subscriptionError }),
+  useSubscription: () => ({ data: undefined, isLoading: false, isFetched: false, isError: false }),
 }));
 
 vi.mock('../../lib/posthog', () => ({ captureEvent: vi.fn() }));
 
 import { AuthenticatedShell } from './AuthenticatedShell';
 
-function makeStore(policy: AuthState['policy'], withToken = true) {
+function makeStore(policy: AuthState['policy'], withToken = true, role = 'owner') {
   return configureStore({
     reducer: { auth: authReducer as Reducer<AuthState> },
     preloadedState: {
@@ -51,7 +49,7 @@ function makeStore(policy: AuthState['policy'], withToken = true) {
         refreshToken: withToken ? 'ref' : null,
         name: 'Ana',
         email: 'a@b.com',
-        role: 'owner',
+        role,
         tenantId: 't1',
         metaId: null,
         plan: 'Pro',
@@ -63,11 +61,11 @@ function makeStore(policy: AuthState['policy'], withToken = true) {
   });
 }
 
-function renderShell(policy: AuthState['policy'], options: { metaConnected?: boolean } = {}) {
+function renderShell(policy: AuthState['policy'], role = 'owner') {
   // O shell lê o token do localStorage (não do Redux) — seed obrigatório.
   localStorage.setItem('token', 'tok');
-  if (options.metaConnected !== false) localStorage.setItem('ady-meta-connected', 'true');
-  const store = makeStore(policy);
+  localStorage.setItem('ady-meta-connected', 'true');
+  const store = makeStore(policy, true, role);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -78,7 +76,6 @@ function renderShell(policy: AuthState['policy'], options: { metaConnected?: boo
           <Routes>
             {/* /politica fora do shell, como no router real */}
             <Route path="/politica" element={<div data-testid="politica-page" />} />
-            <Route path="/onboarding/conectar-meta" element={<div data-testid="meta-onboarding" />} />
             <Route path="*" element={<AuthenticatedShell />} />
           </Routes>
         </MemoryRouter>
@@ -89,8 +86,6 @@ function renderShell(policy: AuthState['policy'], options: { metaConnected?: boo
 
 beforeEach(() => {
   localStorage.clear();
-  subscriptionData = undefined;
-  subscriptionError = false;
   apiGet.mockReset();
   apiGet.mockImplementation((url: string) => {
     if (url === '/policy/current') {
@@ -100,52 +95,6 @@ beforeEach(() => {
     }
     // /meta/connections e outros: conexão existente (evita redirect de onboarding)
     return Promise.resolve({ data: { data: [{ id: 'c1', selectedAdAccountId: 'acc-1' }] } });
-  });
-});
-
-/**
- * Funcionalidade: o bypass do onboarding Meta depende da assinatura confirmada
- * Cenários:
- * - Dado Trial confirmado pela API sem conexão Meta, quando abre a aplicação, então entra sem onboarding.
- * - Dado assinatura paga sem conexão Meta, quando abre a aplicação, então o onboarding continua obrigatório.
- * - Dado erro ao consultar assinatura com status Trial em cache, quando abre a aplicação, então não recebe bypass.
- */
-describe('AuthenticatedShell — onboarding Trial', () => {
-  it('não redireciona trial confirmado pela API para conectar Meta', async () => {
-    apiGet.mockImplementation((url: string) => {
-      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
-      if (url === '/announcements/pending') return Promise.resolve({ data: { data: [] } });
-      return Promise.resolve({ data: { data: null } });
-    });
-    subscriptionData = { status: 'trial', plan: { name: 'Trial' } };
-    renderShell({ currentVersion: '1.0', accepted: true }, { metaConnected: false });
-    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
-    expect(screen.queryByText(/Conectar Meta/)).toBeNull();
-  });
-
-  it('mantém onboarding obrigatório para assinatura paga sem conexão Meta', async () => {
-    apiGet.mockImplementation((url: string) => {
-      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
-      if (url === '/announcements/pending') return Promise.resolve({ data: { data: [] } });
-      return Promise.resolve({ data: { data: null } });
-    });
-    subscriptionData = { status: 'active', plan: { name: 'Pro' } };
-    renderShell({ currentVersion: '1.0', accepted: true }, { metaConnected: false });
-    expect(await screen.findByTestId('meta-onboarding')).not.toBeNull();
-    expect(screen.queryByTestId('sidebar-root')).toBeNull();
-  });
-
-  it('não concede bypass com Trial antigo se a consulta de assinatura falhar', async () => {
-    apiGet.mockImplementation((url: string) => {
-      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
-      if (url === '/announcements/pending') return Promise.resolve({ data: { data: [] } });
-      return Promise.resolve({ data: { data: null } });
-    });
-    subscriptionData = { status: 'trial', plan: { name: 'Trial' } };
-    subscriptionError = true;
-    renderShell({ currentVersion: '1.0', accepted: true }, { metaConnected: false });
-    expect(await screen.findByTestId('meta-onboarding')).not.toBeNull();
-    expect(screen.queryByTestId('sidebar-root')).toBeNull();
   });
 });
 
@@ -170,6 +119,13 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
     expect(screen.queryByTestId('politica-page')).toBeNull();
     expect(policyCalls()).toHaveLength(0);
+  });
+
+  it('Cenário: usuário demo acessa o dashboard sem consultar conexão Meta', async () => {
+    renderShell({ currentVersion: '1.0', accepted: true }, 'demo');
+
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(apiGet.mock.calls.some((call) => call[0] === '/meta/connections')).toBe(false);
   });
 
   it('sessão antiga (policy=null) busca /policy/current UMA vez e bloqueia quando pendente', async () => {

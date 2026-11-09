@@ -127,7 +127,7 @@ describe('CreativeStudio — seletor de modelos', () => {
       expect(screen.getByRole('option', { name: 'Realista', selected: true })).toBeInTheDocument();
     });
 
-  it('exibe cronômetro (Xs) enquanto a imagem está sendo gerada', async () => {
+  it('exibe progresso visual enquanto a imagem está sendo gerada', async () => {
     vi.useFakeTimers();
     mockApiPost.mockImplementation(() => new Promise(() => {})); // nunca resolve
     renderWithProviders();
@@ -135,11 +135,9 @@ describe('CreativeStudio — seletor de modelos', () => {
 
     act(() => { vi.advanceTimersByTime(3000); });
 
-    const generatingMessages = screen.getAllByText(/criando seu anúncio/);
-    expect(generatingMessages.length).toBeGreaterThan(0);
-    for (const el of generatingMessages) {
-      expect(el).toHaveTextContent('(3s)');
-    }
+    const progressbars = screen.getAllByRole('progressbar');
+    expect(progressbars.length).toBeGreaterThan(0);
+    expect(progressbars[0]).toHaveAttribute('aria-label', 'Progresso estimado da geração da imagem');
   });
 
   it('não exibe tempo de processamento nem custo quando a imagem fica pronta', async () => {

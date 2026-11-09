@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { controllers } from '../di.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 
 const router = Router();
 
 // Public routes
 router.post('/register', controllers.auth.register);
 router.post('/login', controllers.auth.login);
+router.post('/demo-login', controllers.auth.demoLogin);
 router.post('/refresh', controllers.auth.refresh);
 router.post('/verify-email', controllers.auth.verifyEmail);
 router.post('/forgot-password', controllers.auth.forgotPassword);
@@ -16,6 +18,7 @@ router.post('/reset-password', controllers.auth.resetPassword);
 router.post('/logout', authMiddleware, controllers.auth.logout);
 router.get('/me', authMiddleware, controllers.auth.getMe);
 router.patch('/me', authMiddleware, controllers.auth.updateMe);
+router.post('/business-context/improve', authMiddleware, tenantMiddleware, controllers.businessContext.improve);
 router.post('/change-password', authMiddleware, controllers.auth.changePassword);
 router.post('/set-password', authMiddleware, controllers.auth.setPassword);
 

@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import { queryClient } from './query-client';
+import { clearSession } from './clear-session';
 import { refreshSession } from './session-refresh';
 import { captureException } from './posthog';
 
@@ -78,10 +78,7 @@ api.interceptors.response.use(
     if (status === 401 && isAuthPath) {
       // refreshSession já encerra a sessão quando a rotação falha. Para /me,
       // a ausência do token será tratada pelo shell autenticado.
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      queryClient.clear();
+      clearSession();
     }
 
     return Promise.reject(error);

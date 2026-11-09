@@ -76,7 +76,7 @@ const createWizardSchema = z
   .object({
     objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
 
-    creatives: z.array(wizardCreativeItemSchema).min(1).max(4).optional(),
+    creatives: z.array(wizardCreativeItemSchema).min(1).optional(),
     // campos únicos legados — mantidos para clientes antigos
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
@@ -238,10 +238,12 @@ function videoScriptFromNotes(notes: string | null | undefined): string | null {
 const HEADLINE_MAX_LENGTH = 40;
 const PRIMARY_TEXT_MAX_LENGTH = 125;
 
-// Nemotron (free) primeiro; se falhar, cai pro Gemini 2.5 Flash Lite (pago).
+// O Gemini Flash é o modelo de visão principal; o Nemotron VL fica como
+// fallback de provedor. Nenhum texto genérico deve ser devolvido quando ambos
+// falham, porque isso mascara que a imagem não foi analisada.
 const SUGGESTION_MODELS: { id: string; maxAttempts: number }[] = [
-  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 3 },
-  { id: 'google/gemini-2.5-flash-lite', maxAttempts: 2 },
+  { id: 'google/gemini-2.5-flash', maxAttempts: 2 },
+  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 2 },
 ];
 
 interface AdCopySuggestion {
@@ -1119,10 +1121,15 @@ Regras (OBRIGATÓRIO respeitar, a resposta será rejeitada se não respeitar):
         imageUrl,
       );
 
-      const headline = suggestion?.headline ?? 'Promoção imperdível';
-      const primaryText = suggestion?.primaryText ?? 'Aproveite esta oferta especial por tempo limitado.';
+      if (!suggestion) {
+        throw new AppError(
+          503,
+          'AD_COPY_SUGGESTION_UNAVAILABLE',
+          'Não foi possível analisar o criativo agora. Tente novamente em instantes.',
+        );
+      }
 
-      res.json({ success: true, data: { headline, primaryText }, timestamp: new Date().toISOString() });
+      res.json({ success: true, data: suggestion, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }
