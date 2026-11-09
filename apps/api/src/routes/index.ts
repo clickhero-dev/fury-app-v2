@@ -84,8 +84,8 @@ router.use(
   ...AUTH_TENANT_SUB,
   observabilityRoutes,
 );
-router.use("/admin", superadminRoutes);
 router.use("/admin/queues", bullBoardRoutes);
+router.use("/admin", superadminRoutes);
 router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
 router.use("/wpp", wppRoutes);
 
