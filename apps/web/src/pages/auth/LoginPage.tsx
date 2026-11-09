@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
-import { useDemoLogin, useLogin } from '@/hooks/useLogin';
+import { useLogin } from '@/hooks/useLogin';
 import { AdySymbol } from '@/components/AdySymbol';
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
@@ -35,7 +35,6 @@ function getFriendlyError(err: unknown): string {
 export function LoginPage() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
-  const demoLoginMutation = useDemoLogin();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -101,16 +100,6 @@ export function LoginPage() {
       navigate('/dashboard');
     } catch (err) {
       setError(getFriendlyError(err));
-    }
-  };
-
-  const enterDemo = async () => {
-    try {
-      setError('');
-      await demoLoginMutation.mutateAsync();
-      navigate('/dashboard');
-    } catch {
-      setError('A conta demo está temporariamente indisponível. Tente novamente em instantes.');
     }
   };
 
@@ -224,15 +213,6 @@ export function LoginPage() {
           <GoogleLoginButton label="Entrar com Google" />
 
           <FacebookLoginButton />
-
-          <button
-            type="button"
-            onClick={enterDemo}
-            disabled={demoLoginMutation.isPending || loginMutation.isPending}
-            className="w-full rounded-xl border border-[#17708A]/40 bg-[#17708A]/5 py-3 text-sm font-semibold text-[#17708A] transition-colors hover:bg-[#17708A]/10 disabled:opacity-60 dark:text-[#2A9BC0]"
-          >
-            {demoLoginMutation.isPending ? 'Abrindo demonstração...' : 'Conhecer o ady com uma conta demo'}
-          </button>
 
           {error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
