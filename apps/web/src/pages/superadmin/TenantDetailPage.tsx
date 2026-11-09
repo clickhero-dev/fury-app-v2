@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Save,
@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
-import { getStoredPlatformRole } from "@/lib/platform-role";
+import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
 import type { AudienceGeo } from "@/components/campaign-wizard/types";
 import { isValidGeo, legacyFromGeo, EMPTY_GEO } from "@/components/campaign-wizard/types";
 import { LocationEditor } from "@/pages/configuracoes/LocationEditor";
@@ -29,6 +29,7 @@ interface TenantData {
     name: string;
     email: string;
     role: string;
+    platformRole?: string | null;
     createdAt: string;
   }[];
   subscription: {
@@ -124,6 +125,9 @@ const GENDERS = [
 
 const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65];
 
+const MAX_PARTNER_CLIENT_MEMBERS = 2;
+const TITULAR_REMOVAL_WAIT_SECONDS = 5;
+
 export function TenantDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -157,8 +161,23 @@ export function TenantDetailPage() {
   const [deleteUserTarget, setDeleteUserTarget] = useState<{
     id: string;
     name: string;
+    role: string;
   } | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  // parceiro removendo o titular: some o cliente inteiro
+  const removesWholeClient = !isSuperAdmin && deleteUserTarget?.role === "owner";
+  const [confirmSeconds, setConfirmSeconds] = useState(0);
+  const [deleteUserError, setDeleteUserError] = useState("");
+
+  // layout effect: o botão já nasce travado
+  useLayoutEffect(() => {
+    if (!removesWholeClient) return;
+    setConfirmSeconds(TITULAR_REMOVAL_WAIT_SECONDS);
+    const timer = setInterval(() => setConfirmSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [removesWholeClient, deleteUserTarget?.id]);
+
+  useEffect(() => setDeleteUserError(""), [deleteUserTarget?.id]);
 
   // Subscription
   const [subForm, setSubForm] = useState({
@@ -454,15 +473,21 @@ export function TenantDetailPage() {
 
   // ─── Delete user ─────────────────────────────────────
   const handleDeleteUser = async () => {
-    if (!deleteUserTarget) return;
+    if (!deleteUserTarget || (removesWholeClient && confirmSeconds > 0)) return;
     setDeletingUser(true);
     try {
       await api.delete(`/admin/users/${deleteUserTarget.id}`);
+      if (removesWholeClient) {
+        navigate("/admin/clientes");
+        return;
+      }
       setMsg("Usuário removido");
       setDeleteUserTarget(null);
       await reload();
     } catch {
-      setMsg("Erro ao remover usuário");
+      setDeleteUserError("Não foi possível remover. Tente novamente.");
+      // nova tentativa do titular volta a esperar
+      if (removesWholeClient) setConfirmSeconds(TITULAR_REMOVAL_WAIT_SECONDS);
     } finally {
       setDeletingUser(false);
     }
@@ -478,7 +503,7 @@ export function TenantDetailPage() {
   if (!data)
     return (
       <div className="text-admin-text-faint text-sm py-12 text-center">
-        Tenant não encontrado
+        Cliente não encontrado
       </div>
     );
 
@@ -490,6 +515,8 @@ export function TenantDetailPage() {
     { key: "publico", label: "Público" },
     { key: "brandkit", label: "Dados da Marca" },
   ];
+
+  const memberLimitReached = !isSuperAdmin && data.users.filter((u) => u.role === "member").length >= MAX_PARTNER_CLIENT_MEMBERS;
 
   const inputCls =
     "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
@@ -541,21 +568,26 @@ export function TenantDetailPage() {
         <div className="space-y-4">
           {data.users.length === 0 && (
             <div role="status" className="bg-admin-petrol/10 border border-admin-petrol/30 rounded-2xl px-5 py-4 text-sm text-admin-text-muted">
-              Esta conta não possui usuários ativos. Para recuperar o acesso, crie um novo usuário com perfil Owner.
+              Esta conta não possui usuários ativos. Para recuperar o acesso, crie um novo usuário com cargo Usuário Titular.
             </div>
           )}
           <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-admin-text mb-4">
               Criar Usuário
             </h3>
-            <div className="grid grid-cols-4 gap-3">
+            {memberLimitReached ? (
+              <div role="status" className="text-sm text-admin-text-muted">
+                Limite de {MAX_PARTNER_CLIENT_MEMBERS} usuários por cliente atingido.
+              </div>
+            ) : (
+            <div className="grid grid-cols-12 gap-3">
               <input
                 value={newUser.name}
                 onChange={(e) =>
                   setNewUser({ ...newUser, name: e.target.value })
                 }
                 placeholder="Nome"
-                className={inputCls}
+                className={`${inputCls} ${isSuperAdmin ? "col-span-3" : "col-span-4"}`}
               />
               <input
                 value={newUser.email}
@@ -564,7 +596,7 @@ export function TenantDetailPage() {
                 }
                 placeholder="Email"
                 type="email"
-                className={inputCls}
+                className={`${inputCls} ${isSuperAdmin ? "col-span-3" : "col-span-4"}`}
               />
               <input
                 value={newUser.password}
@@ -573,30 +605,33 @@ export function TenantDetailPage() {
                 }
                 placeholder="Senha"
                 type="password"
-                className={inputCls}
+                className={`${inputCls} ${isSuperAdmin ? "col-span-3" : "col-span-3"}`}
               />
-              <div className="flex gap-2">
-                <select
-                  value={newUser.role}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, role: e.target.value })
-                  }
-                  className={inputCls}
-                >
-                  <option value="member">Membro</option>
-                  {/* cargo Admin: só super_admin */}
-                  {isSuperAdmin && <option value="admin">Admin</option>}
-                  <option value="owner">Owner</option>
-                </select>
+              <div className={`flex gap-2 ${isSuperAdmin ? "col-span-3" : "col-span-1"}`}>
+                {/* parceiro só cria membro */}
+                {isSuperAdmin && (
+                  <select
+                    value={newUser.role}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, role: e.target.value })
+                    }
+                    className={inputCls}
+                  >
+                    <option value="member">Usuário</option>
+                    <option value="admin">Administrador</option>
+                    <option value="owner">Usuário Titular</option>
+                  </select>
+                )}
                 <button
                   onClick={createUser}
                   disabled={saving}
-                  className={btnCls + " px-4"}
+                  className={btnCls + (isSuperAdmin ? " px-4" : " w-full justify-center px-4")}
                 >
                   <UserPlus className="w-4 h-4" /> Criar
                 </button>
               </div>
             </div>
+            )}
           </div>
 
           <div className="bg-admin-surface border border-admin-border rounded-2xl overflow-hidden">
@@ -605,7 +640,7 @@ export function TenantDetailPage() {
                 <tr className="border-b border-admin-border text-xs text-admin-text-faint uppercase">
                   <th className="text-left px-5 py-3 font-medium">Nome</th>
                   <th className="text-left px-5 py-3 font-medium">Email</th>
-                  <th className="text-left px-5 py-3 font-medium">Role</th>
+                  <th className="text-left px-5 py-3 font-medium">Cargo</th>
                   <th className="text-left px-5 py-3 font-medium">Criado em</th>
                   <th className="text-right px-5 py-3 font-medium">Ações</th>
                 </tr>
@@ -619,8 +654,8 @@ export function TenantDetailPage() {
                     <td className="px-5 py-3">{u.name}</td>
                     <td className="px-5 py-3 text-admin-text-faint">{u.email}</td>
                     <td className="px-5 py-3">
-                      <div className="inline-block text-xs px-2 py-1 rounded-full bg-spark/15 text-[#B55F02] dark:text-spark">
-                        {u.role}
+                      <div className={`inline-block text-xs px-2 py-1 rounded-full ${roleBadgeClass(u)}`}>
+                        {roleLabel(u)}
                       </div>
                     </td>
                     <td className="px-5 py-3 text-admin-text-faint">
@@ -647,6 +682,7 @@ export function TenantDetailPage() {
                             setDeleteUserTarget({
                               id: u.id,
                               name: u.name ?? "sem nome",
+                              role: u.role,
                             })
                           }
                           className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-danger hover:bg-admin-surface-2 transition-all"
@@ -707,21 +743,22 @@ export function TenantDetailPage() {
                   className={`${inputCls} opacity-60`}
                 />
               </div>
-              <div>
-                <label className={labelCls}>Perfil</label>
-                <select
-                  value={editUser.role}
-                  onChange={(e) =>
-                    setEditUser({ ...editUser, role: e.target.value })
-                  }
-                  disabled={!isSuperAdmin && editUser.role === "admin"}
-                  className={inputCls}
-                >
-                  <option value="member">Membro</option>
-                  {(isSuperAdmin || editUser.role === "admin") && <option value="admin">Admin</option>}
-                  <option value="owner">Owner</option>
-                </select>
-              </div>
+              {isSuperAdmin && (
+                <div>
+                  <label className={labelCls}>Cargo</label>
+                  <select
+                    value={editUser.role}
+                    onChange={(e) =>
+                      setEditUser({ ...editUser, role: e.target.value })
+                    }
+                    className={inputCls}
+                  >
+                    <option value="member">Usuário</option>
+                    <option value="admin">Administrador</option>
+                    <option value="owner">Usuário Titular</option>
+                  </select>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditUser(null)}
@@ -755,7 +792,7 @@ export function TenantDetailPage() {
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-admin-text">
-                Remover Usuário
+                {removesWholeClient ? "Remover usuário titular e cliente" : "Remover Usuário"}
               </h2>
               <button
                 onClick={() => setDeleteUserTarget(null)}
@@ -771,9 +808,18 @@ export function TenantDetailPage() {
               </strong>
               ?
             </p>
-            <p className="text-xs text-admin-text-faint mb-6">
-              O usuário perderá acesso ao sistema.
-            </p>
+            {removesWholeClient ? (
+              <div role="alert" className="text-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2.5 mb-6">
+                O usuário titular e <strong className="text-error">todos os usuários vinculados</strong> deste cliente serão removidos e perderão o acesso. A vaga será liberada e você não poderá reaver este cliente.
+              </div>
+            ) : (
+              <p className="text-xs text-admin-text-faint mb-6">
+                O usuário perderá acesso ao sistema.
+              </p>
+            )}
+            {deleteUserError && (
+              <div className="text-sm text-error mb-4">{deleteUserError}</div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteUserTarget(null)}
@@ -783,14 +829,16 @@ export function TenantDetailPage() {
               </button>
               <button
                 onClick={handleDeleteUser}
-                disabled={deletingUser}
+                disabled={deletingUser || (removesWholeClient && confirmSeconds > 0)}
                 className="ady-btn flex-1 bg-[#E5534B] hover:bg-[#E5534B]/90 disabled:opacity-50 text-white py-2.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
               >
                 {deletingUser ? (
                   "Removendo..."
+                ) : removesWholeClient && confirmSeconds > 0 ? (
+                  `Aguarde ${confirmSeconds}s`
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4" /> Sim, remover
+                    <Trash2 className="w-4 h-4" /> {removesWholeClient ? "Sim, remover tudo" : "Sim, remover"}
                   </>
                 )}
               </button>

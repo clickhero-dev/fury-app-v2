@@ -48,6 +48,7 @@ const { mockMetaRepo, mockMetaSyncRepo, mockInvalidateCampaignsCache, mockInvali
   mockInvalidateHttpCache: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../middleware/integrationManager.middleware.js', () => ({ integrationManagerMiddleware: (_req: unknown, _res: unknown, next: () => void) => next() }));
 vi.mock('../di.js', async () => {
   const { MetaController } = await import('../controllers/meta.controller.js');
   const { MetaService } = await import('../services/meta/meta.service.js');

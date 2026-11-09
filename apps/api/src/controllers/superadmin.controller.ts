@@ -126,6 +126,8 @@ const updatePlanSchema = z.object({
   }
 });
 
+const MAX_PARTNER_CLIENT_MEMBERS = 2;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function toMoney(v: number) {
@@ -148,11 +150,11 @@ function partnerOf(req: Request): string | null {
   return req.adminScope.partnerId;
 }
 
-// cargo Admin (libera sem assinatura): só o super_admin dá ou tira
+// parceiro só cria Membro e não troca cargo
 function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
   if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
-  if (newRole === "admin" || currentRole === "admin")
-    throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
+  if (currentRole !== undefined || newRole !== "member")
+    throw new AppError(403, "ROLE_FORBIDDEN", "O parceiro só pode criar Usuários");
 }
 
 // só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
@@ -346,15 +348,20 @@ export class SuperAdminController {
         throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.password, 10);
-      const user = await repo.createUser({
+      const values = {
         tenantId: body.tenantId,
         name: body.name,
         email: body.email,
         passwordHash,
         role: body.role,
         // cliente de parceiro → usuário do parceiro
-        ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
-      });
+        ...(tenant.partnerId ? { platformRole: "user_partner" as const } : {}),
+      };
+      const user = partnerOf(req)
+        ? await repo.createMemberWithinLimit(values, MAX_PARTNER_CLIENT_MEMBERS)
+        : await repo.createUser(values);
+      if (!user)
+        throw new AppError(409, "MEMBER_LIMIT", `Limite de ${MAX_PARTNER_CLIENT_MEMBERS} usuários por cliente atingido`);
 
       res
         .status(201)
@@ -497,6 +504,14 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const user = await this.userInScope(req, req.params.id);
+
+      // parceiro removendo o titular: sai o cliente inteiro e a vaga libera
+      if (partnerOf(req) && user.role === "owner") {
+        await repo.deleteTenant(user.tenantId);
+        await rbacService.bumpVersion();
+        res.json({ success: true, data: { tenantRemoved: true }, timestamp: new Date().toISOString() });
+        return;
+      }
 
       if (await repo.countUsersByTenant(user.tenantId) <= 1 && await repo.hasAccessibleSubscription(user.tenantId)) {
         throw new AppError(
@@ -766,7 +781,7 @@ export class SuperAdminController {
         throw new AppError(
           404,
           "NO_OWNER",
-          "Nenhum usuário encontrado neste tenant",
+          "Nenhum usuário encontrado neste cliente",
         );
 
       const { businessContext, ...audienceOnly } = req.body;

@@ -25,7 +25,7 @@ Cenário: renovação de cota falha
   Quando o superadmin solicita a renovação
   Então a tela informa o erro e mantém a ação disponível
 */
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,8 +33,9 @@ import { TenantDetailPage } from './TenantDetailPage';
 
 const mockGet = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
+const mockDelete = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/api', () => ({ default: { get: mockGet, post: mockPost, patch: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ default: { get: mockGet, post: mockPost, patch: vi.fn(), put: vi.fn(), delete: mockDelete } }));
 vi.mock('@/pages/configuracoes/LocationEditor', () => ({ LocationEditor: () => <div /> }));
 
 function tenantResponse(overrides: Record<string, unknown> = {}) {
@@ -91,6 +92,85 @@ describe('TenantDetailPage — créditos de imagem', () => {
     expect(screen.getByRole('option', { name: /Básico Parceiro/ })).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith('/admin/tenants/tenant-1/assignable-plans');
     expect(mockGet).not.toHaveBeenCalledWith('/admin/plans');
+  });
+
+  function partnerWithUsers(users: object[]) {
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    const base = tenantResponse();
+    mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans')
+      ? { data: { data: [] } }
+      : { data: { data: { ...base.data.data, users } } }));
+  }
+  const person = (id: string, role: string) => ({ id, name: `U ${id}`, email: `${id}@x.com`, role, createdAt: '2026-01-01' });
+
+  it('parceiro não vê cargo ao criar nem ao editar; super vê', async () => {
+    partnerWithUsers([person('t', 'owner')]);
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Criar Usuário')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Usuário' })).not.toBeInTheDocument();
+    await user.click(screen.getByTitle('Editar usuário'));
+    expect(screen.queryByRole('option', { name: 'Usuário Titular' })).not.toBeInTheDocument();
+    unmount();
+
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'super_admin' }));
+    renderPage();
+    expect(await screen.findByRole('option', { name: 'Usuário Titular' })).toBeInTheDocument();
+  });
+
+  it('com 2 membros o parceiro vê o aviso de limite no lugar do formulário', async () => {
+    partnerWithUsers([person('t', 'owner'), person('a', 'member'), person('b', 'member')]);
+    renderPage();
+    expect(await screen.findByText(/Limite de 2 usuários/)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Senha')).not.toBeInTheDocument();
+  });
+
+  it('remover titular: avisa que sai tudo e só libera a confirmação após 5 segundos', async () => {
+    partnerWithUsers([person('t', 'owner'), person('a', 'member')]);
+    renderPage();
+    const buttons = await screen.findAllByTitle('Remover usuário');
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(buttons[0]!);
+      expect(screen.getByRole('alert')).toHaveTextContent(/todos os usuários vinculados/);
+      expect(screen.getByRole('button', { name: 'Aguarde 5s' })).toBeDisabled();
+      act(() => { vi.advanceTimersByTime(4000); });
+      expect(screen.getByRole('button', { name: 'Aguarde 1s' })).toBeDisabled();
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByRole('button', { name: /Sim, remover tudo/ })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falha ao remover titular: erro aparece no modal e a contagem recomeça', async () => {
+    mockDelete.mockRejectedValue(new Error('falha'));
+    partnerWithUsers([person('t', 'owner')]);
+    renderPage();
+    const buttons = await screen.findAllByTitle('Remover usuário');
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(buttons[0]!);
+      act(() => { vi.advanceTimersByTime(5000); });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Sim, remover tudo/ }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('Não foi possível remover. Tente novamente.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Aguarde 5s' })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('remover membro não mostra o aviso do titular', async () => {
+    partnerWithUsers([person('t', 'owner'), person('a', 'member')]);
+    renderPage();
+    const buttons = await screen.findAllByTitle('Remover usuário');
+    fireEvent.click(buttons[1]!);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sim, remover/ })).toBeEnabled();
   });
 
   it('mostra créditos ilimitados sem oferecer renovação', async () => {

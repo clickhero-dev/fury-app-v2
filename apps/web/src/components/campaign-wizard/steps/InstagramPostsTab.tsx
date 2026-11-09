@@ -4,6 +4,7 @@ import { Check, ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { isMemberAccount } from '@/lib/platform-role';
 import type { WizardCreativeState, WizardObjective } from '../types';
 
 interface InstagramPostInsights {
@@ -144,14 +145,14 @@ export function InstagramPostsTab({ selected, onToggle, objective, instagramUser
   if (isError && isReconnectError) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary gap-3">
-        <p className="text-sm">Para usar esta funcionalidade, reconecte sua conta Meta.</p>
-        <Button
+        <p className="text-sm">{isMemberAccount() ? 'Peça ao titular da conta para reconectar a Meta.' : 'Para usar esta funcionalidade, reconecte sua conta Meta.'}</p>
+        {!isMemberAccount() && <Button
           variant="primary"
           onClick={() => reconnectMutation.mutate()}
           disabled={reconnectMutation.isPending}
         >
           {reconnectMutation.isPending ? 'Redirecionando...' : 'Reconectar'}
-        </Button>
+        </Button>}
       </div>
     );
   }

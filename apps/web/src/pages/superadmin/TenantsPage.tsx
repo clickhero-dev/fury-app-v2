@@ -79,10 +79,10 @@ export function TenantsPage() {
     try {
       await api.delete(`/admin/tenants/${deleteTarget.id}`);
       setTenants((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-      setMsg(`Tenant "${deleteTarget.name}" deletado`);
+      setMsg(`Cliente "${deleteTarget.name}" excluído`);
       setDeleteTarget(null);
     } catch {
-      setMsg("Erro ao deletar tenant");
+      setMsg("Erro ao excluir cliente");
     } finally {
       setDeleting(false);
     }
@@ -115,8 +115,8 @@ export function TenantsPage() {
             </svg>
           </div>
           <div className="flex items-baseline gap-2">
-          <h1 className="text-2xl font-bold text-text-primary">Tenants</h1>
-            <span className="text-sm text-text-tertiary">{tenants.length} tenants</span>
+          <h1 className="text-2xl font-bold text-text-primary">Clientes</h1>
+            <span className="text-sm text-text-tertiary">{tenants.length} clientes</span>
           </div>
         </div>
         <div className="relative">
@@ -125,7 +125,7 @@ export function TenantsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar tenant..."
+            placeholder="Buscar cliente..."
             className="w-64 bg-surface border border-border rounded-full pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary transition-colors hover:border-border-light focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
         </div>
@@ -177,7 +177,7 @@ export function TenantsPage() {
       <div className="grid gap-3">
         {filtered.length === 0 && (
           <div className="text-center py-12 text-text-tertiary text-sm">
-            Nenhum tenant encontrado
+            Nenhum cliente encontrado
           </div>
         )}
         {filtered.map((tenant) => (
@@ -219,7 +219,7 @@ export function TenantsPage() {
               <button
                 onClick={(e) => { e.stopPropagation(); setDeleteTarget(tenant); }}
                 className="ady-btn w-8 h-8 flex items-center justify-center leading-none rounded-full bg-error/15 text-error hover:bg-error/25 transition-all shrink-0"
-                title="Deletar tenant"
+                title="Excluir cliente"
               >
                 <Trash2 className="w-4 h-4 shrink-0" />
               </button>
@@ -229,7 +229,7 @@ export function TenantsPage() {
       </div>
       )}
 
-      {/* Deletar Tenant Confirmação */}
+      {/* Excluir cliente Confirmação */}
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
@@ -241,7 +241,7 @@ export function TenantsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-text-primary">Deletar Tenant</h2>
+              <h2 className="text-lg font-semibold text-text-primary">Excluir cliente</h2>
               <button onClick={() => setDeleteTarget(null)} className="ady-btn text-text-tertiary hover:text-text-primary transition-colors">
                 <X className="w-5 h-5" />
               </button>

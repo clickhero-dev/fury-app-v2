@@ -307,6 +307,19 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [row] = await this.db.insert(users).values(data as any).returning();
     return row;
   }
+  // trava o cliente: duas criações simultâneas não passam do limite
+  async createMemberWithinLimit(data: Partial<User> & { tenantId: string }, max: number): Promise<User | null> {
+    return this.db.transaction(async (tx) => {
+      await tx.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, data.tenantId)).for('update');
+      const [{ used }] = await tx
+        .select({ used: sql<number>`count(*)::int`.mapWith(Number) })
+        .from(users)
+        .where(and(eq(users.tenantId, data.tenantId), eq(users.role, 'member'), isNull(users.deletedAt)));
+      if (used! >= max) return null;
+      const [row] = await tx.insert(users).values(data as any).returning();
+      return row;
+    });
+  }
   async updateUser(id: string, data: Partial<User>) {
     const [row] = await this.db.update(users).set(data as any).where(eq(users.id, id)).returning();
     return row ?? null;
@@ -389,6 +402,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
         name: users.name,
         email: users.email,
         role: users.role,
+        platformRole: users.platformRole,
         tenantId: users.tenantId,
         createdAt: users.createdAt,
         tenantName: tenants.name,
