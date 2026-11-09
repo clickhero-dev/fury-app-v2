@@ -30,8 +30,7 @@ interface PolicyAcceptResponse {
 /**
  * Página de aceite da Política de Uso.
  * Exibe o conteúdo da versão vigente; o checkbox "Li e concordo" habilita o botão.
- * Após o aceite: novo usuário (sem onboarding concluído) vai ao onboarding;
- * usuário antigo volta ao dashboard (history back segura o destino original).
+ * Após o aceite, o usuário segue para o dashboard.
  */
 export function PoliticaDeUsoPage() {
   const navigate = useNavigate();
@@ -64,13 +63,7 @@ export function PoliticaDeUsoPage() {
       captureEvent('politica_aceita', { version: result.currentVersion });
       dispatch(setPolicyAccepted({ currentVersion: result.currentVersion, accepted: true }));
       void queryClient.invalidateQueries({ queryKey: ['policy-current'] });
-      // Novo usuário → onboarding; antigo → destino original/dashboard.
-      const hasMeta = localStorage.getItem('ady-meta-connected') === 'true';
-      if (!hasMeta) {
-        navigate('/onboarding/conectar-meta', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      navigate('/dashboard', { replace: true });
     },
     onError: () => {
       setError('Não foi possível registrar o aceite. Tente novamente.');

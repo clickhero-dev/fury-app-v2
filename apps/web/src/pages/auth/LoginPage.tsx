@@ -77,7 +77,7 @@ export function LoginPage() {
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate(session.isNewUser ? '/onboarding/conectar-meta' : '/dashboard');
+        navigate('/dashboard');
       })
       .catch(() => {
         setError('Não foi possível concluir o login com Facebook. Tente novamente.');
