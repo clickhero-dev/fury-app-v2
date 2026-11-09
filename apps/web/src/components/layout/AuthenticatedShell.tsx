@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
@@ -55,7 +55,6 @@ export function AuthenticatedShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const token = localStorage.getItem('token');
   const location = useLocation();
-  const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
   const storedUser = (() => {
@@ -140,15 +139,8 @@ export function AuthenticatedShell() {
       if (connections.length > 0) {
         dispatch(setMetaId(connections[0].id ?? null));
       }
-      if (connections.length === 0) {
-        // ponytail: limpa flag stale que impede o redirect de onboarding
-        localStorage.removeItem('fury-meta-connected');
-        navigate('/onboarding/conectar-meta', { replace: true });
-      } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
-        navigate('/onboarding/selecionar-conta', { replace: true });
-      }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
+  }, [connections, isLoading, isFetched, shouldCheck, dispatch]);
 
   // ── Verificação de assinatura ──────
   const {
