@@ -387,14 +387,14 @@ html:not(.dark) {
   }
 
   /* Correção de Botões Secundários */
-  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill),
-  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill) {
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill):not(.cookie-consent-primary),
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill):not(.cookie-consent-primary) {
     border: 1px solid #e2e8f0 !important;
     color: #475569 !important;
   }
 
-  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):hover,
-  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):hover {
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):not(.cookie-consent-primary):hover,
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):not(.cookie-consent-primary):hover {
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
   }
@@ -575,3 +575,15 @@ html:not(.dark) h2:not(.ady-decor *):not(.gradient-teal *),
 html:not(.dark) h3:not(.ady-decor *):not(.gradient-teal *) {
   color: #0f172a !important;
 }
+/* Ação primária do consentimento: isolada das regras de botões secundários. */
+.cookie-consent-primary {
+  background-color: #17708a;
+  color: #fff;
+}
+.cookie-consent-primary:hover { background-color: #12596e; }
+.cookie-consent-primary:active { background-color: #0d4658; }
+.cookie-consent-primary:focus-visible {
+  outline: 2px solid #17708a;
+  outline-offset: 2px;
+}
+.dark .cookie-consent-primary:focus-visible { outline-color: #fff; }
