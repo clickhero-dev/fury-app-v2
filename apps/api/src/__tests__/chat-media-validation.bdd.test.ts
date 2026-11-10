@@ -53,6 +53,50 @@ describe('áudio e vídeo nativos', () => {
     const buffer = await syntheticMedia(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'libopus', '-f', 'webm']);
     expect(await validator.audio(file(buffer))).toMatchObject({ silent: false, durationSeconds: expect.any(Number), format: 'wav' });
   });
+  it.each([false, true])('Dado WebM Opus completo (vídeo=%s), então o flush EOF não perde áudio nem cria erro de parser', async (video) => {
+    const buffer = await syntheticMedia([
+      ...(video ? ['-f', 'lavfi', '-i', 'color=blue:s=32x32:r=2'] : []),
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-t', '1',
+      ...(video ? ['-c:v', 'libvpx-vp9', '-threads', '1'] : []), '-c:a', 'libopus', '-f', 'webm',
+    ]);
+    if (video) {
+      const result = await validator.attachment(file(buffer, 'opus.webm'));
+      expect(result.metadata.hasAudio).toBe(true);
+      expect(result.metadata.durationSeconds).toBeCloseTo(1, 1);
+    } else {
+      const result = await validator.audio(file(buffer));
+      expect(result.durationSeconds).toBe(1);
+      expect(result.buffer.length).toBe(32044);
+      expect(result.silent).toBe(false);
+    }
+  });
+  it.each([false, true])('Dado pacote Opus corrompido dentro de WebM íntegro (vídeo=%s), então a decodificação estrita rejeita', async (video) => {
+    const { corruptSyntheticOpusPacket } = await import('./chat-media.fixtures.js');
+    const buffer = await syntheticMedia([
+      ...(video ? ['-f', 'lavfi', '-i', 'color=blue:s=32x32:r=2'] : []),
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-t', '1',
+      ...(video ? ['-c:v', 'libvpx-vp9', '-threads', '1'] : []), '-c:a', 'libopus', '-f', 'webm',
+    ]);
+    const corrupt = file(await corruptSyntheticOpusPacket(buffer), 'corrupt.webm');
+    await expect(video ? validator.attachment(corrupt) : validator.audio(corrupt)).rejects.toMatchObject({ statusCode: 415, code: 'CHAT_MEDIA_INVALID' });
+  });
+  it('Dado erro real no stderr com exit 0, então continua rejeitando sem allowlist de mensagens Opus', async () => {
+    const { execFile } = await import('node:child_process');
+    const { runMediaTool } = await import('../services/chat/chat-media-process.js');
+    const { corruptSyntheticOpusPacket } = await import('./chat-media.fixtures.js');
+    const buffer = await corruptSyntheticOpusPacket(await syntheticMedia(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'libopus', '-f', 'webm']));
+    const args = ['-v', 'error', '-protocol_whitelist', 'pipe', '-f', 'matroska', '-i', 'pipe:0', '-show_packets', '-of', 'json'];
+    const stderr = await new Promise<string>((resolve, reject) => {
+      const child = execFile('ffprobe', args, { timeout: 10000 }, (error, _stdout, stderr) => error ? reject(error) : resolve(stderr));
+      child.stdin!.end(buffer);
+    });
+    expect(stderr).toContain('Error parsing Opus packet header.');
+    await expect(runMediaTool('ffprobe', args, buffer)).rejects.toMatchObject({ statusCode: 415, code: 'CHAT_MEDIA_INVALID' });
+  });
+  it('Dado WebM Opus truncado dentro do último pacote, então não aceita áudio parcial', async () => {
+    const buffer = await syntheticMedia(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'libopus', '-f', 'webm']);
+    await expect(validator.audio(file(buffer.subarray(0, buffer.length - 80)))).rejects.toMatchObject({ statusCode: 415 });
+  });
   it('Dado silêncio, então o servidor detecta sem inventar transcrição', async () => {
     const buffer = await syntheticMedia(['-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '1', '-f', 'wav']);
     expect(await validator.audio(file(buffer))).toMatchObject({ silent: true });

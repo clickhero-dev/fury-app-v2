@@ -30,7 +30,12 @@ function isWebm(buffer: Buffer): boolean {
 }
 async function nativeMedia(tool: 'ffprobe' | 'ffmpeg', buffer: Buffer, container: string, output: string[], maxBuffer?: number): Promise<Buffer> {
   const errorOnDecode = tool === 'ffmpeg' ? ['-xerror'] : [];
-  if (container !== 'mov') return runMediaTool(tool, [...protocols, ...errorOnDecode, '-f', container, '-i', 'pipe:0', ...output], buffer, maxBuffer);
+  // WebM already supplies complete, timestamped packets. FFmpeg 8's Opus parser
+  // parses an empty EOF flush as a corrupt header (upstream fix 618fc15e65f5).
+  // Bypass only this redundant framing pass, not decoding: explode, -xerror and
+  // runMediaTool's nonempty-stderr rejection still reject real packet corruption.
+  const packetizedWebm = container === 'matroska' ? ['-fflags', '+noparse+nofillin', '-err_detect', 'explode'] : [];
+  if (container !== 'mov') return runMediaTool(tool, [...protocols, ...errorOnDecode, ...packetizedWebm, '-f', container, '-i', 'pipe:0', ...output], buffer, maxBuffer);
   // Ordinary MP4 may need seeking (moov at the end). The only file path comes from our 0700 temp directory.
   // Force MOV demuxing and disable ALL external data references; never enable network protocols.
   const directory = await mkdtemp(path.join(tmpdir(), 'chat-mp4-'));

@@ -27,5 +27,13 @@ A evolução do assistente tem testes locais verdes, mas a revisão identificou 
 - Builds, regressões e revisão independente no checkout integrado; contagens registradas após execução.
 - SHA do commit remoto confirmado após push; checks remotos avaliados sem confundir com validação local.
 
+## Follow-up: compatibilidade FFmpeg 8 no CI remoto
+
+O primeiro job remoto (`42881962342`, SHA `982f297e`) passou no Python, mas revelou dois casos válidos WebM/Opus recusados na validação nativa. O runner usou Ubuntu 26.04 com FFmpeg `7:8.0.1-3ubuntu2`, diferente do FFmpeg 9 local.
+
+Reprodução com os pacotes exatos confirmou o parser Opus interpretando o flush EOF vazio como pacote inválido, embora a decodificação produzisse todo o PCM e exit 0. O upstream FFmpeg corrige essa condição no commit `618fc15e65f57c9ce25d4562f4b516129815608c`.
+
+O ajuste aplica `+noparse+nofillin` somente ao framing redundante de WebM e mantém demuxing/decodificação reais com `-err_detect explode`, `-xerror`, rejeição de stderr, protocolos restritos e todos os limites. Pacotes corrompidos e truncados continuam recusados. Foram adicionadas seis regressões: 23 testes nativos passaram em FFmpeg 6, 8 e 9; o parent executou 43 testes de mídia/transcrição/rotas, typecheck e lint verdes. O novo check remoto deve ser conferido no SHA do follow-up antes de declarar CI aprovado.
+
 ## Limites
 Mocks de modelo/mídia e storage simulados não certificam OpenRouter/Meta/R2 reais. Homologação e produção devem manter variáveis/segredos próprios e serviço de chat interno, sem exposição pública direta.

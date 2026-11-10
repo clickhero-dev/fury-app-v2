@@ -36,6 +36,22 @@ export async function syntheticSeekableMp4(): Promise<Buffer> {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
+/** Preserve WebM framing but invalidate an actual Opus packet (RFC 6716: >120ms). */
+export async function corruptSyntheticOpusPacket(buffer: Buffer): Promise<Buffer> {
+  const output = await new Promise<string>((resolve, reject) => {
+    const child = execFile('ffprobe', ['-v', 'error', '-fflags', '+noparse+nofillin', '-f', 'matroska', '-i', 'pipe:0', '-select_streams', 'a:0', '-show_packets', '-show_entries', 'packet=pos', '-of', 'json'], { timeout: 10000 }, (error, stdout) => error ? reject(error) : resolve(stdout));
+    child.stdin!.end(buffer);
+  });
+  const packets = (JSON.parse(output) as { packets: Array<{ pos: string }> }).packets;
+  const position = Number(packets[Math.floor(packets.length / 2)]?.pos);
+  // Our synthetic single-track blocks have a one-byte track ID and no lacing.
+  if (!Number.isInteger(position) || !(buffer[position] & 0x80) || (buffer[position + 3] & 6)) throw new Error('Unexpected synthetic WebM block');
+  const corrupt = Buffer.from(buffer);
+  corrupt[position + 4] = 0xfb; // CELT 20ms, arbitrary frame count (code 3).
+  corrupt[position + 5] = 0x3f; // 63 frames = 1260ms, impossible Opus packet.
+  return corrupt;
+}
+
 // Synthetic fixtures only: no customer file, no network, no DB credentials.
 export function syntheticPdf(pages = 1, image?: Buffer): Buffer {
   const contents = image ? Buffer.from('q 100 0 0 100 0 0 cm /Im0 Do Q') : Buffer.from('BT /F1 12 Tf 20 80 Td (TESTE AZUL 42) Tj ET');
