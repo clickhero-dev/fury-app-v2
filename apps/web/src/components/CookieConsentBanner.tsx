@@ -4,7 +4,7 @@ import { needsConsent, setConsent, PRIVACY_URL, type ConsentLevel } from '../lib
 // classe compartilhada: os 3 botões têm o mesmo peso visual (só a cor muda)
 const BTN_BASE = 'rounded-full px-4 py-2 text-xs font-semibold cursor-pointer';
 const BTN_OUTLINE = `${BTN_BASE} border border-slate-300 text-slate-700 dark:border-[#3a3a3a] dark:text-[#e5e5e5]`;
-const BTN_PRIMARY = `${BTN_BASE} bg-[#17708A] text-white`;
+const BTN_PRIMARY = `${BTN_BASE} cookie-consent-primary bg-[#17708A] text-white hover:bg-[#12596E] hover:text-white active:bg-[#0D4658] active:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#17708A] dark:focus-visible:outline-white`;
 
 export function CookieConsentBanner() {
   const [visible, setVisible] = useState(() => needsConsent());
