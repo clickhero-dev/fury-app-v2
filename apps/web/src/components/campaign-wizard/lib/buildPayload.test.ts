@@ -101,6 +101,16 @@ describe('buildWizardCampaignPayload', () => {
     expect(conv.destinations).toBeUndefined();
   });
 
+  it('envia a conta do Instagram para o fluxo de seguidores', () => {
+    const payload = buildWizardCampaignPayload(makeState({ objective: 'followers' }));
+
+    expect(payload.objective).toBe('followers');
+    expect(payload.whatsapp_page_id).toBe('page-1');
+    expect(payload.instagram_user_id).toBe('ig-user');
+    expect(payload.instagram_username).toBe('fury');
+    expect(payload.destinations).toBeUndefined();
+  });
+
   it('preserva Instagram e Facebook juntos no payload de Gerar Conversas', () => {
     const payload = buildWizardCampaignPayload(makeState({
       objective: 'whatsapp',
