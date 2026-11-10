@@ -23,7 +23,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: `VITE_API_URL=${apiBaseUrl} pnpm dev -- --host 127.0.0.1 --port ${webPort}`,
+      command: `VITE_API_URL=${apiBaseUrl} pnpm exec vite --host 127.0.0.1 --port ${webPort}`,
       url: webBaseUrl,
       timeout: 45_000,
       reuseExistingServer: !process.env.CI,

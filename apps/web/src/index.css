@@ -578,7 +578,8 @@ html:not(.dark) h3:not(.ady-decor *):not(.gradient-teal *) {
 /* Ação primária do consentimento: isolada das regras de botões secundários. */
 .cookie-consent-primary {
   background-color: #17708a;
-  color: #fff;
+  /* A regra global de tipografia clara usa !important; preserve o texto branco. */
+  color: #fff !important;
 }
 .cookie-consent-primary:hover { background-color: #12596e; }
 .cookie-consent-primary:active { background-color: #0d4658; }
