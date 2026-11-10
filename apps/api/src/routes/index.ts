@@ -29,6 +29,10 @@ import announcementRoutes from './announcement.routes.js';
 import notificationRoutes from './notification.routes.js';
 import rbacRoutes from "./rbac.routes.js";
 import publicTrialRoutes from './public-trial.routes.js';
+import { createChatProxy } from './chat.routes.js';
+import { createChatMediaRouter } from './chat-media.routes.js';
+import { createChatPlanRouter } from './chat-plan.routes.js';
+import { chatDelegationGuard } from '../middleware/chat-delegation.middleware.js';
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -37,18 +41,28 @@ import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.j
 import { rbacMiddleware } from "../middleware/rbac.middleware.js";
 import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
 import { createV2Router } from "./v2.routes.js";
-import { controllers } from "../di.js";
+import { chatPlanRuntime, controllers } from "../di.js";
 
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
 const router = Router();
 
+router.use('/chat', createChatPlanRouter(chatPlanRuntime.controller, {
+  delegationSecret: process.env.CHAT_DELEGATION_SECRET ?? '',
+}));
+// Delegação é validada antes do RBAC; somente aprovações consumidas chegam às rotas.
+router.use(chatDelegationGuard);
 // RBAC global: bloqueia serviços por papel/parceiro (catálogo em lib/rbac-services.ts)
 router.use(rbacMiddleware);
 
 router.use("/health", healthRoutes);
 router.use("/public", publicTrialRoutes);
 router.use("/auth", authRoutes);
+router.use('/chat', authMiddleware, tenantMiddleware, createChatMediaRouter(controllers.chatMedia));
+router.use('/chat', authMiddleware, tenantMiddleware, createChatProxy({
+  baseUrl: process.env.CHAT_SERVICE_URL ?? 'http://localhost:8000',
+  secret: process.env.CHAT_DELEGATION_SECRET ?? '',
+}));
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/notifications', notificationRoutes);

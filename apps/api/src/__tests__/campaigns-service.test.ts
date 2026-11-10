@@ -193,9 +193,17 @@ describe('mapWizardMetaError', () => {
 // ── Service: createCampaign ────────────────────────────────────────────────
 
 describe('CampaignsService.createCampaign', () => {
+  it('consulta moeda apenas de conta pertencente ao tenant',async()=>{
+    const {service,repo,meta}=makeService();const currency=vi.spyOn(meta,'getAdAccountCurrency');
+    repo.metaConnections.push({tenantId:TENANT_ID,adAccounts:[{id:'act_123'}],accessToken:'tok'} as any);
+    await expect(service.getChatAdAccount({tenantId:TENANT_ID,adAccountId:'act_123'})).resolves.toEqual({id:'act_123',currency:'BRL'});
+    await expect(service.getChatAdAccount({tenantId:TENANT_ID,adAccountId:'act_999'})).rejects.toMatchObject({statusCode:403});
+    expect(currency).toHaveBeenCalledOnce();
+  });
   it('cria campanha com sucesso', async () => {
     const upsertCampaignSnapshot = vi.fn(async () => {});
     const { service, repo, meta } = makeService({ upsertCampaignSnapshot });
+    vi.spyOn(meta,'createCampaign');
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
       adAccounts: [{ id: 'act_123' }], accessToken: 'tok', selectedPageIds: [],
@@ -209,6 +217,10 @@ describe('CampaignsService.createCampaign', () => {
 
     expect(result).toBeDefined();
     expect(result.metaCampaignId).toBe('meta_campaign_1');
+    expect(meta.createCampaign).toHaveBeenCalledWith('act_123','tok_decrypted',{
+      name:'Test',objective:'OUTCOME_SALES',status:'PAUSED',special_ad_categories:[],
+      is_adset_budget_sharing_enabled:false,daily_budget:1000,bid_strategy:'LOWEST_COST_WITHOUT_CAP',
+    });
     expect(repo.campaigns).toHaveLength(1);
     expect(upsertCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, expect.objectContaining({
       metaCampaignId: 'meta_campaign_1', name: 'Test', status: 'PAUSED', objective: 'OUTCOME_SALES',
@@ -216,7 +228,8 @@ describe('CampaignsService.createCampaign', () => {
   });
 
   it('rejeita adAccount de outro tenant', async () => {
-    const { service, repo } = makeService();
+    const { service, repo, meta } = makeService();
+    vi.spyOn(meta,'createCampaign');
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
       adAccounts: [{ id: 'act_999' }], accessToken: 'tok', selectedPageIds: [],
@@ -227,6 +240,23 @@ describe('CampaignsService.createCampaign', () => {
       tenantId: TENANT_ID, name: 'Test', objective: 'OUTCOME_SALES',
       dailyBudget: 1000, adAccountId: 'act_123',
     })).rejects.toThrow(AppError);
+    expect(meta.createCampaign).not.toHaveBeenCalled();
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('não registra orçamento local se a Meta rejeita a criação', async () => {
+    const {service,repo,meta}=makeService();
+    repo.metaConnections.push({tenantId:TENANT_ID,id:'mc1',adAccounts:[{id:'act_123'}],accessToken:'tok'} as any);
+    vi.spyOn(meta,'createCampaign').mockRejectedValueOnce(new Error('falha da Meta'));
+    await expect(service.createCampaign({tenantId:TENANT_ID,name:'Test',objective:'OUTCOME_SALES',dailyBudget:1000,adAccountId:'act_123'})).rejects.toThrow();
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('criação normal mantém orçamento na moeda da conta sem exigir BRL',async()=>{
+    const {service,repo,meta}=makeService();const check=vi.spyOn(meta,'getAdAccountCurrency').mockResolvedValue('USD');
+    repo.metaConnections.push({tenantId:TENANT_ID,adAccounts:[{id:'act_123'}],accessToken:'tok'} as any);
+    await expect(service.createCampaign({tenantId:TENANT_ID,name:'Test',objective:'OUTCOME_SALES',dailyBudget:1000,adAccountId:'act_123'})).resolves.toBeDefined();
+    expect(check).not.toHaveBeenCalled();
   });
 
   it('rejeita sem conexao Meta', async () => {
@@ -368,12 +398,28 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
 
 describe('CampaignsService.updateCampaignBudget', () => {
   it('atualiza orcamento', async () => {
-    const { service, repo } = makeService();
-    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    const { service, repo, meta } = makeService();
+    meta.getCampaignResult={account_id:'123'};
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok',adAccounts:[{id:'act_123'}] } as any);
     const c = await repo.createCampaign({ tenantId: TENANT_ID, metaCampaignId: 'mc1', budget: { daily_budget: 500 } } as any);
 
     const updated = await service.updateCampaignBudget({ tenantId: TENANT_ID, campaignId: c.id, dailyBudget: 1000 });
     expect((updated.budget as any).daily_budget).toBe(1000);
+  });
+  it.each(['USD',null])('bloqueia mudança sem moeda BRL comprovada (%s)',async currency=>{
+    const {service,repo,meta}=makeService();meta.getCampaignResult={account_id:'123'};
+    vi.spyOn(meta,'getAdAccountCurrency').mockResolvedValue(currency);const update=vi.spyOn(meta,'updateCampaign');
+    repo.metaConnections.push({tenantId:TENANT_ID,accessToken:'tok',adAccounts:[{id:'act_123'}]} as any);
+    const c=await repo.createCampaign({tenantId:TENANT_ID,metaCampaignId:'mc1',budget:{daily_budget:500}} as any);
+    await expect(service.updateCampaignBudget({tenantId:TENANT_ID,campaignId:c.id,dailyBudget:1000,enforceBrl:true})).rejects.toMatchObject({code:'META_ACCOUNT_CURRENCY_UNSUPPORTED'});
+    expect(update).not.toHaveBeenCalled();expect((repo.campaigns[0].budget as any).daily_budget).toBe(500);
+  });
+  it('alteração normal não exige conta BRL',async()=>{
+    const {service,repo,meta}=makeService();const check=vi.spyOn(meta,'getAdAccountCurrency').mockResolvedValue('USD');
+    repo.metaConnections.push({tenantId:TENANT_ID,accessToken:'tok'} as any);
+    const c=await repo.createCampaign({tenantId:TENANT_ID,metaCampaignId:'mc1',budget:{daily_budget:500}} as any);
+    await expect(service.updateCampaignBudget({tenantId:TENANT_ID,campaignId:c.id,dailyBudget:1000})).resolves.toBeDefined();
+    expect(check).not.toHaveBeenCalled();
   });
 });
 

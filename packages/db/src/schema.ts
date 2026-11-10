@@ -804,6 +804,7 @@ export const workflowJobs = pgTable(
     workflow: varchar('workflow', { length: 100 }).notNull(),
     status: workflowStatusEnum('status').notNull().default('pending'),
     lockKey: varchar('lock_key', { length: 255 }).notNull(),
+    videoLeaseToken: uuid('video_lease_token'),
     currentStage: varchar('current_stage', { length: 100 }),
     stages: jsonb('stages').notNull().default(sql`'[]'::jsonb`),
     artifacts: jsonb('artifacts').notNull().default(sql`'{}'::jsonb`),

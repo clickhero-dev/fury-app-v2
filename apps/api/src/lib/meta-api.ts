@@ -1183,6 +1183,7 @@ export async function metaApiCall<T>(
     }
 
     if (method === 'GET') {
+      if (path.includes('fields=currency')) return { currency: 'BRL' } as T;
       const pathNoQuery = path.split('?')[0] || path;
       if (pathNoQuery.includes('/me/permissions')) {
         return {

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { StudioVideoService, VIDEO_ASPECT_RATIOS, VIDEO_DURATIONS } from '../services/studio/studio-video.service.js';
+import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 
 const aspectRatio = z.enum(VIDEO_ASPECT_RATIOS);
 const duration = z.number().int().refine((d) => (VIDEO_DURATIONS as readonly number[]).includes(d), 'Duração inválida');
@@ -61,13 +62,21 @@ export class StudioVideoController {
 
   createJob = this.handle(async (req) => {
     const body = createJobSchema.parse(req.body);
-    return this.service.createJob(this.tenantId(req), body, req.user!.userId);
+    const operationId = getDelegatedUser(req) ? req.get('X-Chat-Approval-Id') : undefined;
+    return this.service.createJob(this.tenantId(req), body, req.user!.userId, operationId);
   }, 202);
 
   adjust = this.handle(async (req) => {
     const assetId = z.string().uuid().parse(req.params.assetId);
     const { feedback } = adjustSchema.parse(req.body);
     return this.service.adjustVideo(this.tenantId(req), assetId, feedback, req.user!.userId);
+  }, 202);
+
+  chatAdjust = this.handle(async (req) => {
+    const assetId = z.string().uuid().parse(req.params.assetId);
+    const { feedback, version } = z.object({ feedback: z.string().trim().min(3).max(500), version: z.string().regex(/^\d{1,10}$/) }).strict().parse(req.body);
+    const operationId = getDelegatedUser(req) ? req.get('X-Chat-Approval-Id') : undefined;
+    return this.service.adjustChatVideo(this.tenantId(req), assetId, version, feedback, req.user!.userId, operationId);
   }, 202);
 
   getJob = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

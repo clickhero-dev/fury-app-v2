@@ -18,6 +18,31 @@ const deletePhotoSchema = z.object({ url: z.string().url() });
 export class BrandKitController {
   constructor(private service: BrandKitService) {}
 
+  chatSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try { res.json({ success: true, data: await this.service.getChatBrand(req.tenant!.tenantId) }); }
+    catch (err) { next(err); }
+  };
+
+  chatUpdate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z.object({
+        version: z.string().regex(/^(?:\d{1,10}|absent)$/),
+        primary_color: z.string().regex(HEX_COLOR_REGEX).optional(),
+        secondary_color: z.string().regex(HEX_COLOR_REGEX).optional(),
+        voice_tone: z.enum(['professional', 'casual', 'urgent', 'premium']).optional(),
+        whatsapp_number: z.string().regex(/^\d{10,15}$/).nullable().optional(),
+      }).strict().refine(v => v.primary_color !== undefined || v.secondary_color !== undefined || v.voice_tone !== undefined || v.whatsapp_number !== undefined);
+      const payload = body.parse(req.body);
+      const values = {
+        ...(payload.primary_color !== undefined && { primaryColor: payload.primary_color }),
+        ...(payload.secondary_color !== undefined && { secondaryColor: payload.secondary_color }),
+        ...(payload.voice_tone !== undefined && { voiceTone: payload.voice_tone }),
+        ...(payload.whatsapp_number !== undefined && { whatsappNumber: payload.whatsapp_number }),
+      };
+      res.json({ success: true, data: await this.service.updateChatBrand(req.tenant!.tenantId, payload.version, values) });
+    } catch (err) { next(err); }
+  };
+
   get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tenantId } = req.tenant!;

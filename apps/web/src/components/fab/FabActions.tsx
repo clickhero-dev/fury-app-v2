@@ -12,6 +12,7 @@ import { captureEvent } from '@/lib/posthog';
  * além do tooltip nativo (title).
  */
 const EXCLUDED_PREFIXES = [
+  '/chat', // o composer do assistente precisa permanecer livre de sobreposições
   '/criar-campanha', // dentro do wizard não há razão para o atalho
   '/onboarding',
   '/politica',

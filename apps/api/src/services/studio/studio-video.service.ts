@@ -34,6 +34,12 @@ const MAX_STATUS_ERRORS = 6;
 const SAVE_ATTEMPTS = 3;
 const MAX_SCENES = 8;
 
+class VideoJobStateUnknown extends AppError {
+  constructor() { super(503, 'VIDEO_JOB_STATE_UNKNOWN', 'Não foi possível confirmar o início do vídeo. Verifique antes de tentar novamente.'); }
+}
+class VideoLeaseLost extends Error {}
+class VideoFailurePersistenceError extends Error {}
+
 export type AspectRatio = (typeof VIDEO_ASPECT_RATIOS)[number];
 export type VideoStage = 'queued' | 'submitting' | 'generating' | 'saving' | 'done';
 type PhotoKind = 'produto' | 'equipe';
@@ -72,6 +78,7 @@ interface VideoJobMetadata {
   /** Teto de mudanças do plano, congelado no vídeo novo (null = sem limite). */
   modificationsLimit?: number | null;
   openrouterJobId: string | null;
+  billingUncertain?: boolean;
   startedAt: string;
   submittedAt: string | null;
   log: LogEntry[];
@@ -336,7 +343,7 @@ export class StudioVideoService {
     return { scenes: result.scenes };
   }
 
-  async createJob(tenantId: string, input: CreateVideoInput, initiatedByUserId?: string): Promise<{ jobId: string }> {
+  async createJob(tenantId: string, input: CreateVideoInput, initiatedByUserId?: string, operationId?: string): Promise<{ jobId: string }> {
     if (!(VIDEO_DURATIONS as readonly number[]).includes(input.duration)) {
       throw new AppError(400, 'INVALID_DURATION', 'Duração inválida.');
     }
@@ -361,12 +368,19 @@ export class StudioVideoService {
         initiatedByUserId,
       },
       limits.videosPerMonth === null ? undefined : { since: limits.periodStart, limit: limits.videosPerMonth },
+      operationId,
     );
   }
 
   /** Ajuste pós-geração: o LLM reescreve o roteiro com o pedido e gera uma nova versão do grupo. */
-  async adjustVideo(tenantId: string, assetId: string, feedback: string, initiatedByUserId?: string): Promise<{ jobId: string }> {
-    const asset = await this.deps.studioRepo(tenantId).findAssetById(assetId);
+  async adjustChatVideo(tenantId: string, assetId: string, version: string, feedback: string, initiatedByUserId: string, operationId?: string): Promise<{ jobId: string }> {
+    const asset = await this.deps.studioRepo(tenantId).findAssetByIdAndVersion(assetId, version);
+    if (!asset) throw new AppError(409, 'ASSET_CHANGED', 'O vídeo mudou. Consulte novamente antes de confirmar.');
+    return this.adjustVideo(tenantId, assetId, feedback, initiatedByUserId, asset, operationId);
+  }
+
+  async adjustVideo(tenantId: string, assetId: string, feedback: string, initiatedByUserId?: string, approvedAsset?: Awaited<ReturnType<StudioRepository['findAssetByIdAndVersion']>>, operationId?: string): Promise<{ jobId: string }> {
+    const asset = approvedAsset ?? await this.deps.studioRepo(tenantId).findAssetById(assetId);
     if (!asset || asset.type !== 'video') throw new AppError(404, 'VIDEO_NOT_FOUND', 'Vídeo não encontrado.');
     let notes: any;
     try {
@@ -383,8 +397,12 @@ export class StudioVideoService {
       throw new AppError(403, 'VIDEO_NOT_IN_PLAN', 'Seu plano não inclui criação de vídeo.');
     }
     const rootAssetId = asset.rootAssetId ?? asset.id;
-    // mudanças por vídeo, como nas imagens; devolve se não chegar a gerar
-    await this.deps.modQuota.consume(rootAssetId);
+    const jobId = operationId ?? randomUUID();
+    const reservation = await this.deps.jobRepo.reserveVideoAdjustment({id:jobId,tenantId,rootAssetId,approvalId:operationId},MAX_ACTIVE_JOBS_PER_TENANT);
+    if (reservation === 'quota') throw new AppError(403, 'MODIFICATION_QUOTA_EXCEEDED', 'Limite de modificações deste criativo foi atingido.');
+    if (reservation === 'active_limit') throw new AppError(409, 'VIDEO_JOBS_LIMIT', 'Você já tem 2 vídeos sendo gerados. Aguarde um terminar para criar outro.');
+    if (reservation === 'approval_inactive') throw new AppError(409, 'CHAT_APPROVAL_INACTIVE', 'A execução expirou.');
+    if (reservation === 'exists') throw new AppError(409, 'VIDEO_JOB_EXISTS', 'Esta solicitação de vídeo já foi iniciada.');
     try {
       const text = [
         'Você é roteirista de anúncios em vídeo para redes sociais (Meta Ads).',
@@ -406,9 +424,9 @@ export class StudioVideoService {
         rootAssetId,
         feedback,
         initiatedByUserId,
-      });
+      }, undefined, operationId, jobId);
     } catch (err) {
-      await this.deps.modQuota.refund(rootAssetId);
+      if (!(err instanceof VideoJobStateUnknown)) await this.deps.jobRepo.cancelVideoAdjustment(jobId,tenantId);
       throw err;
     }
   }
@@ -417,9 +435,11 @@ export class StudioVideoService {
     tenantId: string,
     input: Omit<VideoJobMetadata, 'videoPrompt' | 'scriptModel' | 'videoCostUsd' | 'openrouterJobId' | 'startedAt' | 'submittedAt' | 'log'>,
     period?: { since: Date; limit: number },
+    operationId?: string,
+    preparedJobId?: string,
   ): Promise<{ jobId: string }> {
     const brand = await this.deps.brand(tenantId);
-    const jobId = randomUUID();
+    const jobId = preparedJobId ?? operationId ?? randomUUID();
     const at = new Date(this.deps.now()).toISOString();
     const metadata: VideoJobMetadata = {
       ...input,
@@ -434,7 +454,9 @@ export class StudioVideoService {
         { at, step: 'na fila', detail: `${input.model} · ${input.aspectRatio} · ${input.duration}s · ${input.photos.length} foto(s)` },
       ],
     };
-    const created = await this.deps.jobRepo.createTenantJobIfUnderLimit(
+    const created = preparedJobId
+      ? (await this.deps.jobRepo.activateVideoAdjustment(jobId,tenantId,metadata) ? 'created' : 'approval_inactive')
+      : await this.deps.jobRepo.createTenantJobIfUnderLimit(
       {
         id: jobId,
         tenantId,
@@ -447,7 +469,11 @@ export class StudioVideoService {
       MAX_ACTIVE_JOBS_PER_TENANT,
       new Date(this.deps.now() - STALE_JOB_MS),
       period,
+      operationId,
     );
+    if (created === 'approval_inactive') {
+      throw new AppError(409, 'CHAT_APPROVAL_INACTIVE', 'A execução expirou. Verifique o resultado antes de solicitar outra ação.');
+    }
     if (created === 'period_limit') {
       throw new AppError(403, 'VIDEO_QUOTA_EXCEEDED', 'Limite de vídeos do mês atingido. Faça upgrade do plano para continuar.');
     }
@@ -458,8 +484,18 @@ export class StudioVideoService {
     try {
       await this.deps.enqueue(jobId, tenantId);
     } catch (err) {
-      await this.deps.jobRepo.patchWorkflowJob(jobId, { status: 'error', error: 'Não foi possível iniciar a geração.', updatedAt: new Date() });
-      throw err;
+      let stopped: boolean;
+      try { stopped = preparedJobId ? await this.deps.jobRepo.cancelVideoAdjustment(jobId,tenantId) : await this.deps.jobRepo.markPendingVideoEnqueueFailed(jobId, tenantId); }
+      catch { throw new VideoJobStateUnknown(); }
+      if (stopped) throw err;
+      let current: Awaited<ReturnType<WorkflowJobRepository['getWorkflowJob']>>;
+      try { current = await this.deps.jobRepo.getWorkflowJob(jobId); }
+      catch { throw new VideoJobStateUnknown(); }
+      if (!current || current.tenantId !== tenantId || !['running', 'done', 'error'].includes(current.status)) {
+        throw new VideoJobStateUnknown();
+      }
+      // The worker already claimed it: preserve its status and return the stable ID.
+      return { jobId };
     }
     return { jobId };
   }
@@ -506,25 +542,53 @@ export class StudioVideoService {
     return jobs.filter((j) => new Date(j.updatedAt).getTime() > staleBefore).map((j) => this.toStatus(j));
   }
 
+  /** Requeue only jobs that were persisted but never claimed by a worker. */
+  async recoverPendingJobs(shouldContinue: () => boolean = () => true): Promise<number> {
+    await this.deps.jobRepo.reconcileVideoAdjustments();
+    const jobs = await this.deps.jobRepo.listRecoverableWorkflowJobs({ workflow: VIDEO_WORKFLOW, sinceMs: 1 });
+    let recovered = 0;
+    for (const job of jobs) {
+      if (!shouldContinue()) break;
+      const resumable = job.status === 'running' && new Date(job.updatedAt).getTime() < this.deps.now() - STALE_JOB_MS
+        && Boolean((job.metadata as Partial<VideoJobMetadata> | null)?.openrouterJobId);
+      if (job.status !== 'pending' && !resumable) continue;
+      try {
+        await this.deps.enqueue(job.id, job.tenantId);
+        recovered++;
+      } catch {
+        // Keep this job pending for a later sweep without blocking other tenants.
+        console.error('[studio-video] recuperação de job pendente indisponível');
+      }
+    }
+    return recovered;
+  }
+
   /** Job do BullMQ falhou fora do processJob: não deixa o workflow_job preso em running. */
   async markFailed(jobId: string, reason: string): Promise<void> {
     const job = await this.deps.jobRepo.getWorkflowJob(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
+    if ((job.metadata as Partial<VideoJobMetadata> | null)?.openrouterJobId) return;
     console.error('[studio-video] job marcado como erro pelo worker', { jobId, reason });
-    await this.deps.jobRepo.patchWorkflowJob(jobId, { status: 'error', error: 'A geração do vídeo foi interrompida. Tente novamente.', updatedAt: new Date() });
+    if (job.status === 'running') {
+      await this.deps.jobRepo.markUnsubmittedVideoFailed(jobId);
+      return;
+    }
     const rootAssetId = (job.metadata as Partial<VideoJobMetadata> | null)?.rootAssetId;
-    if (rootAssetId) await this.deps.modQuota.refund(rootAssetId);
+    if (rootAssetId) await this.deps.jobRepo.cancelVideoAdjustment(jobId,job.tenantId);
+    else await this.deps.jobRepo.markPendingVideoEnqueueFailed(jobId,job.tenantId);
   }
 
   /** Executado pelo worker: envia ao OpenRouter, acompanha, salva na biblioteca. Retomável pelo openrouterJobId. */
   async processJob(jobId: string): Promise<void> {
-    const job = await this.deps.jobRepo.getWorkflowJob(jobId);
-    if (!job || job.status === 'done' || job.status === 'error') return;
+    const token = randomUUID();
+    const job = await this.deps.jobRepo.claimVideoJob(jobId, token)
+      ?? await this.deps.jobRepo.claimResumableVideoJob(jobId, token);
+    if (!job) return;
     // IA do vídeo usa a chave do dono do cliente
-    return runWithTenant(job.tenantId, () => this.processLoadedJob(jobId, job));
+    return runWithTenant(job.tenantId, () => this.processLoadedJob(jobId, job, token));
   }
 
-  private async processLoadedJob(jobId: string, job: NonNullable<Awaited<ReturnType<Deps['jobRepo']['getWorkflowJob']>>>): Promise<void> {
+  private async processLoadedJob(jobId: string, job: NonNullable<Awaited<ReturnType<Deps['jobRepo']['getWorkflowJob']>>>, token: string): Promise<void> {
     const { jobRepo, video } = this.deps;
     const meta = { ...(job.metadata as unknown as VideoJobMetadata) };
     meta.log = [...(meta.log ?? [])];
@@ -533,12 +597,16 @@ export class StudioVideoService {
       meta.log.push({ at: new Date(this.deps.now()).toISOString(), step, ...(detail ? { detail } : {}) });
       console.log(`[studio-video] ${step}`, { jobId, ...(detail ? { detail } : {}) });
     };
-    const save = (patch: Record<string, unknown>) =>
-      jobRepo.patchWorkflowJob(jobId, { ...patch, metadata: meta as any, updatedAt: new Date() } as any);
+    const save = async (patch: Record<string, unknown>) => {
+      if (!await jobRepo.patchOwnedVideoJob(jobId, token, { ...patch, metadata: meta as any, updatedAt: new Date() } as any)) throw new VideoLeaseLost();
+    };
     // ajuste que falhou devolve a mudança; vídeo novo que falhou não conta na cota (status error)
-    const fail = async (message: string) => {
-      await save({ status: 'error', error: message });
-      if (meta.rootAssetId) await this.deps.modQuota.refund(meta.rootAssetId);
+    const fail = async (message: string, refund = true) => {
+      if (!refund) meta.billingUncertain = true;
+      let saved: boolean;
+      try { saved = await jobRepo.failOwnedVideoJob(jobId, token, message, meta, refund); }
+      catch { throw new VideoFailurePersistenceError(); }
+      if (!saved) throw new VideoLeaseLost();
       if (meta.initiatedByUserId) {
         try { await this.deps.notifyVideoFailed(job.tenantId, meta.initiatedByUserId, jobId); }
         catch (notificationError) { console.error('[studio-video] falha ao criar notificação de erro', { jobId, error: (notificationError as Error).message }); }
@@ -547,29 +615,33 @@ export class StudioVideoService {
 
     await save({ status: 'running' });
 
+    let submissionStarted = false;
     try {
       if (!meta.openrouterJobId) {
         await save({ currentStage: 'submitting' });
         await this.deps.llm.assertCreditsAvailable();
+        submissionStarted = true;
         meta.openrouterJobId = await video.submit(this.submitParams(meta));
         meta.submittedAt = new Date(this.deps.now()).toISOString();
-        log('enviado ao OpenRouter', `id ${meta.openrouterJobId}`);
+        log('enviado ao OpenRouter');
         await save({ currentStage: 'generating' });
       } else {
-        log('retomando acompanhamento', `id ${meta.openrouterJobId}`);
+        log('retomando acompanhamento');
       }
 
       let lastStatus = '';
       let costUsd: number | null = null;
       let statusErrors = 0;
+      let queried = false;
       for (;;) {
-        if (this.deps.now() - startedAt > JOB_TIMEOUT_MS) {
+        if (queried && this.deps.now() - startedAt > JOB_TIMEOUT_MS) {
           log('tempo esgotado', `${Math.round(JOB_TIMEOUT_MS / 60000)} min`);
-          await fail('A geração demorou mais que o esperado. Tente novamente.');
+          await fail('Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.', false);
           return;
         }
         let state;
         try {
+          queried = true;
           state = await video.getJob(meta.openrouterJobId);
         } catch (err) {
           // falha pontual: tenta de novo; persistente: desiste (vídeo pode ter sido cobrado, id fica no log)
@@ -577,10 +649,10 @@ export class StudioVideoService {
           console.warn('[studio-video] falha ao consultar status', { jobId, attempt: statusErrors, error: (err as Error).message });
           if (statusErrors >= MAX_STATUS_ERRORS) {
             log('status indisponível', (err as Error).message);
-            await fail('Não foi possível acompanhar a geração do vídeo. Tente novamente em alguns minutos.');
+            await fail('Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.', false);
             return;
           }
-          await jobRepo.renewWorkflowJobLock(jobId);
+          await save({});
           await this.deps.sleep(POLL_INTERVAL_MS);
           continue;
         }
@@ -590,7 +662,7 @@ export class StudioVideoService {
           log(`status ${state.status}`);
           await save({ currentStage: 'generating' });
         } else {
-          await jobRepo.renewWorkflowJobLock(jobId);
+          await save({});
         }
         if (state.status === 'completed') {
           costUsd = state.costUsd;
@@ -612,7 +684,6 @@ export class StudioVideoService {
       log('vídeo pronto', `custo ${costUsd ?? '?'} USD · ${Math.round((this.deps.now() - startedAt) / 1000)}s`);
       await save({ currentStage: 'saving' });
 
-      const repo = this.deps.studioRepo(job.tenantId);
       const persist = async () => {
         const buffer = await video.download(meta.openrouterJobId!);
         const url = await this.deps.store(buffer, 'mp4', 'video/mp4');
@@ -631,7 +702,7 @@ export class StudioVideoService {
         }
       }
 
-      const asset = await repo.createAsset({
+      const asset = await jobRepo.completeOwnedVideoJob(jobId, token, {
         tenantId: job.tenantId,
         type: 'video',
         url: videoUrl,
@@ -653,11 +724,9 @@ export class StudioVideoService {
           generatedAt: new Date(this.deps.now()).toISOString(),
           videoJobId: jobId,
         }),
-      });
-      // versão nova do ajuste fica em evidência
-      if (meta.rootAssetId) await repo.setActiveAsset(meta.rootAssetId, asset.id);
+      }, meta);
+      if (!asset) throw new VideoLeaseLost();
       log('concluído', `asset ${asset.id}`);
-      await save({ status: 'done', currentStage: 'done', artifacts: { assetId: asset.id, videoUrl } });
       if (meta.initiatedByUserId) {
         try {
           await this.deps.notifyVideoReady(job.tenantId, meta.initiatedByUserId, jobId, asset.id);
@@ -670,9 +739,13 @@ export class StudioVideoService {
         }
       }
     } catch (err) {
+      if (err instanceof VideoLeaseLost) return;
+      if (err instanceof VideoFailurePersistenceError) throw err;
       log('erro', (err as Error).message);
       console.error('[studio-video] job falhou', { jobId, error: (err as Error).message });
-      await fail('Não foi possível gerar o vídeo agora. Tente novamente em alguns minutos.');
+      const notSubmitted = err instanceof AppError && err.details?.notSubmitted === true;
+      const uncertainBilling = !notSubmitted && (submissionStarted || !!meta.openrouterJobId);
+      await fail(uncertainBilling ? 'Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.' : 'Não foi possível gerar o vídeo agora. Tente novamente em alguns minutos.', !uncertainBilling);
     }
   }
 }
