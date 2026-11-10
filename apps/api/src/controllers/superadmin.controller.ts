@@ -128,6 +128,13 @@ const updatePlanSchema = z.object({
 
 const MAX_PARTNER_CLIENT_MEMBERS = 2;
 
+// chave técnica (ex.: trial) é só da ady
+function rejectPartnerTechnicalKey(req: Request) {
+  if (partnerOf(req) && req.body?.technicalKey != null) {
+    throw new AppError(403, "TECHNICAL_KEY_FORBIDDEN", "Parceiro não pode definir chave técnica do plano.");
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function toMoney(v: number) {
@@ -842,6 +849,7 @@ export class SuperAdminController {
 
   createPlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      rejectPartnerTechnicalKey(req);
       const body = createPlanSchema.parse(req.body);
       // dono vem do escopo, nunca do body
       const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
@@ -856,6 +864,7 @@ export class SuperAdminController {
   updatePlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
+      rejectPartnerTechnicalKey(req);
       const body = updatePlanSchema.parse(req.body);
       await this.planInScope(req.params.id, partnerOf(req));
 

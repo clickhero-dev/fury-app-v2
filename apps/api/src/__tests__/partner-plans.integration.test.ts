@@ -104,6 +104,30 @@ describe('Planos do parceiro — integração', () => {
     expect(res.body.data.partnerId).toBe(partnerA);
   });
 
+  it('parceiro não define chave técnica (trial é só da ady)', async () => {
+    const created = await request(app).post('/api/admin/plans').set(bearer(tokenA))
+      .send({ name: `Trial falso ${id}`, technicalKey: 'public_trial_signup', priceCents: 100 });
+    expect(created.status).toBe(403);
+    expect(created.body.error.code).toBe('TECHNICAL_KEY_FORBIDDEN');
+    const own = await plan('Plano A2', partnerA);
+    const updated = await request(app).patch(`/api/admin/plans/${own}`).set(bearer(tokenA))
+      .send({ technicalKey: 'public_trial_signup' });
+    expect(updated.status).toBe(403);
+    const [row] = await db.select().from(schema.plans).where(eq(schema.plans.id, own));
+    expect(row!.technicalKey).toBeNull();
+    const fakes = await db.select().from(schema.plans).where(eq(schema.plans.name, `Trial falso ${id}`));
+    expect(fakes).toHaveLength(0);
+    await db.delete(schema.plans).where(eq(schema.plans.id, own));
+  });
+
+  it('cadastro novo da ady cai no trial da ady', async () => {
+    const c = await register('trial-ady');
+    const sub = await subOf(c.user.tenantId);
+    expect(sub).toBeDefined();
+    const [p] = await db.select().from(schema.plans).where(eq(schema.plans.id, sub.planId));
+    expect(p!.partnerId).toBeNull();
+  });
+
   it('cada um lista só os seus planos', async () => {
     const mine = (await request(app).get('/api/admin/plans').set(bearer(tokenA))).body.data.map((p: { id: string }) => p.id);
     expect(mine).toEqual([planA]);

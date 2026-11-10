@@ -167,7 +167,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
           role: data.userRole,
         }).returning();
         await provisionTrialSubscription({
-          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: eq(plans.technicalKey, key) })) ?? null,
+          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: and(eq(plans.technicalKey, key), isNull(plans.partnerId)) })) ?? null,
           querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) })) ?? null,
           insertSubscription: async (values) => {
             const [subscription] = await tx.insert(subscriptions).values(values as typeof subscriptions.$inferInsert).returning({ id: subscriptions.id });

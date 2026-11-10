@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { getStoredPlatformRole } from "@/lib/platform-role";
 import { apiMessage } from "./PartnersPage";
 import { Button } from "@/components/ui/button";
+import { ListPagination, usePagination } from "./ListPagination";
 
 interface DeletedTenant {
   id: string;
@@ -72,6 +73,8 @@ export function TenantsPage() {
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.slug.toLowerCase().includes(search.toLowerCase()),
   );
+  const pagedActive = usePagination(filtered);
+  const pagedDeleted = usePagination(deleted);
 
   async function handleDeleteTenant() {
     if (!deleteTarget) return;
@@ -124,7 +127,7 @@ export function TenantsPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); pagedActive.setPage(1); }}
             placeholder="Buscar cliente..."
             className="w-64 bg-surface border border-border rounded-full pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary transition-colors hover:border-border-light focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
@@ -151,7 +154,7 @@ export function TenantsPage() {
           {deleted.length === 0 && (
             <div className="text-center py-12 text-text-tertiary text-sm">Nenhum cliente excluído</div>
           )}
-          {deleted.map((t) => (
+          {pagedDeleted.pageItems.map((t) => (
             <div key={t.id} className="flex items-center justify-between bg-surface border border-border rounded-2xl p-5">
               <div>
                 <div className="font-semibold text-text-primary">{t.name}</div>
@@ -170,6 +173,7 @@ export function TenantsPage() {
               </Button>
             </div>
           ))}
+          <ListPagination page={pagedDeleted.page} totalPages={pagedDeleted.totalPages} total={deleted.length} onChange={pagedDeleted.setPage} />
         </div>
       )}
 
@@ -180,7 +184,7 @@ export function TenantsPage() {
             Nenhum cliente encontrado
           </div>
         )}
-        {filtered.map((tenant) => (
+        {pagedActive.pageItems.map((tenant) => (
           <div
             key={tenant.id}
             onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
@@ -226,6 +230,7 @@ export function TenantsPage() {
             </div>
           </div>
         ))}
+        <ListPagination page={pagedActive.page} totalPages={pagedActive.totalPages} total={filtered.length} onChange={pagedActive.setPage} />
       </div>
       )}
 
