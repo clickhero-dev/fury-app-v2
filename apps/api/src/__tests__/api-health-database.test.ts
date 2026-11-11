@@ -39,6 +39,7 @@ vi.mock('../services/stateMachine/workflow.engine.js', async (importOriginal) =>
 
 describe('health check — conexão do banco', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     vi.resetModules();
     executeMock.mockReset();
     workflowRunMock.mockReset();
@@ -94,6 +95,29 @@ describe('health check — conexão do banco', () => {
     await expect(apiStartupWorkflow.stages[0].execute({}, {})).resolves.toEqual(expect.objectContaining({ ok: true }));
 
     expect(apiState.getApiState().checks.db).not.toHaveProperty('category');
+  });
+
+  it('Cenário: eventos distinguem homologação e produção mesmo com NODE_ENV production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_ENV', 'homologation');
+    executeMock.mockRejectedValueOnce(Object.assign(new Error('secret'), { code: 'ECONNREFUSED' })).mockResolvedValueOnce([]);
+    const { apiStartupWorkflow } = await import('../workflows/api-startup.workflow.js');
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).rejects.toThrow();
+    await apiStartupWorkflow.stages[0].execute({}, {});
+    expect(captureMock).toHaveBeenCalledWith('db_health_probe_failed', expect.objectContaining({ service: 'api', environment: 'homologation' }));
+    expect(captureMock).toHaveBeenCalledWith('db_health_probe_recovered', expect.objectContaining({ service: 'api', environment: 'homologation' }));
+    vi.unstubAllEnvs();
+  });
+
+  it('Cenário: ambiente inválido não é enviado nem inferido como produção', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_ENV', 'postgres://user:secret@host');
+    executeMock.mockRejectedValueOnce(Object.assign(new Error('secret'), { code: 'ECONNREFUSED' }));
+    const { apiStartupWorkflow } = await import('../workflows/api-startup.workflow.js');
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).rejects.toThrow();
+    expect(captureMock).toHaveBeenCalledWith('db_health_probe_failed', expect.objectContaining({ environment: 'unknown' }));
+    expect(JSON.stringify(captureMock.mock.calls)).not.toContain('secret');
+    vi.unstubAllEnvs();
   });
 
   it('telemetria indisponível não altera o resultado da recuperação', async () => {

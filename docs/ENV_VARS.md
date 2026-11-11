@@ -11,7 +11,8 @@ O projeto tem variáveis de ambiente em 3 lugares diferentes. Cada um tem seu pr
 | Variável | Exemplo | Descrição |
 |----------|---------|-----------|
 | `PORT` | `3000` | Porta da API |
-| `NODE_ENV` | `development` | Ambiente (`development` ou `production`) |
+| `NODE_ENV` | `development` | Modo de execução Node (`development` ou `production`) |
+| `APP_ENV` | `development` | Ambiente para telemetria: `development`, `test`, `homologation` ou `production`. Configure separadamente em cada serviço; ausente ou inválido resulta em `unknown`. |
 
 ### Banco de Dados (Neon)
 

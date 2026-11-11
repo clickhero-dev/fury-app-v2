@@ -14,9 +14,10 @@ export interface ApiStartupContext {
 let dbAttempt = 0;
 let dbHadFailure = false;
 
-function runtimeEnvironment(): 'production' | 'development' | 'test' | 'unknown' {
-  const value = process.env.NODE_ENV;
-  return value === 'production' || value === 'development' || value === 'test' ? value : 'unknown';
+function runtimeEnvironment(): 'production' | 'homologation' | 'development' | 'test' | 'unknown' {
+  const value = process.env.APP_ENV;
+  return value === 'production' || value === 'homologation' || value === 'development' || value === 'test'
+    ? value : 'unknown';
 }
 
 function captureProbeEvent(event: string, properties: Record<string, unknown>): void {
