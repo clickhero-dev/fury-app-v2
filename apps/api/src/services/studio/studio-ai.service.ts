@@ -366,7 +366,7 @@ export class StudioAiService {
           aspectRatio: payload.aspect_ratio,
           referenceImageUrls: referenceImageUrls ?? [],
           ...(referencePhotoIds ? { referencePhotoIds, referencePhotoKinds } : {}),
-          ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected } } : {}),
+          ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected, status: review.status } } : {}),
         }),
       });
       return {
@@ -395,12 +395,13 @@ export class StudioAiService {
     headline: string | undefined,
     dataUrl: string,
     aspectRatio: string,
-  ): Promise<{ dataUrl: string; costUsd: number | null; checked: boolean; corrected: boolean; headline?: string }> {
+  ): Promise<{ dataUrl: string; costUsd: number | null; checked: boolean; corrected: boolean; headline?: string; status?: 'verified' | 'failed' }> {
     if (!headline) return { dataUrl, costUsd: null, checked: false, corrected: false };
     const costs: (number | null)[] = [];
     const total = () => (costs.every((c) => c === null) ? null : costs.reduce<number>((a, c) => a + (c ?? 0), 0));
     let current = dataUrl;
     let corrected = false;
+    let status: 'verified' | 'failed' = 'failed';
     try {
       const written = await this.llm.generateImageFromImages({
         model: TEMPLATE_IMAGE_MODEL,
@@ -429,12 +430,23 @@ export class StudioAiService {
         costs.push(fix.costUsd);
         current = fix.dataUrl;
         corrected = true;
+        const recheck = await this.llm.chatWithImages({
+          model: TEMPLATE_ANALYSIS_MODEL,
+          text: buildTemplateVerificationPrompt(),
+          imageUrls: [current],
+          temperature: 0,
+          jsonMode: true,
+        });
+        costs.push(recheck.costUsd);
+        status = headlineIssues(headline, parseTranscript(recheck.content).texts) ? 'failed' : 'verified';
+      } else {
+        status = 'verified';
       }
     } catch (err) {
       // texto é melhoria: se falhar, fica a melhor imagem que já temos
       console.warn('[quick-create] frase da arte falhou:', (err as Error).message);
     }
-    return { dataUrl: current, costUsd: total(), checked: true, corrected, headline };
+    return { dataUrl: current, costUsd: total(), checked: true, corrected, headline, status };
   }
 
   /** Modelo de anúncio: analisa (visão) → plano validado → prompt montado em código → Gemini. */

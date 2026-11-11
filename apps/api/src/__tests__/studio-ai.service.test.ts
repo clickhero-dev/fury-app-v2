@@ -437,6 +437,38 @@ describe('StudioAiService — fotos sem modelo (aprimoramento + frase)', () => {
     expect(out.enhancedPrompt).toContain('Texto na imagem (único texto, escrito exatamente assim): "Terapia de Dianética"');
   });
 
+  it('Dado contexto sem fato útil, quando aprimora com foto, então proíbe texto', async () => {
+    reset();
+    (llm.chat as any).mockResolvedValueOnce(JSON.stringify({ scene: 'Retrato profissional.', headline: null }));
+    const out = await svc.enhancePrompt('t-1', { prompt: 'Faça uma imagem bonita', type: 'image', photo_kinds: ['equipe'] });
+    expect(out.enhancedPrompt).toBe('Retrato profissional.\nNão escreva nenhum texto na imagem.');
+  });
+
+  it('Dada falha ao escrever a frase, quando gera, então registra falha verificável', async () => {
+    reset();
+    (llm.generateImageFromImages as any).mockRejectedValueOnce(new Error('falha'));
+    await svc.generateImage('t-1', { model: 'x', prompt: MARKED, aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID] });
+    const notes = JSON.parse((repo.createAsset as any).mock.calls.at(-1)[0].complianceNotes);
+    expect(notes.textReview).toMatchObject({ status: 'failed', corrected: false });
+  });
+
+  it('Dada correção bem-sucedida, quando revisa novamente, então registra confirmação', async () => {
+    reset();
+    (llm.chatWithImages as any).mockResolvedValueOnce({ content: JSON.stringify({ texts: [] }), costUsd: 0.005 });
+    await svc.generateImage('t-1', { model: 'x', prompt: MARKED, aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID] });
+    const notes = JSON.parse((repo.createAsset as any).mock.calls.at(-1)[0].complianceNotes);
+    expect(notes.textReview).toMatchObject({ status: 'verified', corrected: true });
+  });
+
+  it('Dada frase repetida após correção, quando revisa novamente, então registra falha sem nova correção', async () => {
+    reset(['Venha experimentar nossos hambúrgueres artesanais', 'Venha experimentar nossos hambúrgueres artesanais']);
+    await svc.generateImage('t-1', { model: 'x', prompt: MARKED, aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID] });
+    const notes = JSON.parse((repo.createAsset as any).mock.calls.at(-1)[0].complianceNotes);
+    expect(llm.chatWithImages).toHaveBeenCalledTimes(2);
+    expect(llm.generateImageFromImages).toHaveBeenCalledTimes(2);
+    expect(notes.textReview).toMatchObject({ status: 'failed', corrected: true });
+  });
+
   it('geração com fotos: diz o que é cada referência, FLUX sem texto e o Gemini escreve a frase uma vez', async () => {
     reset();
     const out = await svc.generateImage('t-1', { model: 'x', prompt: MARKED, aspect_ratio: '1:1', resolution: '2K', photo_ids: [EQUIPE_ID, PRODUTO_ID] });
