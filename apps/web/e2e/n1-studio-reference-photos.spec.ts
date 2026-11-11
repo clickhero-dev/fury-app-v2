@@ -42,8 +42,8 @@ test('envia fotos da biblioteca com os tipos corretos para a Criação Rápida',
   await page.getByRole('button', { name: 'Minhas fotos' }).click();
   const picker = page.getByRole('dialog', { name: 'Fotos para colocar na arte' });
   await expect(picker).toBeVisible();
-  await page.getByRole('button', { name: 'Usar imagem: Equipe' }).click();
-  await page.getByRole('button', { name: 'Usar imagem: Produto' }).click();
+  await picker.getByRole('button', { name: 'Usar imagem: Equipe' }).click();
+  await picker.getByRole('button', { name: 'Usar imagem: Produto' }).click();
   await picker.getByRole('button', { name: 'Usar fotos' }).click();
 
   await page.getByLabel('Descreva o anúncio').fill('Retrato profissional para divulgar atendimento de terapia.');
