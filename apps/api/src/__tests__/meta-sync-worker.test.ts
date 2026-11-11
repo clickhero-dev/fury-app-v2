@@ -218,6 +218,18 @@ import {
   META_SYNC_QUEUE_NAME,
 } from '../workers/meta-sync.worker.js';
 
+describe('BDD: conexão do worker Meta', () => {
+  it('aguarda o adapter e não cria worker se a conexão falhar', async () => {
+    const { getRedisConnection } = await import('../lib/queue.js');
+    workerInstances.length = 0;
+    vi.mocked(getRedisConnection).mockRejectedValueOnce(new Error('REDIS_CONNECTION_TIMEOUT'));
+    await expect(startMetaSyncWorker()).rejects.toThrow('REDIS_CONNECTION_TIMEOUT');
+    expect(workerInstances).toHaveLength(0);
+    await startMetaSyncWorker();
+    expect(workerInstances).toHaveLength(1);
+  });
+});
+
 describe('BDD: MetaSyncManager (agendamento)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
