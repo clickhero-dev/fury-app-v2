@@ -11,6 +11,7 @@ import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
 import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail, StudioVariationBatchResponse } from '@/types/studio';
 import { VersionCarousel } from './VersionCarousel';
 import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
+import { CreativeRatingPrompt } from './CreativeRatingPrompt';
 
 interface Props {
   result: GenerateCreativeResponse;
@@ -55,6 +56,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [ratingVisible, setRatingVisible] = useState(false);
+  const ratingDismissedAssetRef = useRef<string | null>(null);
 
   // ponytail: máscara canvas — pintura contínua (mousedown + drag)
   const [hasMask, setHasMask] = useState(false);
@@ -68,6 +71,24 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const isVideo = currentResult.type === 'video';
   const [videoMeta, setVideoMeta] = useState(currentResult.videoMeta ?? null);
   const adjustVideo = useAdjustStudioVideo();
+  const currentAssetIdRef = useRef(currentResult.assetId);
+  currentAssetIdRef.current = currentResult.assetId;
+
+  const ratingMutation = useMutation({
+    mutationFn: async ({ assetId, rating }: { assetId: string; rating: number }) => (await api.put(`/studio/assets/${assetId}/rating`, { rating })).data,
+    onSuccess: (_data, { assetId }) => {
+      if (currentAssetIdRef.current !== assetId) return;
+      ratingDismissedAssetRef.current = assetId;
+      setRatingVisible(false);
+    },
+  });
+
+  useEffect(() => {
+    setRatingVisible(false);
+    if (!showVariationSuggestion || ratingDismissedAssetRef.current === currentResult.assetId) return;
+    const timer = window.setTimeout(() => setRatingVisible(true), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [currentResult.assetId, showVariationSuggestion]);
 
   // Histórico do grupo (versões/evidência/arquivado) — carregado à parte do
   // resultado da criação/modificação em si, porque cada versão tem seu
@@ -270,6 +291,14 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
 
   return (
     <div className="space-y-6">
+      {ratingVisible && (
+        <CreativeRatingPrompt
+          onSubmit={(rating) => ratingMutation.mutate({ assetId: currentResult.assetId, rating })}
+          onClose={() => { ratingDismissedAssetRef.current = currentResult.assetId; setRatingVisible(false); }}
+          isSubmitting={ratingMutation.isPending}
+          error={ratingMutation.isError ? 'Não foi possível enviar sua avaliação. Tente novamente.' : undefined}
+        />
+      )}
       {/* Selo de compliance desativado
       {(() => {
         // ponytail: o selo segue a versão selecionada no carrossel

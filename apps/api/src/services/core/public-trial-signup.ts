@@ -2,8 +2,11 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 
 export const PUBLIC_TRIAL_PLAN_KEY = 'public_trial_signup' as const;
-export const PUBLIC_TRIAL_IMAGE_LIMIT = 7;
-export const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
+/** Limites imutáveis do trial adquirido pelo formulário público. */
+export const PUBLIC_TRIAL_IMAGE_LIMIT = 5;
+/** Links são opacos, válidos por uma hora e limitados a três usos. */
+export const MAGIC_LINK_MAX_USES = 3;
+export const MAGIC_LINK_TTL_MS = 60 * 60 * 1000;
 
 const signupSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -28,6 +31,11 @@ export function createMagicLinkToken(): { raw: string; hash: string; expiresAt: 
 
 export function hashMagicLinkToken(raw: string): string {
   return crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
+}
+
+/** Senha provisória nunca é persistida em claro nem retornada pela API. */
+export function createTemporaryPassword(): string {
+  return crypto.randomBytes(18).toString('base64url');
 }
 
 export function verifyWebhookSignature(body: string, header: string | undefined, secret: string): boolean {

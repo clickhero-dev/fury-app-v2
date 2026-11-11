@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Reducer } from 'redux';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -76,6 +76,7 @@ function renderShell(policy: AuthState['policy'], role = 'owner') {
           <Routes>
             {/* /politica fora do shell, como no router real */}
             <Route path="/politica" element={<div data-testid="politica-page" />} />
+            <Route path="/onboarding/*" element={<div data-testid="onboarding-page" />} />
             <Route path="*" element={<AuthenticatedShell />} />
           </Routes>
         </MemoryRouter>
@@ -103,6 +104,19 @@ describe('AuthenticatedShell — gate de política de uso', () => {
   function policyCalls() {
     return apiGet.mock.calls.filter((c) => c[0] === '/policy/current');
   }
+
+  it.each([
+    ['sem conexão Meta', []],
+    ['sem conta de anúncios selecionada', [{ id: 'c1', selectedAdAccountId: null }]],
+  ])('permite acessar o aplicativo %s', async (_scenario, connections) => {
+    apiGet.mockResolvedValue({ data: { data: connections } });
+    renderShell({ currentVersion: '1.0', accepted: true });
+
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/meta/connections'));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(screen.getByTestId('sidebar-root')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-page')).toBeNull();
+  });
 
   it('usuário pendente (accepted=false) é redirecionado para /politica', async () => {
     renderShell({ currentVersion: '1.0', accepted: false });

@@ -66,7 +66,7 @@ export interface CampaignListItem {
   ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
 }
 
-export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
+export type WizardObjective = 'visits' | 'followers' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
 export function resolveMessagingDestinationType(destinations: WizardMessagingDestination[]): string | undefined {
@@ -189,6 +189,7 @@ const WIZARD_OBJECTIVE_MAP: Record<WizardObjective, {
   destinationType?: string; label: string;
 }> = {
   visits: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Visitas' },
+  followers: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'VISIT_INSTAGRAM_PROFILE', cta: 'LEARN_MORE', destinationType: 'INSTAGRAM_PROFILE', label: 'Aumentar Seguidores do Instagram' },
   whatsapp_conv: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Conversas WhatsApp' },
   engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
   messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
@@ -720,16 +721,25 @@ export class CampaignsService {
     // Check if already deleted on Meta before calling update.
     // If this fails (e.g. already removed by Meta), fall through to local archive.
     let campaignMeta: Record<string, unknown> | undefined;
+    let metaCampaignUnavailable = false;
     try {
       campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
     } catch (err) {
-      const code = (err as AppError)?.code;
-      if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
-        throw err;
+      // Normaliza a resposta bruta da Graph API antes de decidir se o
+      // arquivamento local pode continuar. Sem isso, code 100/803 escapava
+      // como erro não tratado quando a campanha já havia sido removida.
+      try {
+        this.handleMetaError(err);
+      } catch (mappedErr) {
+        const code = (mappedErr as AppError)?.code;
+        if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
+          throw mappedErr;
+        }
+        metaCampaignUnavailable = true;
       }
     }
     const metaStatus = campaignMeta?.status as string | undefined;
-    if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
+    if (!metaCampaignUnavailable && metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
       try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
       catch (err) { this.handleMetaError(err); }
     }
@@ -972,6 +982,14 @@ export class CampaignsService {
     const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
     const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
 
+    if (args.objective === 'followers' && (!args.instagramUserId || !args.instagramUsername)) {
+      throw new AppError(
+        400,
+        'FOLLOWERS_INSTAGRAM_REQUIRED',
+        'Conecte uma conta do Instagram para criar uma campanha de aumento de seguidores.'
+      );
+    }
+
     let messagingDestinations: WizardMessagingDestination[] = [];
     if (args.objective === 'whatsapp') {
       if (!args.whatsappPageId) throw new AppError(400, 'WHATSAPP_PAGE_REQUIRED', 'Selecione a Página do Facebook para receber as mensagens.');
@@ -1094,7 +1112,7 @@ export class CampaignsService {
       promotedObject = { page_id: args.whatsappPageId };
       if (messagingDestinations.includes('whatsapp')) promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
       messagingDestinationType = resolveMessagingDestinationType(messagingDestinations);
-    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
+    } else if (args.objective === 'visits' || args.objective === 'followers' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
       promotedObject = { page_id: pageId };
     }
 
@@ -1293,6 +1311,8 @@ export class CampaignsService {
       const creativeLinkFor = (c: WizardCreativeInput): string | undefined =>
         args.objective === 'visits'
           ? c.destinationUrl
+          : args.objective === 'followers'
+            ? `https://instagram.com/${args.instagramUsername ?? ''}`
           : args.objective === 'whatsapp_conv'
             ? `${LP_BASE_URL}/l/${lpSlug}`
             : `https://www.facebook.com/${pageId}`;

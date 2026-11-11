@@ -11,6 +11,7 @@ interface InstagramPostInsights {
   saved: number;
   shares: number;
   replies: number;
+  follows?: number;
 }
 
 interface InstagramPost {
@@ -41,6 +42,7 @@ interface InstagramPostsTabProps {
   onToggle: (post: { id: string; mediaUrl?: string; caption?: string }) => void;
   objective: WizardObjective | null;
   instagramUserId?: string;
+  onRejectRecommendation?: () => void;
 }
 
 function formatMetrics(objective: WizardObjective | null, post: InstagramPost): string {
@@ -49,6 +51,9 @@ function formatMetrics(objective: WizardObjective | null, post: InstagramPost): 
   }
   if (objective === 'messages' || objective === 'whatsapp') {
     return `💬 ${post.insights.replies} conversas · ❤️ ${post.like_count} curtidas`;
+  }
+  if (objective === 'followers') {
+    return `👥 ${post.insights.follows ?? 0} seguidores novos · 🔖 ${post.insights.saved} salvamentos`;
   }
   return `🔖 ${post.insights.saved} salvamentos · 💬 ${post.comments_count} comentários`;
 }
@@ -96,7 +101,7 @@ function ProxiedImage({ url, alt, className }: { url: string; alt: string; class
   return <img src={objectUrl} alt={alt} className={className} />;
 }
 
-export function InstagramPostsTab({ selected, onToggle, objective, instagramUserId }: InstagramPostsTabProps) {
+export function InstagramPostsTab({ selected, onToggle, objective, instagramUserId, onRejectRecommendation }: InstagramPostsTabProps) {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
     queryKey: ['instagram/posts-ranked', objective, instagramUserId],
     queryFn: async () => {
@@ -176,6 +181,8 @@ export function InstagramPostsTab({ selected, onToggle, objective, instagramUser
   }
 
   const posts = data?.data ?? [];
+  const isFollowersFlow = objective === 'followers';
+  const recommendedPost = posts.find((post) => post.recommended) ?? posts[0];
   const selectedPostIds = new Set(
     selected.filter((c) => c.instagramMediaId).map((c) => c.instagramMediaId as string)
   );
@@ -185,6 +192,32 @@ export function InstagramPostsTab({ selected, onToggle, objective, instagramUser
       <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary">
         <ImagePlus className="w-8 h-8 mb-2 text-text-tertiary" />
         <p className="text-sm">Nenhum post encontrado no Instagram.</p>
+      </div>
+    );
+  }
+
+  if (isFollowersFlow && recommendedPost) {
+    const isSelected = selectedPostIds.has(recommendedPost.id);
+    const recommendationReason = recommendedPost.recommendationReason?.trim() || 'Melhor combinação de seguidores novos, salvamentos, envios, comentários e curtidas.';
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border-2 border-brand bg-brand/5 p-3">
+          <p className="text-sm font-bold text-text-primary">Recomendação do ady</p>
+          <p className="text-xs text-text-secondary mt-1">Analisamos seus posts e Reels pelos resultados orgânicos. Este é o conteúdo com maior potencial para atrair seguidores.</p>
+        </div>
+        <div className="rounded-xl overflow-hidden border border-brand/40 bg-surface">
+          {recommendedPost.media_url ? <ProxiedImage url={recommendedPost.media_url} alt={recommendedPost.caption?.slice(0, 50) || 'Post recomendado'} className="w-full h-56 object-cover" /> : <div className="w-full h-56 flex items-center justify-center text-text-tertiary"><ImagePlus className="w-8 h-8" /></div>}
+          <div className="p-3">
+            {recommendedPost.caption && <p className="text-sm text-text-secondary line-clamp-3">{recommendedPost.caption}</p>}
+            <p className="mt-2 text-xs font-medium text-brand">{recommendationReason}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="primary" className="flex-1" onClick={() => onToggle({ id: recommendedPost.id, mediaUrl: recommendedPost.media_url ?? undefined, caption: recommendedPost.caption })}>
+            {isSelected ? 'Recomendação aceita' : 'Usar esta recomendação'}
+          </Button>
+          <Button variant="outline" onClick={onRejectRecommendation}>Escolher outro</Button>
+        </div>
       </div>
     );
   }

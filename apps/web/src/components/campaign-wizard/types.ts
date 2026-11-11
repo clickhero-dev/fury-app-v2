@@ -1,4 +1,4 @@
-export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp' | 'whatsapp_conv' | 'leads';
+export type WizardObjective = 'visits' | 'followers' | 'engagement' | 'messages' | 'whatsapp' | 'whatsapp_conv' | 'leads';
 
 export type WizardGender = 'all' | 'male' | 'female';
 

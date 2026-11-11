@@ -58,3 +58,64 @@ test('mostra progresso estimado e conclui antes de exibir o resultado', async ({
   await expect(page.getByRole('heading', { name: 'Variações geradas' })).toBeVisible();
   await expect(page.getByAltText('Variação 1 do criativo')).toBeVisible();
 });
+
+/*
+ * Funcionalidade: avaliação de criativo após a geração.
+ * Cenário: nota persistida; Dado que a imagem acabou de ser gerada;
+ * Quando espero o convite e escolho uma nota; Então a nota é enviada para o asset gerado.
+ * Cenário: falha recuperável; Dado que o primeiro envio falha;
+ * Quando tento enviar novamente; Então o convite permanece acessível e o novo envio é aceito.
+ */
+test('solicita e envia avaliação do criativo gerado, permitindo nova tentativa após falha', async ({ page }) => {
+  const ratingRequests: Array<{ url: string; rating: number }> = [];
+  let shouldFail = true;
+
+  await page.addInitScript(() => localStorage.setItem('token', 'e2e-local-token'));
+  await page.route('**/auth/me', async (route) => {
+    await route.fulfill({ json: { id: 'e2e-user', email: 'e2e@example.test', tenantId: 'e2e-tenant' } });
+  });
+  await page.route('**/studio/ai/models', async (route) => {
+    await route.fulfill({ json: { image: [{ id: 'flux-test', name: 'Modelo de teste', provider: 'test' }], video: [] } });
+  });
+  await page.route('**/studio/assets', async (route) => {
+    await route.fulfill({ json: { assets: [], creativesRemaining: 10, creativesLimit: 20 } });
+  });
+  await page.route('**/studio/ai/enhance-prompt', async (route) => {
+    await route.fulfill({ json: { enhancedPrompt: 'Imagem de teste para avaliação.' } });
+  });
+  await page.route('**/studio/ai/generate-image', async (route) => {
+    await route.fulfill({ json: { creativeAssetId: 'e2e-asset-rating', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP', modificationsRemaining: 9 } });
+  });
+  await page.route('**/studio/assets/e2e-asset-rating/set-active', async (route) => {
+    await route.fulfill({ json: { groupId: 'e2e-asset-rating', activeVersionId: 'e2e-asset-rating', archivedAt: null, versions: [] } });
+  });
+  await page.route('**/studio/assets/e2e-asset-rating/rating', async (route) => {
+    ratingRequests.push({ url: route.request().url(), rating: route.request().postDataJSON().rating });
+    if (shouldFail) {
+      shouldFail = false;
+      await route.fulfill({ status: 500, json: { error: 'Falha temporária' } });
+      return;
+    }
+    await route.fulfill({ json: { creativeAssetId: 'e2e-asset-rating', rating: 4, createdAt: '2026-11-07T00:00:00.000Z', updatedAt: '2026-11-07T00:00:00.000Z' } });
+  });
+
+  await page.goto('/estudio?criar=rapida');
+  await page.getByLabel('Descreva o anúncio').fill('Imagem de teste com produto em destaque e fundo claro.');
+  await page.getByRole('button', { name: 'Gerar imagem' }).click();
+  await expect(page.getByRole('heading', { name: 'Seu anúncio' })).toBeVisible();
+
+  const prompt = page.getByLabel('Avaliação do criativo');
+  await expect(prompt).toBeVisible({ timeout: 7_000 });
+  const fourStars = prompt.getByRole('radio', { name: '4 estrelas' });
+  await fourStars.locator('..').click();
+  await expect(fourStars).toBeChecked();
+  await prompt.getByRole('button', { name: 'Enviar avaliação' }).click();
+  await expect(prompt.getByRole('alert')).toHaveText('Não foi possível enviar sua avaliação. Tente novamente.');
+
+  await prompt.getByRole('button', { name: 'Enviar avaliação' }).click();
+  await expect(prompt).toBeHidden();
+  expect(ratingRequests.map(({ url, rating }) => ({ path: new URL(url).pathname, rating }))).toEqual([
+    { path: '/api/studio/assets/e2e-asset-rating/rating', rating: 4 },
+    { path: '/api/studio/assets/e2e-asset-rating/rating', rating: 4 },
+  ]);
+});

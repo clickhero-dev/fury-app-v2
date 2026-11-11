@@ -1,6 +1,7 @@
 import { AppError } from '../../middleware/errorHandler.js';
+import { PUBLIC_TRIAL_IMAGE_LIMIT, PUBLIC_TRIAL_PLAN_KEY } from '../core/public-trial-signup.js';
 
-export const TRIAL_PLAN_KEY = 'trial_new_signup' as const;
+export const TRIAL_PLAN_KEY = PUBLIC_TRIAL_PLAN_KEY;
 const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isTrialExpired(now: Date, trialEndsAt: Date | null | undefined): boolean {
@@ -21,7 +22,7 @@ export function validateTrialPlan(input: {
     input.technicalKey !== TRIAL_PLAN_KEY ||
     input.priceCents !== 0 ||
     !input.isActive ||
-    input.creativesPerMonth !== 5
+    input.creativesPerMonth !== PUBLIC_TRIAL_IMAGE_LIMIT
   ) {
     return { ok: false, reason: 'INVALID_TRIAL_PLAN' };
   }
@@ -78,7 +79,7 @@ export async function provisionTrialSubscription(
     status: 'trial',
     trialEndsAt,
     currentPeriodEnd,
-    creativesRemaining: 5,
+    creativesRemaining: PUBLIC_TRIAL_IMAGE_LIMIT,
     asaasSubscriptionId: null,
     asaasCustomerId: null,
   });

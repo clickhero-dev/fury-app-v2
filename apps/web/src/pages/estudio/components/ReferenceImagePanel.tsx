@@ -102,7 +102,7 @@ interface Props {
  * modelo define o modelo da criação; num produto/equipe, coloca/tira da arte.
  */
 export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, onToggleArtPhoto, onUploadClick, uploading, hideTemplates }: Props) {
-  const { data: library = [], isLoading } = useStudioLibrary();
+  const { data: library = [], isLoading, isError, refetch } = useStudioLibrary();
   const photos = library.filter((p) => !p.hidden_from_reference_panel && (!hideTemplates || p.kind !== 'modelo'));
   const [filter, setFilter] = useState<Filter>('todas');
   const [toHide, setToHide] = useState<LibraryPhoto | null>(null);
@@ -152,6 +152,11 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
         {isLoading ? (
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+          </div>
+        ) : isError ? (
+          <div className="space-y-2 py-6 text-center text-xs text-error">
+            <p role="alert">Não foi possível carregar suas imagens.</p>
+            <button type="button" className="underline" onClick={() => void refetch()}>Tentar novamente</button>
           </div>
         ) : visible.length === 0 ? (
           <p className="py-6 text-center text-xs text-text-tertiary">

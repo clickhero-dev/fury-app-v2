@@ -519,4 +519,53 @@ describe('CampaignsController', () => {
       expect(mockChat).not.toHaveBeenCalled();
     });
   });
+
+  describe('suggestText com imagem', () => {
+    function makeImageController() {
+      const repo = {
+        findBrandKit: vi.fn().mockResolvedValue(null),
+        findTenant: vi.fn().mockResolvedValue({ businessContext: 'Padaria' }),
+      };
+      return new CampaignsController({} as CampaignsService, (() => repo) as any);
+    }
+
+    it('usa um modelo de visão dedicado para gerar copy contextualizada', async () => {
+      mockChat.mockResolvedValueOnce('{"headline":"Pão artesanal","primaryText":"Experimente o sabor feito hoje na nossa padaria."}');
+      const ctrl = makeImageController();
+      const res = makeRes();
+
+      await ctrl.suggestText(
+        makeReq({ body: { imageUrl: 'https://cdninstagram.com/creative.jpg' } }),
+        res,
+        next,
+      );
+
+      expect(mockChat).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        data: { headline: 'Pão artesanal', primaryText: 'Experimente o sabor feito hoje na nossa padaria.' },
+      }));
+    });
+
+    it('retorna erro quando os modelos não conseguem analisar a imagem em vez de usar copy genérica', async () => {
+      mockChat.mockRejectedValue(new Error('provider unavailable'));
+      const ctrl = makeImageController();
+
+      await ctrl.suggestText(
+        makeReq({ body: { imageUrl: 'https://cdninstagram.com/creative.jpg' } }),
+        makeRes(),
+        next,
+      );
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'AD_COPY_SUGGESTION_UNAVAILABLE',
+        statusCode: 503,
+      }));
+      expect(next).not.toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('Promoção imperdível'),
+      }));
+    });
+  });
 });
