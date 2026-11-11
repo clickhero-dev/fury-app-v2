@@ -25,7 +25,7 @@ Cenário: renovação de cota falha
   Quando o superadmin solicita a renovação
   Então a tela informa o erro e mantém a ação disponível
 */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -107,21 +107,25 @@ describe('TenantDetailPage — créditos de imagem', () => {
     partnerWithUsers([person('t', 'owner')]);
     const user = userEvent.setup();
     const { unmount } = renderPage();
-    expect(await screen.findByText('Criar Usuário')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    expect(screen.getByRole('dialog', { name: 'Criar Usuário' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Usuário' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
     await user.click(screen.getByTitle('Editar usuário'));
     expect(screen.queryByRole('option', { name: 'Usuário Titular' })).not.toBeInTheDocument();
     unmount();
 
     localStorage.setItem('user', JSON.stringify({ platformRole: 'super_admin' }));
     renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
     expect(await screen.findByRole('option', { name: 'Usuário Titular' })).toBeInTheDocument();
   });
 
-  it('com 2 membros o parceiro vê o aviso de limite no lugar do formulário', async () => {
+  it('com 2 membros o parceiro vê o aviso de limite e não consegue abrir a criação', async () => {
     partnerWithUsers([person('t', 'owner'), person('a', 'member'), person('b', 'member')]);
     renderPage();
     expect(await screen.findByText(/Limite de 2 usuários/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Criar Usuário' })).toBeDisabled();
     expect(screen.queryByPlaceholderText('Senha')).not.toBeInTheDocument();
   });
 
@@ -203,5 +207,141 @@ describe('TenantDetailPage — créditos de imagem', () => {
 
     expect(await screen.findByText('Não foi possível renovar a cota. Tente novamente.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
+  });
+
+  it('mostra a barra de créditos com o saldo do plano', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Assinatura' }));
+    const bar = await screen.findByRole('progressbar', { name: 'Créditos disponíveis' });
+    expect(bar).toHaveAttribute('aria-valuenow', '2');
+    expect(bar).toHaveAttribute('aria-valuemax', '10');
+  });
+});
+
+describe('TenantDetailPage — cards de seção', () => {
+  it('abre em Usuários e troca o conteúdo ao escolher outro card', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const usersCard = await screen.findByRole('button', { name: 'Usuários' });
+    expect(usersCard).toHaveAttribute('aria-pressed', 'true');
+    expect(usersCard).toHaveAccessibleDescription(/0 usuários/);
+
+    await user.click(screen.getByRole('button', { name: 'Motor ADY' }));
+    expect(screen.getByRole('button', { name: 'Motor ADY' })).toHaveAttribute('aria-pressed', 'true');
+    expect(usersCard).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByLabelText('Meta de ROAS (x)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Utilização de Budget (%)')).toBeInTheDocument();
+  });
+
+  it('card de Assinatura resume plano e status', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Assinatura' })).toHaveAccessibleDescription('Pro Status: active');
+  });
+
+  it('salvar Metas mantém o mesmo payload da API', async () => {
+    const { default: api } = await import('@/lib/api');
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Metas' }));
+    await user.selectOptions(screen.getByLabelText('Objetivo da campanha'), 'gerar_leads');
+    await user.type(screen.getByLabelText('Nicho do negócio'), 'pet');
+    await user.type(screen.getByLabelText('Orçamento mensal (R$)'), '500');
+    await user.type(screen.getByLabelText('CPA alvo (R$)'), '20');
+    await user.click(screen.getByRole('button', { name: /Salvar Metas/ }));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/admin/tenants/tenant-1/goals', {
+      objective: 'gerar_leads', niche: 'pet', mainProduct: '', monthlyBudget: 500, targetCpa: 20,
+    }));
+  });
+});
+
+describe('TenantDetailPage — criar usuário e paginação', () => {
+  function withUsers(users: object[]) {
+    const base = tenantResponse();
+    mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans')
+      ? { data: { data: [] } }
+      : { data: { data: { ...base.data.data, users } } }));
+  }
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `u${i + 1}`, name: `Pessoa ${i + 1}`, email: `p${i + 1}@x.com`, role: 'member', createdAt: '2026-01-01' }));
+
+  it('cria no modal com o mesmo payload, fecha e confirma', async () => {
+    mockPost.mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    await user.type(screen.getByLabelText('Nome'), 'Ana');
+    await user.type(screen.getByLabelText('Email'), 'ana@x.com');
+    await user.type(screen.getByLabelText('Senha'), 'segredo123');
+    await user.click(screen.getByRole('button', { name: /^Criar$/ }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/users', {
+      name: 'Ana', email: 'ana@x.com', password: 'segredo123', role: 'member', tenantId: 'tenant-1',
+    }));
+    expect(await screen.findByText('Usuário criado')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('erro ao criar fica dentro do modal, que continua aberto', async () => {
+    mockPost.mockRejectedValue(new Error('falha'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    await user.type(screen.getByLabelText('Nome'), 'Ana');
+    await user.click(screen.getByRole('button', { name: /^Criar$/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Criar Usuário' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Erro ao criar usuário');
+  });
+
+  it('fechar o modal descarta a senha digitada', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    await user.type(screen.getByLabelText('Senha'), 'segredo123');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Criar Usuário' }));
+    expect(screen.getByLabelText('Senha')).toHaveValue('');
+  });
+
+  it('com até 9 usuários não mostra paginação', async () => {
+    withUsers(many(9));
+    renderPage();
+    expect(await screen.findAllByTitle('Editar usuário')).toHaveLength(9);
+    expect(screen.queryByRole('navigation', { name: 'Paginação de usuários' })).not.toBeInTheDocument();
+  });
+
+  it('acima de 9 usuários pagina de 9 em 9', async () => {
+    withUsers(many(11));
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findAllByTitle('Editar usuário')).toHaveLength(9);
+    expect(screen.getByText('Mostrando 1–9 de 11')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(screen.getAllByTitle('Editar usuário')).toHaveLength(2);
+    expect(screen.getByText('Pessoa 10')).toBeInTheDocument();
+    expect(screen.getByText('Mostrando 10–11 de 11')).toBeInTheDocument();
+  });
+
+  it('depois de criar vai para a última página', async () => {
+    let users = many(9);
+    const base = tenantResponse();
+    mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans')
+      ? { data: { data: [] } }
+      : { data: { data: { ...base.data.data, users } } }));
+    mockPost.mockImplementation(async () => {
+      users = [...users, { id: 'novo', name: 'Nova Pessoa', email: 'nova@x.com', role: 'member', createdAt: '2026-01-02' }];
+      return { data: { success: true } };
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    await user.type(screen.getByLabelText('Nome'), 'Nova Pessoa');
+    await user.click(screen.getByRole('button', { name: /^Criar$/ }));
+
+    expect(await screen.findByText('Nova Pessoa')).toBeInTheDocument();
+    expect(screen.getByText('Mostrando 10–10 de 10')).toBeInTheDocument();
   });
 });
