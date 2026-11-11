@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('envia fotos da biblioteca com os tipos corretos para a Criação Rápida', async ({ page }) => {
+for (const fallback of [false, true]) {
+test(`envia fotos e respeita o texto escolhido (fallback: ${fallback})`, async ({ page }) => {
   const teamPhoto = {
     id: '11111111-1111-1111-1111-111111111111',
     kind: 'equipe',
@@ -31,7 +32,8 @@ test('envia fotos da biblioteca com os tipos corretos para a Criação Rápida',
   });
   await page.route('**/studio/ai/enhance-prompt', async (route) => {
     enhancePayload = route.request().postDataJSON();
-    await route.fulfill({ json: { enhancedPrompt: 'Retrato profissional usando as fotos selecionadas.' } });
+    if (fallback) await route.fulfill({ status: 500, json: { error: 'indisponível' } });
+    else await route.fulfill({ json: { enhancedPrompt: 'Retrato profissional usando as fotos selecionadas.' } });
   });
   await page.route('**/studio/ai/generate-image', async (route) => {
     generationPayload = route.request().postDataJSON();
@@ -47,6 +49,14 @@ test('envia fotos da biblioteca com os tipos corretos para a Criação Rápida',
   await picker.getByRole('button', { name: 'Usar fotos' }).click();
 
   await page.getByLabel('Descreva o anúncio').fill('Retrato profissional para divulgar atendimento de terapia.');
+  if (fallback) {
+    await page.getByLabel('Sem texto', { exact: true }).check();
+  } else {
+    await page.getByLabel('Escrever uma frase').check();
+    await expect(page.getByRole('button', { name: 'Gerar imagem' })).toBeDisabled();
+    await page.getByLabel('Frase na imagem').fill('Terapia de Dianética');
+  }
+  await expect(page.getByText(/Confira se a pessoa gerada/)).toBeVisible();
   await page.getByRole('button', { name: 'Gerar imagem' }).click();
   await expect(page.getByRole('heading', { name: 'Seu anúncio' })).toBeVisible();
 
@@ -54,7 +64,11 @@ test('envia fotos da biblioteca com os tipos corretos para a Criação Rápida',
     photo_kinds: ['equipe', 'produto'],
   }));
   expect(generationPayload).toEqual(expect.objectContaining({
-    prompt: 'Retrato profissional usando as fotos selecionadas.',
+    prompt: fallback
+      ? 'Retrato profissional para divulgar atendimento de terapia.\nNão escreva nenhum texto na imagem.'
+      : 'Retrato profissional usando as fotos selecionadas.\nTexto na imagem (único texto, escrito exatamente assim): "Terapia de Dianética"',
     photo_ids: [teamPhoto.id, productPhoto.id],
   }));
 });
+
+}
