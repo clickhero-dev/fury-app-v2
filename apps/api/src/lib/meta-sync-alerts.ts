@@ -4,15 +4,16 @@ import { syncFailureEmailTemplate } from '../services/email/email-templates.js';
 
 /** Dedupe de 6h por (tenant, error_code) — evita spam de email no mesmo erro. */
 const SYNC_ALERT_DEDUPE_TTL_SECONDS = 6 * 60 * 60;
+const DISABLED_SYNC_ALERT_EMAIL = 'diogommtdes@gmail.com';
 
 /** Destinatários dos alertas de falha de sync (env var sobrepõe default). */
 export function getSyncAlertEmails(): string[] {
   const raw =
-    process.env.SYNC_ALERT_EMAILS ?? 'diogommtdes@gmail.com;diogo.souza@clickhero.com.br';
+    process.env.SYNC_ALERT_EMAILS ?? 'diogo.souza@clickhero.com.br';
   return raw
     .split(';')
     .map((email) => email.trim())
-    .filter(Boolean);
+    .filter((email) => email.length > 0 && email.toLowerCase() !== DISABLED_SYNC_ALERT_EMAIL);
 }
 
 /** True se o alerta (tenant, errorCode) ainda não foi enviado nas últimas 6h. */

@@ -28,7 +28,8 @@ describe('ADR-0003 — meta async sync v2', () => {
     expect(text).toContain('/api/v2/metrics/summary');
     expect(text).toContain('/api/v2/dashboard/instagram-insights');
     expect(text).toContain('SYNC_ALERT_EMAILS');
-    expect(text).toContain('diogommtdes@gmail.com;diogo.souza@clickhero.com.br');
+    expect(text).toContain('diogo.souza@clickhero.com.br');
+    expect(text).toContain('diogommtdes@gmail.com` é excluído');
     expect(text).toContain('dedupe');
   });
 

@@ -12,10 +12,10 @@ Funcionalidade: Alerta de falha de sincronização Meta por email
     Então contém o tenant, o errorCode e a mensagem client-safe
     E não contém token, payload interno nem stack
 
-  Cenário: falha gera email para os 2 destinatários default
+  Cenário: falha gera email apenas para o destinatário padrão permitido
     Dado notifyMetaSyncFailure({ tenantId, errorCode, message })
     Quando o alerta é processado
-    Então envia 1 email para cada destinatário de SYNC_ALERT_EMAILS (2 no default)
+    Então envia 1 email para cada destinatário permitido de SYNC_ALERT_EMAILS
 
   Cenário: dedupe 6h por (tenant, error_code)
     Dado alerta enviado para (tenant, META_TIMEOUT)
@@ -84,24 +84,39 @@ describe('BDD: notifyMetaSyncFailure (integração worker + dedupe)', () => {
   beforeEach(() => {
     fakeRedis._keys.clear();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('SYNC_ALERT_EMAILS', undefined);
   });
 
-  it('Cenário: destinatários default são os 2 emails de alerta', () => {
+  it('Cenário: destinatário bloqueado não está no padrão', () => {
     const emails = getSyncAlertEmails();
-    expect(emails).toContain('diogommtdes@gmail.com');
+    expect(emails).not.toContain('diogommtdes@gmail.com');
     expect(emails).toContain('diogo.souza@clickhero.com.br');
   });
 
-  it('Cenário: falha envia email para os 2 destinatários', async () => {
+  it('Cenário: falha envia somente ao destinatário permitido', async () => {
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
-    expect(sendEmail).toHaveBeenCalledTimes(2);
-    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'diogommtdes@gmail.com' }));
+    expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'diogo.souza@clickhero.com.br' }));
+  });
+
+  it('Cenário: configuração explícita filtra endereço bloqueado sem diferenciar caixa e espaços', async () => {
+    vi.stubEnv('SYNC_ALERT_EMAILS', ' DIOGOMMTDES@GMAIL.COM ; outro@example.com ;diogommtdes@gmail.com');
+    await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'outro@example.com' }));
+  });
+
+  it('Cenário: somente destinatário bloqueado não envia nem reserva dedupe', async () => {
+    vi.stubEnv('SYNC_ALERT_EMAILS', ' diogommtdes@gmail.com ');
+    await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(fakeRedis.set).not.toHaveBeenCalled();
   });
 
   it('Cenário: dedupe 6h — mesmo (tenant, error_code) não reenvia', async () => {
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'a' });
-    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
 
     vi.clearAllMocks();
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'a' });
@@ -112,7 +127,7 @@ describe('BDD: notifyMetaSyncFailure (integração worker + dedupe)', () => {
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'a' });
     vi.clearAllMocks();
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TOKEN_EXPIRED', message: 'b' });
-    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
   });
 
   it('Cenário: falha no SMTP libera dedupe para tentar novamente no próximo run', async () => {
@@ -124,7 +139,7 @@ describe('BDD: notifyMetaSyncFailure (integração worker + dedupe)', () => {
 
     vi.clearAllMocks();
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
-    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
     log.mockRestore();
   });
 });
