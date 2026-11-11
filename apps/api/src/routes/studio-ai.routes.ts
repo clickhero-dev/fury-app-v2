@@ -23,6 +23,10 @@ router.get('/models', controllers.studioAi.getModels);
 
 router.post('/enhance-prompt', authMiddleware, tenantMiddleware, controllers.studioAi.enhancePrompt);
 router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.studioAi.generateImage);
+router.post('/visual-variation-batches', authMiddleware, tenantMiddleware, controllers.studioAi.createVisualVariationBatch);
+router.get('/visual-variation-batches/:batchId', authMiddleware, tenantMiddleware, controllers.studioAi.getVisualVariationBatch);
+router.post('/visual-variation-batches/:batchId/cancel', authMiddleware, tenantMiddleware, controllers.studioAi.cancelVisualVariationBatch);
+router.post('/visual-variation-batches/:batchId/items/:index/retry', authMiddleware, tenantMiddleware, controllers.studioAi.retryVisualVariationItem);
 router.post('/generate-video', authMiddleware, tenantMiddleware, controllers.studioAi.generateVideo);
 router.post('/regenerate', authMiddleware, tenantMiddleware, controllers.studioAi.regenerate);
 router.post(
