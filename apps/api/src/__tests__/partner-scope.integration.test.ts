@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import app from '../index.js';
 import { db } from '@fury/db';
 import * as schema from '@fury/db';
@@ -69,6 +69,7 @@ describe('Escopo do parceiro no admin — integração', () => {
   });
 
   afterAll(async () => {
+    await db.delete(schema.adyRbacAuditLog).where(inArray(schema.adyRbacAuditLog.entityKey, [userA, userB]));
     await db.delete(schema.tenants).where(inArray(schema.tenants.id, tenantIds));
     await db.delete(schema.adyPartners).where(inArray(schema.adyPartners.id, partnerIds));
     await rbacService.bumpVersion();
@@ -299,6 +300,44 @@ describe('Escopo do parceiro no admin — integração', () => {
     for (const call of calls) expect((await call.set(asPartner())).status).toBe(403);
   });
 
+  it('troca de senha pelo suporte: só no escopo, senha forte e derruba as sessões', async () => {
+    const [a] = await db.select().from(schema.users).where(eq(schema.users.id, userA));
+    const login = (pw: string) => request(app).post('/api/auth/login').send({ email: a!.email, password: pw });
+    const before = await login(password);
+    expect(before.status).toBe(200);
+    const oldRefresh = before.body.data.refreshToken as string;
+    const newPassword = 'NovaSenha#2026';
+
+    expect((await request(app).post(`/api/admin/users/${userB}/password`).set(asPartner()).send({ password: newPassword })).status).toBe(404);
+    expect((await request(app).post(`/api/admin/users/${userA}/password`).set(asPartner()).send({ password: 'fraca' })).status).toBe(400);
+    expect((await request(app).post(`/api/admin/users/${userA}/password`).send({ password: newPassword })).status).toBe(401);
+
+    const res = await request(app).post(`/api/admin/users/${userA}/password`).set(asPartner()).send({ password: newPassword });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(newPassword);
+
+    // antes de logar de novo: token do mesmo segundo sairia igual
+    expect(oldRefresh).toBeTruthy();
+    expect((await request(app).post('/api/auth/refresh').send({ refreshToken: oldRefresh })).status).toBe(401);
+    expect((await login(password)).status).toBe(401);
+    expect((await login(newPassword)).status).toBe(200);
+
+    // super também alcança cliente de outro parceiro
+    expect((await request(app).post(`/api/admin/users/${userB}/password`).set(asSuper()).send({ password: newPassword })).status).toBe(200);
+
+    // histórico: quem trocou, de quem e quando; tentativas recusadas não entram
+    const [partnerUser] = await db.select().from(schema.users).where(eq(schema.users.partnerId, partnerA));
+    const logs = await db.select().from(schema.adyRbacAuditLog)
+      .where(and(eq(schema.adyRbacAuditLog.action, 'user_password_reset'), inArray(schema.adyRbacAuditLog.entityKey, [userA, userB])));
+    expect(logs).toHaveLength(2);
+    const byPartner = logs.find((l) => l.entityKey === userA)!;
+    expect(byPartner).toMatchObject({ actorUserId: partnerUser!.id, entityType: 'user', partnerId: partnerA });
+    expect(byPartner.details).toEqual({ tenantId: clientA, email: a!.email, byPartner: true });
+    expect(byPartner.createdAt).toBeInstanceOf(Date);
+    expect((logs.find((l) => l.entityKey === userB)!.details as { byPartner: boolean }).byPartner).toBe(false);
+    expect(JSON.stringify(logs)).not.toContain(newPassword);
+  });
+
   it('parceiro exclui (soft) o próprio cliente', async () => {
     expect((await request(app).delete(`/api/admin/tenants/${clientA}`).set(asPartner())).status).toBe(200);
     const [row] = await db.select().from(schema.tenants).where(eq(schema.tenants.id, clientA));
@@ -339,6 +378,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'POST /plans',
       'POST /tenants/:tenantId/reset-quota',
       'POST /users',
+      'POST /users/:id/password',
       'PUT /my-partner/ai-key',
       'PUT /tenants/:tenantId/goals',
     ]);

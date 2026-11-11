@@ -84,7 +84,7 @@ async function verifyRefreshTokenHash(userId: string, refreshToken: string): Pro
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(computedHash));
 }
 
-async function revokeRefreshToken(userId: string): Promise<void> {
+export async function revokeRefreshToken(userId: string): Promise<void> {
   const redis = getRedis();
   await redis.del(`refresh:${userId}`);
 }

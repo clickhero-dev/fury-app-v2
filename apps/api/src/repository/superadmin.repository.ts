@@ -12,6 +12,7 @@ import {
   campaigns,
   creativeAssets,
   adyPartners,
+  adyRbacAuditLog,
 } from '@fury/db';
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -279,6 +280,25 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
   async findUserById(id: string) {
     return this.db.query.users.findFirst({ where: and(eq(users.id, id), isNull(users.deletedAt)) });
+  }
+  // troca a senha e registra quem fez, nunca a senha
+  async resetUserPassword(
+    user: { id: string; tenantId: string; email: string },
+    passwordHash: string,
+    actor: { userId: string; partnerId: string | null },
+  ) {
+    await this.db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash, resetToken: null, resetTokenExpiresAt: null }).where(eq(users.id, user.id));
+      const [tenant] = await tx.select({ partnerId: tenants.partnerId }).from(tenants).where(eq(tenants.id, user.tenantId));
+      await tx.insert(adyRbacAuditLog).values({
+        actorUserId: actor.userId,
+        action: 'user_password_reset',
+        entityType: 'user',
+        entityKey: user.id,
+        partnerId: tenant?.partnerId ?? null,
+        details: { tenantId: user.tenantId, email: user.email, byPartner: actor.partnerId !== null },
+      });
+    });
   }
   async findOwnerUser(tenantId: string) {
     return this.db.query.users.findFirst({ where: and(eq(users.tenantId, tenantId), eq(users.role, 'owner')) });

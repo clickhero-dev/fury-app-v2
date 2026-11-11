@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Trash2 } from "lucide-react";
 import { roleBadgeClass, roleLabel } from "@/lib/platform-role";
 
 export interface TenantUser {
@@ -18,7 +18,7 @@ function initials(user: TenantUser) {
 }
 
 // Card de um usuário do cliente
-export function UserCard({ user, onEdit, onRemove }: { user: TenantUser; onEdit: () => void; onRemove: () => void }) {
+export function UserCard({ user, onEdit, onResetPassword, onRemove }: { user: TenantUser; onEdit: () => void; onResetPassword: () => void; onRemove: () => void }) {
   return (
     <article className="bg-admin-surface border border-admin-border rounded-2xl p-4 flex flex-col gap-3 min-w-0">
       <div className="flex items-center gap-3 min-w-0">
@@ -54,6 +54,14 @@ export function UserCard({ user, onEdit, onRemove }: { user: TenantUser; onEdit:
             title="Editar usuário"
           >
             <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onResetPassword}
+            className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
+            title="Trocar senha"
+          >
+            <KeyRound className="w-4 h-4" />
           </button>
           <button
             type="button"

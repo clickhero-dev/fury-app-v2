@@ -38,7 +38,6 @@ import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
-import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { RoadmapPage } from './pages/roadmap/RoadmapPage';
 import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
@@ -182,7 +181,7 @@ export const router = createBrowserRouter([
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
-      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
+      // Orçamento Smart fora do ar até ser finalizado (rbac-views da API: budget disabled)
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },

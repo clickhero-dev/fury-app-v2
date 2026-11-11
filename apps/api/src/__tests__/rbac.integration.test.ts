@@ -149,6 +149,13 @@ describe('RBAC de serviços — integração', () => {
     expect((await get('/api/goals')).status).not.toBe(403);
   });
 
+  it('tela desativada (Orçamento smart): serviço bloqueado para todos, até super_admin', async () => {
+    expect((await get('/api/budget/suggestions')).status).toBe(403);
+    await setUser('super_admin');
+    expect((await get('/api/budget/suggestions')).status).toBe(403);
+    expect((await get('/api/goals')).status).not.toBe(403);
+  });
+
   it('remover o bloqueio + bumpVersion libera na hora', async () => {
     await block('user', 'goals');
     expect((await get('/api/goals')).status).toBe(403);

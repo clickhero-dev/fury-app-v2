@@ -7,6 +7,8 @@ import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/sup
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
 import { slugify } from "./partner.controller.js";
+import { passwordSchema } from "../lib/shared.js";
+import { revokeRefreshToken } from "../services/core/auth.service.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -15,6 +17,8 @@ const createUserSchema = z.object({
   password: z.string().min(8).max(255),
   role: z.enum(["owner", "admin", "member"]).default("member"),
 });
+
+const resetUserPasswordSchema = z.object({ password: passwordSchema });
 
 const setupTenantSchema = z.object({
   name: z.string().min(1).max(255),
@@ -502,6 +506,20 @@ export class SuperAdminController {
         data: null,
         timestamp: new Date().toISOString(),
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // suporte troca a senha; sessões abertas caem
+  resetUserPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = resetUserPasswordSchema.parse(req.body);
+      const user = await this.userInScope(req, req.params.id);
+      const passwordHash = await bcrypt.hash(body.password, 10);
+      await this.repo.resetUserPassword(user, passwordHash, { userId: req.user!.userId, partnerId: partnerOf(req) });
+      await revokeRefreshToken(user.id);
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }

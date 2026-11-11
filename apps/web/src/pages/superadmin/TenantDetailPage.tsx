@@ -9,7 +9,6 @@ import {
   Trash2,
   Users,
   CreditCard,
-  Gauge,
   Target,
   UserRoundSearch,
   Palette,
@@ -44,6 +43,7 @@ import { FormSection, FieldLabel } from "./tenant-detail/FormSection";
 import { UserCard } from "./tenant-detail/UserCard";
 import { UserPager } from "./tenant-detail/UserPager";
 import { CreateUserModal } from "./tenant-detail/CreateUserModal";
+import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
 
 type Tab =
   "users" | "subscription" | "config" | "metas" | "publico" | "brandkit";
@@ -161,8 +161,8 @@ const USERS_PER_PAGE = 9;
 const SECTIONS: { key: Tab; label: string; icon: SectionItem<Tab>["icon"] }[] = [
   { key: "users", label: "Usuários", icon: Users },
   { key: "subscription", label: "Assinatura", icon: CreditCard },
-  { key: "config", label: "Motor ADY", icon: Gauge },
-  { key: "metas", label: "Metas", icon: Target },
+  { key: "config", label: "Metas", icon: Target },
+  { key: "metas", label: "Objetivo", icon: Flag },
   { key: "publico", label: "Público", icon: UserRoundSearch },
   { key: "brandkit", label: "Dados da Marca", icon: Palette },
 ];
@@ -188,6 +188,9 @@ export function TenantDetailPage() {
     role: "member" as string,
   });
   const [createOpen, setCreateOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
   const [createError, setCreateError] = useState("");
   const [userPage, setUserPage] = useState(1);
 
@@ -499,6 +502,24 @@ export function TenantDetailPage() {
     }
   };
 
+  // ─── Reset password (suporte) ────────────────────────
+  const resetPassword = async (password: string) => {
+    if (!resetTarget) return;
+    setResetting(true);
+    setResetError("");
+    try {
+      await api.post(`/admin/users/${resetTarget.id}/password`, { password });
+      setMsg(`Senha de ${resetTarget.name} alterada`);
+      setResetTarget(null);
+    } catch {
+      setResetError("Não foi possível trocar a senha. Tente novamente.");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const closeReset = useCallback(() => setResetTarget(null), []);
+
   // fechar descarta a senha digitada
   const closeCreate = useCallback(() => {
     setCreateOpen(false);
@@ -578,6 +599,7 @@ export function TenantDetailPage() {
     "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
   const labelCls = "block text-xs font-medium text-admin-text-muted mb-1.5";
   const metricCls = "bg-admin-surface-2 rounded-xl p-4";
+  const hintCls = "text-xs text-admin-text-muted mb-2 leading-snug";
   const btnCls =
     "ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-6 py-2.5 flex items-center gap-2";
 
@@ -641,6 +663,7 @@ export function TenantDetailPage() {
                 key={u.id}
                 user={u}
                 onEdit={() => setEditUser({ id: u.id, name: u.name ?? "", email: u.email, role: u.role })}
+                onResetPassword={() => { setResetError(""); setResetTarget({ id: u.id, name: u.name || u.email }); }}
                 onRemove={() => setDeleteUserTarget({ id: u.id, name: u.name ?? "sem nome", role: u.role })}
               />
             ))}
@@ -648,6 +671,17 @@ export function TenantDetailPage() {
 
           <UserPager total={data.users.length} page={currentUserPage} perPage={USERS_PER_PAGE} onChange={setUserPage} />
         </div>
+      )}
+
+      {resetTarget && (
+        <ResetPasswordModal
+          key={resetTarget.id}
+          userName={resetTarget.name}
+          saving={resetting}
+          error={resetError}
+          onSubmit={resetPassword}
+          onClose={closeReset}
+        />
       )}
 
       <CreateUserModal
@@ -956,18 +990,20 @@ export function TenantDetailPage() {
         </div>
       )}
 
-      {/* ── Motor ADY (Benchmarks) ─────────────────── */}
+      {/* ── Metas (benchmarks do score) ─────────────── */}
       {tab === "config" && (
         <FormSection
-          icon={Gauge}
-          title="Benchmarks de Performance"
-          description="Defina as metas que o ady usa para calcular o score de cada campanha."
+          icon={Target}
+          title="Metas de performance"
+          description="Os números que o ady usa como referência para dar nota a cada campanha do cliente."
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <div className={metricCls}>
               <FieldLabel icon={TrendingUp} htmlFor="cfg-roas">Meta de ROAS (x)</FieldLabel>
+              <div id="cfg-roas-hint" className={hintCls}>Quanto a campanha deve vender para cada R$ 1 investido. Ex.: 4 = R$ 4 em vendas por R$ 1.</div>
               <input
                 id="cfg-roas"
+                aria-describedby="cfg-roas-hint"
                 type="number"
                 step="0.1"
                 value={configForm.targetRoas}
@@ -979,8 +1015,10 @@ export function TenantDetailPage() {
             </div>
             <div className={metricCls}>
               <FieldLabel icon={Receipt} htmlFor="cfg-cpa">Meta de CPA (R$)</FieldLabel>
+              <div id="cfg-cpa-hint" className={hintCls}>Quanto vale pagar, no máximo, por cada venda ou contato conquistado.</div>
               <input
                 id="cfg-cpa"
+                aria-describedby="cfg-cpa-hint"
                 type="number"
                 step="0.01"
                 value={configForm.targetCpa}
@@ -992,8 +1030,10 @@ export function TenantDetailPage() {
             </div>
             <div className={metricCls}>
               <FieldLabel icon={MousePointerClick} htmlFor="cfg-ctr">Meta de CTR (%)</FieldLabel>
+              <div id="cfg-ctr-hint" className={hintCls}>De cada 100 pessoas que veem o anúncio, quantas devem clicar.</div>
               <input
                 id="cfg-ctr"
+                aria-describedby="cfg-ctr-hint"
                 type="number"
                 step="0.01"
                 value={configForm.targetCtr}
@@ -1005,8 +1045,10 @@ export function TenantDetailPage() {
             </div>
             <div className={metricCls}>
               <FieldLabel icon={Wallet} htmlFor="cfg-budget">Utilização de Budget (%)</FieldLabel>
+              <div id="cfg-budget-hint" className={hintCls}>Quanto do orçamento da campanha deve ser gasto no período. Ex.: 80 = gastar 80% do previsto.</div>
               <input
                 id="cfg-budget"
+                aria-describedby="cfg-budget-hint"
                 type="number"
                 value={configForm.targetBudgetUtilization}
                 onChange={(e) =>
@@ -1028,8 +1070,8 @@ export function TenantDetailPage() {
       {/* ── Metas ───────────────────────────────────── */}
       {tab === "metas" && (
         <FormSection
-          icon={Target}
-          title="Metas do Cliente"
+          icon={Flag}
+          title="Objetivo do Cliente"
           description="Objetivos e orçamento que a IA usa para otimizar campanhas."
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

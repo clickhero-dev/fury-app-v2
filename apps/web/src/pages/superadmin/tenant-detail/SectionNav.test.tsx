@@ -60,7 +60,7 @@ describe('buildSectionSummaries', () => {
     expect(s.users.line2).toBe('Sem limite de vagas');
     expect(s.subscription.line1).toBe('Sem assinatura');
     expect(s.config.line1).toBe('Não configurado');
-    expect(s.metas.line1).toBe('Não definidas');
+    expect(s.metas.line1).toBe('Não definido');
     expect(s.publico).toEqual({ line1: '18 até 65 · Todos', line2: 'Sem localização' });
     expect(s.brandkit).toEqual({ line1: 'Sem tom de voz', line2: '0 fotos', swatches: undefined });
   });

@@ -124,7 +124,7 @@ export function buildSectionSummaries(
       : { line1: "Não configurado", line2: "Defina ROAS e CPA" },
     metas: goals
       ? { line1: labelOf(labels.objectives, goals.objective) || "Sem objetivo", line2: `R$ ${brl(goals.monthlyBudget || 0)}/mês` }
-      : { line1: "Não definidas", line2: "Defina objetivo e orçamento" },
+      : { line1: "Não definido", line2: "Defina objetivo e orçamento" },
     publico: {
       line1: `${aud?.ageMin ?? 18} até ${aud?.ageMax ?? 65} · ${labelOf(labels.genders, aud?.gender ?? "all")}`,
       line2: locationSummary(aud),

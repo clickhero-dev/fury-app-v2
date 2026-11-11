@@ -227,11 +227,15 @@ describe('TenantDetailPage — cards de seção', () => {
     expect(usersCard).toHaveAttribute('aria-pressed', 'true');
     expect(usersCard).toHaveAccessibleDescription(/0 usuários/);
 
-    await user.click(screen.getByRole('button', { name: 'Motor ADY' }));
-    expect(screen.getByRole('button', { name: 'Motor ADY' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Metas' }));
+    expect(screen.getByRole('button', { name: 'Metas' })).toHaveAttribute('aria-pressed', 'true');
     expect(usersCard).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByLabelText('Meta de ROAS (x)')).toBeInTheDocument();
-    expect(screen.getByLabelText('Utilização de Budget (%)')).toBeInTheDocument();
+    expect(screen.getByText('Metas de performance')).toBeInTheDocument();
+    expect(screen.getByLabelText('Meta de ROAS (x)')).toHaveAccessibleDescription(/para cada R\$ 1 investido/);
+    expect(screen.getByLabelText('Meta de CPA (R$)')).toHaveAccessibleDescription(/por cada venda ou contato/);
+    expect(screen.getByLabelText('Meta de CTR (%)')).toHaveAccessibleDescription(/quantas devem clicar/);
+    expect(screen.getByLabelText('Utilização de Budget (%)')).toHaveAccessibleDescription(/do orçamento da campanha/);
+    expect(screen.queryByRole('button', { name: 'Motor ADY' })).not.toBeInTheDocument();
   });
 
   it('card de Assinatura resume plano e status', async () => {
@@ -239,11 +243,12 @@ describe('TenantDetailPage — cards de seção', () => {
     expect(await screen.findByRole('button', { name: 'Assinatura' })).toHaveAccessibleDescription('Pro Status: active');
   });
 
-  it('salvar Metas mantém o mesmo payload da API', async () => {
+  it('salvar Objetivo mantém o mesmo payload da API', async () => {
     const { default: api } = await import('@/lib/api');
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Metas' }));
+    await user.click(await screen.findByRole('button', { name: 'Objetivo' }));
+    expect(screen.getByText('Objetivo do Cliente')).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Objetivo da campanha'), 'gerar_leads');
     await user.type(screen.getByLabelText('Nicho do negócio'), 'pet');
     await user.type(screen.getByLabelText('Orçamento mensal (R$)'), '500');
@@ -303,6 +308,35 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Criar Usuário' }));
     expect(screen.getByLabelText('Senha')).toHaveValue('');
+  });
+
+  it('suporte troca a senha do usuário pelo card', async () => {
+    withUsers(many(1));
+    mockPost.mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByTitle('Trocar senha'));
+    const dialog = screen.getByRole('dialog', { name: 'Trocar senha' });
+    expect(within(dialog).getByText('Pessoa 1')).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Nova senha'), 'NovaSenha#1');
+    await user.type(within(dialog).getByLabelText('Confirmar senha'), 'NovaSenha#1');
+    await user.click(within(dialog).getByRole('button', { name: /Trocar senha/ }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/users/u1/password', { password: 'NovaSenha#1' }));
+    expect(await screen.findByText('Senha de Pessoa 1 alterada')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('falha ao trocar a senha mostra o erro no modal', async () => {
+    withUsers(many(1));
+    mockPost.mockRejectedValue(new Error('falha'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByTitle('Trocar senha'));
+    await user.type(screen.getByLabelText('Nova senha'), 'NovaSenha#1');
+    await user.type(screen.getByLabelText('Confirmar senha'), 'NovaSenha#1');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Trocar senha/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível trocar a senha. Tente novamente.');
   });
 
   it('com até 9 usuários não mostra paginação', async () => {
