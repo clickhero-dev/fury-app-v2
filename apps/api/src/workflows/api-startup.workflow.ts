@@ -1,7 +1,7 @@
 import type { WorkflowDefinition } from '../services/stateMachine/stageInterface.js';
 import { RetryDependencyError, WorkflowFailedError } from '../services/stateMachine/workflow.engine.js';
 import { db } from '@fury/db';
-import { sql } from 'drizzle-orm';
+import { probeDatabase } from '../lib/database-probe.js';
 import { waitForRedisReady } from '../lib/redis.js';
 import { runMigrationsAndValidate } from '@fury/db/migrate';
 import { setCheck, setStatus, handleCriticalFailure, getMissingEnvs, databaseCheckErrorDetail, classifyDatabaseError } from '../lib/api-state.js';
@@ -19,6 +19,14 @@ function runtimeEnvironment(): 'production' | 'development' | 'test' | 'unknown'
   return value === 'production' || value === 'development' || value === 'test' ? value : 'unknown';
 }
 
+function captureProbeEvent(event: string, properties: Record<string, unknown>): void {
+  try {
+    captureServerEvent(event, properties);
+  } catch {
+    // Telemetria nunca deve interferir na inicialização nem registrar dados do erro.
+  }
+}
+
 export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
   id: 'api-startup',
   lockKey: () => 'global',
@@ -32,11 +40,11 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
         dbAttempt += 1;
         const start = Date.now();
         try {
-          await db.execute(sql`SELECT 1`);
+          await probeDatabase(() => db.$client.unsafe('SELECT 1'));
           const latencyMs = Date.now() - start;
           setCheck('db', true, `latency ${latencyMs}ms`);
           if (dbHadFailure) {
-            captureServerEvent('db_health_probe_recovered', {
+            captureProbeEvent('db_health_probe_recovered', {
               service: 'api',
               environment: runtimeEnvironment(),
               category: 'healthy',
@@ -50,7 +58,7 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
           const category = classifyDatabaseError(error);
           dbHadFailure = true;
           setCheck('db', false, databaseCheckErrorDetail(error), category);
-          captureServerEvent('db_health_probe_failed', {
+          captureProbeEvent('db_health_probe_failed', {
             service: 'api',
             environment: runtimeEnvironment(),
             category,

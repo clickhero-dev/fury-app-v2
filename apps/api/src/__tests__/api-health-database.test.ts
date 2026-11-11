@@ -8,10 +8,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Quando a consulta de probe falha
 // Então o check db é marcado como falho com diagnóstico sanitizado
 
-const { executeMock, workflowRunMock } = vi.hoisted(() => ({ executeMock: vi.fn(), workflowRunMock: vi.fn() }));
+const { executeMock, workflowRunMock, captureMock } = vi.hoisted(() => ({ executeMock: vi.fn(), workflowRunMock: vi.fn(), captureMock: vi.fn() }));
+
+vi.mock('../lib/analytics.js', () => ({ captureServerEvent: captureMock }));
 
 vi.mock('@fury/db', () => ({
-  db: { execute: executeMock },
+  db: { $client: { unsafe: (...args: unknown[]) => {
+    const promise = executeMock(...args);
+    return Object.assign(promise, { cancel: vi.fn() });
+  } } },
 }));
 
 vi.mock('@fury/db/migrate', () => ({
@@ -37,6 +42,7 @@ describe('health check — conexão do banco', () => {
     vi.resetModules();
     executeMock.mockReset();
     workflowRunMock.mockReset();
+    captureMock.mockReset();
   });
 
   it('Cenário: falha de conexão registra check db falso sem expor credenciais', async () => {
@@ -90,12 +96,21 @@ describe('health check — conexão do banco', () => {
     expect(apiState.getApiState().checks.db).not.toHaveProperty('category');
   });
 
+  it('telemetria indisponível não altera o resultado da recuperação', async () => {
+    const { apiStartupWorkflow } = await import('../workflows/api-startup.workflow.js');
+    executeMock.mockRejectedValueOnce(Object.assign(new Error('secret'), { code: 'ECONNREFUSED' })).mockResolvedValueOnce([]);
+    captureMock.mockImplementation(() => { throw new Error('telemetry down'); });
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).rejects.toThrow('database connection failed (unavailable)');
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).resolves.toMatchObject({ ok: true });
+  });
+
   it('Cenário: timeout e erro de query recebem categorias distintas', async () => {
     const { classifyDatabaseError } = await import('../lib/api-state.js');
 
     expect(classifyDatabaseError({ code: 'ETIMEDOUT' })).toBe('timeout');
     expect(classifyDatabaseError({ code: '57014' })).toBe('timeout');
     expect(classifyDatabaseError({ code: '42601' })).toBe('query_error');
+    expect(classifyDatabaseError({ code: '42P01' })).toBe('query_error');
     expect(classifyDatabaseError({ code: 'ECONNRESET' })).toBe('unavailable');
   });
 
@@ -145,9 +160,11 @@ describe('health check — conexão do banco', () => {
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: 'SERVICE_UNAVAILABLE' });
     apiState.setStatus('healthy');
+    expect((await request(app).get('/api/private')).status).toBe(200);
   });
 
-  it('Cenário: falha terminal do banco devolve o controle ao servidor para fechar o listener', async () => {
+  it('Cenário: falha terminal do banco agenda saída após a janela de diagnóstico', async () => {
+    vi.useFakeTimers();
     const { WorkflowFailedError } = await import('../services/stateMachine/workflow.engine.js');
     workflowRunMock.mockRejectedValueOnce(
       new WorkflowFailedError('api-startup-global', 'db-connect', 'database connection failed (unavailable)'),
@@ -157,5 +174,8 @@ describe('health check — conexão do banco', () => {
 
     await expect(runApiStartupWorkflow()).rejects.toMatchObject({ stageId: 'db-connect' });
     expect(exitSpy).not.toHaveBeenCalled();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    exitSpy.mockRestore();
   });
 });

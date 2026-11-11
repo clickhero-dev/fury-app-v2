@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import app from '../index.js';
+import app from './ready-app.js';
 import { db, users, tenants } from '@fury/db';
 import { seedStartup } from '../lib/seed-superadmin.js';
 

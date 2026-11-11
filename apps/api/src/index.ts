@@ -41,7 +41,7 @@ import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
 import { initializeBullBoardRoutes, shutdownBullBoardMetrics } from './routes/bull-board.routes.js';
 import { startupGate } from './middleware/startup-gate.js';
-import { setStatus } from './lib/api-state.js';
+import { handleCriticalFailure, isCritical, setStatus } from './lib/api-state.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,6 +71,7 @@ app.use(express.json({ limit: '10mb', verify: (req, _res, buffer) => {
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);
 app.use(requestLogger);
+app.use(startupGate);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
@@ -219,7 +220,6 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 });
 
 app.use('/api', rateLimitMiddleware);
-app.use('/api', startupGate);
 app.use('/api', routes);
 
 // ── Swagger UI ────────────────────────────────────────────────────────
@@ -348,10 +348,9 @@ app.use((req, res) => {
       setStatus('healthy');
       markStartupReady?.();
     } catch (error) {
-      // Em falha de bootstrap o health já refletiu o estado crítico; não deixe
-      // um listener órfão até o supervisor finalizar o processo.
-      server.close();
-      throw error;
+      // Mantém o health acessível durante a janela de diagnóstico antes do exit.
+      if (!isCritical()) handleCriticalFailure('API startup failed');
+      return;
     }
 
     // Tratamento de encerramento (único handler)

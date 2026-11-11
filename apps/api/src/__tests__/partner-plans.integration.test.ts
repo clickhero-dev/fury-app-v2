@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { eq, inArray } from 'drizzle-orm';
-import app from '../index.js';
+import app from './ready-app.js';
 import { db } from '@fury/db';
 import * as schema from '@fury/db';
 import { rbacService } from '../services/core/rbac.service.js';

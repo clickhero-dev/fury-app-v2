@@ -22,9 +22,7 @@ export async function runApiStartupWorkflow(): Promise<void> {
     if (err instanceof WorkflowFailedError && err.stageId === 'db-connect') {
       handleCriticalFailure('Database startup probe failed after retries');
     }
-    // O processo ainda será finalizado pelo supervisor, mas devolvemos o erro
-    // imediatamente para que o chamador possa fechar o listener HTTP e não
-    // deixe uma porta servindo respostas durante a janela de encerramento.
+    // O chamador mantém o health disponível durante a janela de diagnóstico.
     throw err;
   }
 }
