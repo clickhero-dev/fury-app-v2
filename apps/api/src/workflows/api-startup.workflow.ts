@@ -85,10 +85,10 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
           await runMigrationsAndValidate();
           setCheck('migrate', true, 'all 26 tables exist');
           return { ok: true };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+        } catch {
+          const msg = 'migration validation failed';
           setCheck('migrate', false, msg);
-          handleCriticalFailure(`Migration validation failed: ${msg}`);
+          handleCriticalFailure(msg);
           throw new WorkflowFailedError('api-startup-global', 'migrate', msg);
         }
       },

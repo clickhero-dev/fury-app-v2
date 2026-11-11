@@ -69,6 +69,25 @@ describe('health check — conexão do banco', () => {
     expect(apiState.getApiState().checks.db.detail).not.toContain('postgresql://');
   });
 
+  it('Cenário: falha de migration não expõe credenciais no health público', async () => {
+    vi.useFakeTimers();
+    const { runMigrationsAndValidate } = await import('@fury/db/migrate');
+    vi.mocked(runMigrationsAndValidate).mockRejectedValueOnce(new Error('postgresql://user:super-secret@host/db'));
+    const [{ apiStartupWorkflow }, healthRoutes] = await Promise.all([
+      import('../workflows/api-startup.workflow.js'), import('../routes/health.js'),
+    ]);
+    const app = express();
+    app.use('/health', healthRoutes.default);
+    await expect(apiStartupWorkflow.stages[1].execute({}, {})).rejects.toThrow('migration validation failed');
+    const response = await request(app).get('/health');
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('critical');
+    expect(response.body.checks.migrate.detail).toBe('migration validation failed');
+    expect(JSON.stringify(response.body)).not.toContain('super-secret');
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('Cenário: banco acessível registra latência no check db', async () => {
     executeMock.mockResolvedValueOnce([]);
 
