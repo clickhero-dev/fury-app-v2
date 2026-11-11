@@ -7,6 +7,8 @@ import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/sup
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
 import { slugify } from "./partner.controller.js";
+import { passwordSchema } from "../lib/shared.js";
+import { revokeRefreshToken } from "../services/core/auth.service.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -15,6 +17,8 @@ const createUserSchema = z.object({
   password: z.string().min(8).max(255),
   role: z.enum(["owner", "admin", "member"]).default("member"),
 });
+
+const resetUserPasswordSchema = z.object({ password: passwordSchema });
 
 const setupTenantSchema = z.object({
   name: z.string().min(1).max(255),
@@ -126,6 +130,15 @@ const updatePlanSchema = z.object({
   }
 });
 
+const MAX_PARTNER_CLIENT_MEMBERS = 2;
+
+// chave técnica (ex.: trial) é só da ady
+function rejectPartnerTechnicalKey(req: Request) {
+  if (partnerOf(req) && req.body?.technicalKey != null) {
+    throw new AppError(403, "TECHNICAL_KEY_FORBIDDEN", "Parceiro não pode definir chave técnica do plano.");
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function toMoney(v: number) {
@@ -148,11 +161,11 @@ function partnerOf(req: Request): string | null {
   return req.adminScope.partnerId;
 }
 
-// cargo Admin (libera sem assinatura): só o super_admin dá ou tira
+// parceiro só cria Membro e não troca cargo
 function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
   if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
-  if (newRole === "admin" || currentRole === "admin")
-    throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
+  if (currentRole !== undefined || newRole !== "member")
+    throw new AppError(403, "ROLE_FORBIDDEN", "O parceiro só pode criar Usuários");
 }
 
 // só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
@@ -346,15 +359,20 @@ export class SuperAdminController {
         throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.password, 10);
-      const user = await repo.createUser({
+      const values = {
         tenantId: body.tenantId,
         name: body.name,
         email: body.email,
         passwordHash,
         role: body.role,
         // cliente de parceiro → usuário do parceiro
-        ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
-      });
+        ...(tenant.partnerId ? { platformRole: "user_partner" as const } : {}),
+      };
+      const user = partnerOf(req)
+        ? await repo.createMemberWithinLimit(values, MAX_PARTNER_CLIENT_MEMBERS)
+        : await repo.createUser(values);
+      if (!user)
+        throw new AppError(409, "MEMBER_LIMIT", `Limite de ${MAX_PARTNER_CLIENT_MEMBERS} usuários por cliente atingido`);
 
       res
         .status(201)
@@ -493,10 +511,32 @@ export class SuperAdminController {
     }
   };
 
+  // suporte troca a senha; sessões abertas caem
+  resetUserPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = resetUserPasswordSchema.parse(req.body);
+      const user = await this.userInScope(req, req.params.id);
+      const passwordHash = await bcrypt.hash(body.password, 10);
+      await this.repo.resetUserPassword(user, passwordHash, { userId: req.user!.userId, partnerId: partnerOf(req) });
+      await revokeRefreshToken(user.id);
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   deleteUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
       const user = await this.userInScope(req, req.params.id);
+
+      // parceiro removendo o titular: sai o cliente inteiro e a vaga libera
+      if (partnerOf(req) && user.role === "owner") {
+        await repo.deleteTenant(user.tenantId);
+        await rbacService.bumpVersion();
+        res.json({ success: true, data: { tenantRemoved: true }, timestamp: new Date().toISOString() });
+        return;
+      }
 
       if (await repo.countUsersByTenant(user.tenantId) <= 1 && await repo.hasAccessibleSubscription(user.tenantId)) {
         throw new AppError(
@@ -766,7 +806,7 @@ export class SuperAdminController {
         throw new AppError(
           404,
           "NO_OWNER",
-          "Nenhum usuário encontrado neste tenant",
+          "Nenhum usuário encontrado neste cliente",
         );
 
       const { businessContext, ...audienceOnly } = req.body;
@@ -827,6 +867,7 @@ export class SuperAdminController {
 
   createPlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      rejectPartnerTechnicalKey(req);
       const body = createPlanSchema.parse(req.body);
       // dono vem do escopo, nunca do body
       const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
@@ -841,6 +882,7 @@ export class SuperAdminController {
   updatePlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
+      rejectPartnerTechnicalKey(req);
       const body = updatePlanSchema.parse(req.body);
       await this.planInScope(req.params.id, partnerOf(req));
 

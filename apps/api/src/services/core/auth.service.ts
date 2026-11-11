@@ -84,7 +84,7 @@ async function verifyRefreshTokenHash(userId: string, refreshToken: string): Pro
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(computedHash));
 }
 
-async function revokeRefreshToken(userId: string): Promise<void> {
+export async function revokeRefreshToken(userId: string): Promise<void> {
   const redis = getRedis();
   await redis.del(`refresh:${userId}`);
 }
@@ -140,7 +140,7 @@ export class AuthService {
         .values({ tenantId: tenant.id, email: data.email, passwordHash, role: 'owner' })
         .returning();
       await provisionTrialSubscription({
-        queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+        queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { and, eq, isNull }: any) => and(eq(plans.technicalKey, TRIAL_PLAN_KEY), isNull(plans.partnerId)) })) ?? null,
         querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, tenantId) })) ?? null,
         insertSubscription: async (values) => {
           const [subscription] = await tx.insert(subscriptions).values(values as any).returning({ id: subscriptions.id });

@@ -10,6 +10,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { NotificationsBell } from './NotificationsBell';
 
+const theme = vi.hoisted(() => ({ isDark: false, setDark: vi.fn() }));
+vi.mock('@/hooks/useTheme', () => ({ useTheme: () => theme }));
+
 const { get, patch } = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ data: { data: { items: [{ id: 'n1', type: 'general', title: 'Aviso', body: 'Texto', actionUrl: '/estudio?assetId=a1', createdAt: new Date().toISOString(), readAt: null }], nextCursor: null, unreadCount: 1 } } }),
   patch: vi.fn().mockResolvedValue({ data: { data: { id: 'n1', readAt: new Date().toISOString() } } }),
@@ -31,5 +34,10 @@ describe('NotificationsBell', () => {
     expect(markReadButton).not.toHaveTextContent('Marcar como lida');
     fireEvent.click(markReadButton);
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/notifications/n1/read'));
+  });
+  it('botão ao lado do sino alterna o tema', () => {
+    render(<QueryClientProvider client={new QueryClient()}><NotificationsBell /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Ativar modo escuro' }));
+    expect(theme.setDark).toHaveBeenCalledWith(true);
   });
 });

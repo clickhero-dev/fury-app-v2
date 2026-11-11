@@ -31,7 +31,7 @@ async function provisionSocialTrial(tx: any, tenantId: string): Promise<void> {
   // relational query API; real transactions always expose `query`.
   if (!tx.query?.plans || !tx.query?.subscriptions) return;
   await provisionTrialSubscription({
-    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { and, eq, isNull }: any) => and(eq(plans.technicalKey, TRIAL_PLAN_KEY), isNull(plans.partnerId)) })) ?? null,
     querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, id) })) ?? null,
     insertSubscription: async (values) => {
       const [subscription] = await tx.insert(subscriptions).values(values).returning({ id: subscriptions.id });

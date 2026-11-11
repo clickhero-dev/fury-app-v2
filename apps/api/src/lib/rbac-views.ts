@@ -5,6 +5,8 @@ export interface RbacViewEntry {
   description: string;
   // serviços (rbac-services) bloqueados junto com a tela
   services?: string[];
+  // fora do ar para todos (até super_admin) e some das permissões
+  disabled?: boolean;
 }
 
 export const RBAC_VIEWS: readonly RbacViewEntry[] = [
@@ -20,7 +22,8 @@ export const RBAC_VIEWS: readonly RbacViewEntry[] = [
   { key: 'studio.video', description: 'Gerador de vídeo', services: ['studio.video'] },
   { key: 'planner', description: 'Planejador', services: ['planner'] },
   { key: 'calendar', description: 'Calendário' },
-  { key: 'budget', description: 'Orçamento smart', services: ['budget'] },
+  // inacabado: tirar o disabled quando for finalizado (e voltar a rota no web)
+  { key: 'budget', description: 'Orçamento smart', services: ['budget'], disabled: true },
   { key: 'settings', description: 'Configurações' },
   { key: 'settings.integrations', description: 'Integrações' },
   { key: 'plans', description: 'Planos' },
@@ -34,3 +37,6 @@ export const RBAC_VIEWS: readonly RbacViewEntry[] = [
   { key: 'admin.faqs', description: 'Admin: FAQs' },
   { key: 'admin.announcements', description: 'Admin: avisos' },
 ];
+
+// serviços das telas desativadas
+export const DISABLED_SERVICE_KEYS: readonly string[] = RBAC_VIEWS.filter((v) => v.disabled).flatMap((v) => v.services ?? []);
