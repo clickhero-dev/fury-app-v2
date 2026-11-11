@@ -19,7 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { hasLifetimeAccess } from '@/lib/platform-role';
+import { hasLifetimeAccess, isMemberAccount } from '@/lib/platform-role';
 
 type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'publico';
 const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'publico'];
@@ -348,7 +348,8 @@ export function Configuracoes() {
                   </>
                 )}
 
-                {/* Seção 4: Integrações disponíveis */}
+                {/* Seção 4: Integrações disponíveis (só titular) */}
+                {!isMemberAccount() && (<>
                 <hr className="border-border" />
                 <div className="space-y-3">
                   <div>
@@ -393,6 +394,7 @@ export function Configuracoes() {
                     </Link> */}
                   </div>
                 </div>
+                </>)}
 
                 {/* Rodapé de Ações */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-border">

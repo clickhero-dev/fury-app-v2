@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Save,
@@ -6,8 +6,31 @@ import {
   Upload,
   X,
   Image as ImageIcon,
-  Pencil,
   Trash2,
+  Users,
+  CreditCard,
+  Target,
+  UserRoundSearch,
+  Palette,
+  Package,
+  BadgeCheck,
+  Hourglass,
+  CalendarClock,
+  TrendingUp,
+  Receipt,
+  MousePointerClick,
+  Wallet,
+  Flag,
+  Tag,
+  ShoppingBag,
+  FileText,
+  Cake,
+  VenusAndMars,
+  MessageCircle,
+  Images,
+  Zap,
+  RotateCw,
+  Info,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getStoredPlatformRole } from "@/lib/platform-role";
@@ -15,6 +38,12 @@ import type { AudienceGeo } from "@/components/campaign-wizard/types";
 import { isValidGeo, legacyFromGeo, EMPTY_GEO } from "@/components/campaign-wizard/types";
 import { LocationEditor } from "@/pages/configuracoes/LocationEditor";
 import { FURY_COLORS } from "@/lib/constants";
+import { SectionNav, buildSectionSummaries, type SectionItem } from "./tenant-detail/SectionNav";
+import { FormSection, FieldLabel } from "./tenant-detail/FormSection";
+import { UserCard } from "./tenant-detail/UserCard";
+import { UserPager } from "./tenant-detail/UserPager";
+import { CreateUserModal } from "./tenant-detail/CreateUserModal";
+import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
 
 type Tab =
   "users" | "subscription" | "config" | "metas" | "publico" | "brandkit";
@@ -29,6 +58,7 @@ interface TenantData {
     name: string;
     email: string;
     role: string;
+    platformRole?: string | null;
     createdAt: string;
   }[];
   subscription: {
@@ -124,6 +154,19 @@ const GENDERS = [
 
 const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65];
 
+const MAX_PARTNER_CLIENT_MEMBERS = 2;
+const TITULAR_REMOVAL_WAIT_SECONDS = 5;
+const USERS_PER_PAGE = 9;
+
+const SECTIONS: { key: Tab; label: string; icon: SectionItem<Tab>["icon"] }[] = [
+  { key: "users", label: "Usuários", icon: Users },
+  { key: "subscription", label: "Assinatura", icon: CreditCard },
+  { key: "config", label: "Metas", icon: Target },
+  { key: "metas", label: "Objetivo", icon: Flag },
+  { key: "publico", label: "Público", icon: UserRoundSearch },
+  { key: "brandkit", label: "Dados da Marca", icon: Palette },
+];
+
 export function TenantDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -144,6 +187,12 @@ export function TenantDetailPage() {
     password: "",
     role: "member" as string,
   });
+  const [createOpen, setCreateOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [userPage, setUserPage] = useState(1);
 
   // Edit user
   const [editUser, setEditUser] = useState<{
@@ -157,8 +206,23 @@ export function TenantDetailPage() {
   const [deleteUserTarget, setDeleteUserTarget] = useState<{
     id: string;
     name: string;
+    role: string;
   } | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  // parceiro removendo o titular: some o cliente inteiro
+  const removesWholeClient = !isSuperAdmin && deleteUserTarget?.role === "owner";
+  const [confirmSeconds, setConfirmSeconds] = useState(0);
+  const [deleteUserError, setDeleteUserError] = useState("");
+
+  // layout effect: o botão já nasce travado
+  useLayoutEffect(() => {
+    if (!removesWholeClient) return;
+    setConfirmSeconds(TITULAR_REMOVAL_WAIT_SECONDS);
+    const timer = setInterval(() => setConfirmSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [removesWholeClient, deleteUserTarget?.id]);
+
+  useEffect(() => setDeleteUserError(""), [deleteUserTarget?.id]);
 
   // Subscription
   const [subForm, setSubForm] = useState({
@@ -286,6 +350,7 @@ export function TenantDetailPage() {
   async function reload() {
     const tRes = await api.get(`/admin/tenants/${id}`);
     setData(tRes.data.data);
+    return tRes.data.data as TenantData;
   }
 
   function save(fn: () => Promise<void>, okMsg: string) {
@@ -421,17 +486,46 @@ export function TenantDetailPage() {
   // ─── Create user ─────────────────────────────────────
   const createUser = async () => {
     setSaving(true);
+    setCreateError("");
     try {
       await api.post("/admin/users", { ...newUser, tenantId: id });
       setMsg("Usuário criado");
       setNewUser({ name: "", email: "", password: "", role: "member" });
-      await reload();
+      setCreateOpen(false);
+      const fresh = await reload();
+      // mostra o usuário novo
+      setUserPage(Math.max(1, Math.ceil(fresh.users.length / USERS_PER_PAGE)));
     } catch {
-      setMsg("Erro ao criar usuário");
+      setCreateError("Erro ao criar usuário");
     } finally {
       setSaving(false);
     }
   };
+
+  // ─── Reset password (suporte) ────────────────────────
+  const resetPassword = async (password: string) => {
+    if (!resetTarget) return;
+    setResetting(true);
+    setResetError("");
+    try {
+      await api.post(`/admin/users/${resetTarget.id}/password`, { password });
+      setMsg(`Senha de ${resetTarget.name} alterada`);
+      setResetTarget(null);
+    } catch {
+      setResetError("Não foi possível trocar a senha. Tente novamente.");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const closeReset = useCallback(() => setResetTarget(null), []);
+
+  // fechar descarta a senha digitada
+  const closeCreate = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError("");
+    setNewUser((prev) => ({ ...prev, password: "" }));
+  }, []);
 
   // ─── Edit user ───────────────────────────────────────
   const handleEditUser = async () => {
@@ -454,15 +548,21 @@ export function TenantDetailPage() {
 
   // ─── Delete user ─────────────────────────────────────
   const handleDeleteUser = async () => {
-    if (!deleteUserTarget) return;
+    if (!deleteUserTarget || (removesWholeClient && confirmSeconds > 0)) return;
     setDeletingUser(true);
     try {
       await api.delete(`/admin/users/${deleteUserTarget.id}`);
+      if (removesWholeClient) {
+        navigate("/admin/clientes");
+        return;
+      }
       setMsg("Usuário removido");
       setDeleteUserTarget(null);
       await reload();
     } catch {
-      setMsg("Erro ao remover usuário");
+      setDeleteUserError("Não foi possível remover. Tente novamente.");
+      // nova tentativa do titular volta a esperar
+      if (removesWholeClient) setConfirmSeconds(TITULAR_REMOVAL_WAIT_SECONDS);
     } finally {
       setDeletingUser(false);
     }
@@ -478,22 +578,28 @@ export function TenantDetailPage() {
   if (!data)
     return (
       <div className="text-admin-text-faint text-sm py-12 text-center">
-        Tenant não encontrado
+        Cliente não encontrado
       </div>
     );
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "users", label: "Usuários" },
-    { key: "subscription", label: "Assinatura" },
-    { key: "config", label: "Motor ADY" },
-    { key: "metas", label: "Metas" },
-    { key: "publico", label: "Público" },
-    { key: "brandkit", label: "Dados da Marca" },
-  ];
+  const summaries = buildSectionSummaries(data, {
+    isSuperAdmin,
+    maxMembers: MAX_PARTNER_CLIENT_MEMBERS,
+    labels: { objectives: OBJECTIVES, genders: GENDERS, tones: VOICE_TONES },
+  });
+  const sectionItems: SectionItem<Tab>[] = SECTIONS.map((s) => ({ ...s, ...summaries[s.key] }));
+
+  const memberLimitReached = !isSuperAdmin && data.users.filter((u) => u.role === "member").length >= MAX_PARTNER_CLIENT_MEMBERS;
+  // página válida mesmo após remover
+  const userPages = Math.max(1, Math.ceil(data.users.length / USERS_PER_PAGE));
+  const currentUserPage = Math.min(userPage, userPages);
+  const pageUsers = data.users.slice((currentUserPage - 1) * USERS_PER_PAGE, currentUserPage * USERS_PER_PAGE);
 
   const inputCls =
     "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
   const labelCls = "block text-xs font-medium text-admin-text-muted mb-1.5";
+  const metricCls = "bg-admin-surface-2 rounded-xl p-4";
+  const hintCls = "text-xs text-admin-text-muted mb-2 leading-snug";
   const btnCls =
     "ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-6 py-2.5 flex items-center gap-2";
 
@@ -520,149 +626,74 @@ export function TenantDetailPage() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-6 bg-admin-surface rounded-xl p-1 w-full">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`ady-btn flex-1 px-4 py-2 rounded-lg text-sm font-medium text-center transition-colors ${
-              tab === t.key
-                ? "bg-admin-petrol/15 text-[#17708A] dark:text-[#1E88A8] font-semibold"
-                : "text-admin-text-muted hover:text-admin-petrol hover:bg-admin-petrol/10"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SectionNav<Tab> items={sectionItems} active={tab} onSelect={setTab} />
 
       {/* ── Users ───────────────────────────────────── */}
       {tab === "users" && (
         <div className="space-y-4">
           {data.users.length === 0 && (
             <div role="status" className="bg-admin-petrol/10 border border-admin-petrol/30 rounded-2xl px-5 py-4 text-sm text-admin-text-muted">
-              Esta conta não possui usuários ativos. Para recuperar o acesso, crie um novo usuário com perfil Owner.
+              Esta conta não possui usuários ativos. Para recuperar o acesso, crie um novo usuário com cargo Usuário Titular.
             </div>
           )}
-          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-admin-text mb-4">
-              Criar Usuário
-            </h3>
-            <div className="grid grid-cols-4 gap-3">
-              <input
-                value={newUser.name}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, name: e.target.value })
-                }
-                placeholder="Nome"
-                className={inputCls}
-              />
-              <input
-                value={newUser.email}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, email: e.target.value })
-                }
-                placeholder="Email"
-                type="email"
-                className={inputCls}
-              />
-              <input
-                value={newUser.password}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, password: e.target.value })
-                }
-                placeholder="Senha"
-                type="password"
-                className={inputCls}
-              />
-              <div className="flex gap-2">
-                <select
-                  value={newUser.role}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, role: e.target.value })
-                  }
-                  className={inputCls}
-                >
-                  <option value="member">Membro</option>
-                  {/* cargo Admin: só super_admin */}
-                  {isSuperAdmin && <option value="admin">Admin</option>}
-                  <option value="owner">Owner</option>
-                </select>
-                <button
-                  onClick={createUser}
-                  disabled={saving}
-                  className={btnCls + " px-4"}
-                >
-                  <UserPlus className="w-4 h-4" /> Criar
-                </button>
-              </div>
+          <div className="bg-admin-surface border border-admin-border rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3">
+            <div className="mr-auto">
+              <h3 className="text-sm font-semibold text-admin-text">Usuários do cliente</h3>
+              <div className="text-xs text-admin-text-muted">{data.users.length} cadastrados</div>
             </div>
+            {memberLimitReached && (
+              <div role="status" className="flex items-center gap-1.5 text-xs text-admin-text-muted bg-admin-petrol/10 rounded-full px-3 py-1.5">
+                <Info aria-hidden="true" className="w-3.5 h-3.5 text-[#17708A] dark:text-[#1E88A8]" />
+                Limite de {MAX_PARTNER_CLIENT_MEMBERS} usuários por cliente atingido.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              disabled={memberLimitReached}
+              className={btnCls + " justify-center max-sm:w-full disabled:cursor-not-allowed"}
+            >
+              <UserPlus className="w-4 h-4" /> Criar Usuário
+            </button>
           </div>
 
-          <div className="bg-admin-surface border border-admin-border rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-admin-border text-xs text-admin-text-faint uppercase">
-                  <th className="text-left px-5 py-3 font-medium">Nome</th>
-                  <th className="text-left px-5 py-3 font-medium">Email</th>
-                  <th className="text-left px-5 py-3 font-medium">Role</th>
-                  <th className="text-left px-5 py-3 font-medium">Criado em</th>
-                  <th className="text-right px-5 py-3 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.users.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-b border-admin-border/50 text-admin-text-muted"
-                  >
-                    <td className="px-5 py-3">{u.name}</td>
-                    <td className="px-5 py-3 text-admin-text-faint">{u.email}</td>
-                    <td className="px-5 py-3">
-                      <div className="inline-block text-xs px-2 py-1 rounded-full bg-spark/15 text-[#B55F02] dark:text-spark">
-                        {u.role}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-admin-text-faint">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() =>
-                            setEditUser({
-                              id: u.id,
-                              name: u.name ?? "",
-                              email: u.email,
-                              role: u.role,
-                            })
-                          }
-                          className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
-                          title="Editar usuário"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            setDeleteUserTarget({
-                              id: u.id,
-                              name: u.name ?? "sem nome",
-                            })
-                          }
-                          className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-danger hover:bg-admin-surface-2 transition-all"
-                          title="Remover usuário"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pageUsers.map((u) => (
+              <UserCard
+                key={u.id}
+                user={u}
+                onEdit={() => setEditUser({ id: u.id, name: u.name ?? "", email: u.email, role: u.role })}
+                onResetPassword={() => { setResetError(""); setResetTarget({ id: u.id, name: u.name || u.email }); }}
+                onRemove={() => setDeleteUserTarget({ id: u.id, name: u.name ?? "sem nome", role: u.role })}
+              />
+            ))}
           </div>
+
+          <UserPager total={data.users.length} page={currentUserPage} perPage={USERS_PER_PAGE} onChange={setUserPage} />
         </div>
       )}
+
+      {resetTarget && (
+        <ResetPasswordModal
+          key={resetTarget.id}
+          userName={resetTarget.name}
+          saving={resetting}
+          error={resetError}
+          onSubmit={resetPassword}
+          onClose={closeReset}
+        />
+      )}
+
+      <CreateUserModal
+        open={createOpen}
+        value={newUser}
+        onChange={setNewUser}
+        onSubmit={createUser}
+        onClose={closeCreate}
+        saving={saving}
+        error={createError}
+        isSuperAdmin={isSuperAdmin}
+      />
 
       {/* ── Edit User Modal ────────────────────────────── */}
       {editUser && (
@@ -707,21 +738,22 @@ export function TenantDetailPage() {
                   className={`${inputCls} opacity-60`}
                 />
               </div>
-              <div>
-                <label className={labelCls}>Perfil</label>
-                <select
-                  value={editUser.role}
-                  onChange={(e) =>
-                    setEditUser({ ...editUser, role: e.target.value })
-                  }
-                  disabled={!isSuperAdmin && editUser.role === "admin"}
-                  className={inputCls}
-                >
-                  <option value="member">Membro</option>
-                  {(isSuperAdmin || editUser.role === "admin") && <option value="admin">Admin</option>}
-                  <option value="owner">Owner</option>
-                </select>
-              </div>
+              {isSuperAdmin && (
+                <div>
+                  <label className={labelCls}>Cargo</label>
+                  <select
+                    value={editUser.role}
+                    onChange={(e) =>
+                      setEditUser({ ...editUser, role: e.target.value })
+                    }
+                    className={inputCls}
+                  >
+                    <option value="member">Usuário</option>
+                    <option value="admin">Administrador</option>
+                    <option value="owner">Usuário Titular</option>
+                  </select>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditUser(null)}
@@ -755,7 +787,7 @@ export function TenantDetailPage() {
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-admin-text">
-                Remover Usuário
+                {removesWholeClient ? "Remover usuário titular e cliente" : "Remover Usuário"}
               </h2>
               <button
                 onClick={() => setDeleteUserTarget(null)}
@@ -771,9 +803,18 @@ export function TenantDetailPage() {
               </strong>
               ?
             </p>
-            <p className="text-xs text-admin-text-faint mb-6">
-              O usuário perderá acesso ao sistema.
-            </p>
+            {removesWholeClient ? (
+              <div role="alert" className="text-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2.5 mb-6">
+                O usuário titular e <strong className="text-error">todos os usuários vinculados</strong> deste cliente serão removidos e perderão o acesso. A vaga será liberada e você não poderá reaver este cliente.
+              </div>
+            ) : (
+              <p className="text-xs text-admin-text-faint mb-6">
+                O usuário perderá acesso ao sistema.
+              </p>
+            )}
+            {deleteUserError && (
+              <div className="text-sm text-error mb-4">{deleteUserError}</div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteUserTarget(null)}
@@ -783,14 +824,16 @@ export function TenantDetailPage() {
               </button>
               <button
                 onClick={handleDeleteUser}
-                disabled={deletingUser}
+                disabled={deletingUser || (removesWholeClient && confirmSeconds > 0)}
                 className="ady-btn flex-1 bg-[#E5534B] hover:bg-[#E5534B]/90 disabled:opacity-50 text-white py-2.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
               >
                 {deletingUser ? (
                   "Removendo..."
+                ) : removesWholeClient && confirmSeconds > 0 ? (
+                  `Aguarde ${confirmSeconds}s`
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4" /> Sim, remover
+                    <Trash2 className="w-4 h-4" /> {removesWholeClient ? "Sim, remover tudo" : "Sim, remover"}
                   </>
                 )}
               </button>
@@ -807,41 +850,54 @@ export function TenantDetailPage() {
             const creativesLimit = subscription?.plan?.limits?.creativesPerMonth ?? null;
             const hasLimitedQuota = subscription !== null && subscription !== undefined && creativesLimit !== null;
 
+            const remaining = subscription?.creativesRemaining ?? 0;
+            const pct = hasLimitedQuota && creativesLimit ? Math.min(100, Math.max(0, (remaining / creativesLimit) * 100)) : 0;
+
             return (
-              <section className="bg-admin-surface border border-admin-border rounded-2xl p-5" aria-labelledby="image-credits-title">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 id="image-credits-title" className="text-sm font-semibold text-admin-text">Créditos de imagem</h3>
-                    {!subscription ? (
-                      <p className="mt-1 text-sm text-admin-text-faint">Configure uma assinatura para liberar créditos.</p>
-                    ) : hasLimitedQuota ? (
-                      <p className="mt-1 text-sm text-admin-text-muted">
-                        <strong className="block font-semibold text-admin-text">{subscription.creativesRemaining ?? 0} de {creativesLimit} disponíveis</strong>
-                        <small className="block mt-0.5 text-xs text-admin-text-faint">A renovação restaura o saldo ao limite mensal do plano.</small>
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-sm font-semibold text-admin-text">Créditos ilimitados</p>
-                    )}
-                  </div>
-                  {hasLimitedQuota && (
-                    <button
-                      onClick={renewCreativeQuota}
-                      disabled={renewingQuota}
-                      className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors shrink-0 px-4 py-2.5"
+              <FormSection
+                icon={ImageIcon}
+                title="Créditos de imagem"
+                titleId="image-credits-title"
+                right={hasLimitedQuota ? (
+                  <button
+                    onClick={renewCreativeQuota}
+                    disabled={renewingQuota}
+                    className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors shrink-0 px-4 py-2.5 flex items-center gap-2"
+                  >
+                    <RotateCw className="w-4 h-4" /> {renewingQuota ? "Renovando..." : "Renovar cota"}
+                  </button>
+                ) : undefined}
+              >
+                {!subscription ? (
+                  <p className="text-sm text-admin-text-faint">Configure uma assinatura para liberar créditos.</p>
+                ) : hasLimitedQuota ? (
+                  <div className="space-y-2">
+                    <div className="text-xl font-bold text-admin-text tabular-nums">{remaining} de {creativesLimit} disponíveis</div>
+                    <div
+                      role="progressbar"
+                      aria-label="Créditos disponíveis"
+                      aria-valuenow={remaining}
+                      aria-valuemin={0}
+                      aria-valuemax={creativesLimit ?? 0}
+                      className="h-2 rounded-full bg-admin-surface-2 overflow-hidden"
                     >
-                      {renewingQuota ? "Renovando..." : "Renovar cota"}
-                    </button>
-                  )}
-                </div>
-              </section>
+                      <div className="h-full rounded-full bg-admin-petrol" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="text-xs text-admin-text-faint">A renovação restaura o saldo ao limite mensal do plano.</div>
+                  </div>
+                ) : (
+                  <div className="text-sm font-semibold text-admin-text">Créditos ilimitados</div>
+                )}
+              </FormSection>
             );
           })()}
 
-        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <FormSection icon={CreditCard} title="Assinatura">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Plano</label>
+              <FieldLabel icon={Package} htmlFor="sub-plan">Plano</FieldLabel>
               <select
+                id="sub-plan"
                 value={subForm.planId}
                 onChange={(e) =>
                   setSubForm({ ...subForm, planId: e.target.value })
@@ -857,8 +913,9 @@ export function TenantDetailPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Status</label>
+              <FieldLabel icon={BadgeCheck} htmlFor="sub-status">Status</FieldLabel>
               <select
+                id="sub-status"
                 value={subForm.status}
                 onChange={(e) =>
                   setSubForm({ ...subForm, status: e.target.value })
@@ -871,8 +928,9 @@ export function TenantDetailPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Fim do Trial</label>
+              <FieldLabel icon={Hourglass} htmlFor="sub-trial">Fim do Trial</FieldLabel>
               <input
+                id="sub-trial"
                 type="datetime-local"
                 value={subForm.trialEndsAt}
                 onChange={(e) =>
@@ -882,8 +940,9 @@ export function TenantDetailPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Fim do Período Atual</label>
+              <FieldLabel icon={CalendarClock} htmlFor="sub-period-end">Fim do Período Atual</FieldLabel>
               <input
+                id="sub-period-end"
                 type="datetime-local"
                 value={subForm.currentPeriodEnd}
                 onChange={(e) =>
@@ -904,7 +963,7 @@ export function TenantDetailPage() {
             />
             Plano não expirável (ignora vencimento)
           </label>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button onClick={saveSub} disabled={saving} className={btnCls}>
               <Save className="w-4 h-4" /> Salvar
             </button>
@@ -922,31 +981,29 @@ export function TenantDetailPage() {
                   planId: prev.planId || cheapestPlanId || prev.planId,
                 }));
               }}
-              className="ady-btn bg-success hover:bg-success/90 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition-colors"
+              className="ady-btn bg-success hover:bg-success/90 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition-colors flex items-center gap-2"
             >
-              Ativar (30 dias)
+              <Zap className="w-4 h-4" /> Ativar (30 dias)
             </button>
           </div>
-        </div>
+        </FormSection>
         </div>
       )}
 
-      {/* ── Motor ADY (Benchmarks) ─────────────────── */}
+      {/* ── Metas (benchmarks do score) ─────────────── */}
       {tab === "config" && (
-        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-admin-text mb-1">
-              Benchmarks de Performance
-            </h3>
-            <p className="text-xs text-admin-text-faint mb-4">
-              Defina as metas que o ady usa para calcular o score de cada
-              campanha.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Meta de ROAS (x)</label>
+        <FormSection
+          icon={Target}
+          title="Metas de performance"
+          description="Os números que o ady usa como referência para dar nota a cada campanha do cliente."
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className={metricCls}>
+              <FieldLabel icon={TrendingUp} htmlFor="cfg-roas">Meta de ROAS (x)</FieldLabel>
+              <div id="cfg-roas-hint" className={hintCls}>Quanto a campanha deve vender para cada R$ 1 investido. Ex.: 4 = R$ 4 em vendas por R$ 1.</div>
               <input
+                id="cfg-roas"
+                aria-describedby="cfg-roas-hint"
                 type="number"
                 step="0.1"
                 value={configForm.targetRoas}
@@ -956,9 +1013,12 @@ export function TenantDetailPage() {
                 className={inputCls}
               />
             </div>
-            <div>
-              <label className={labelCls}>Meta de CPA (R$)</label>
+            <div className={metricCls}>
+              <FieldLabel icon={Receipt} htmlFor="cfg-cpa">Meta de CPA (R$)</FieldLabel>
+              <div id="cfg-cpa-hint" className={hintCls}>Quanto vale pagar, no máximo, por cada venda ou contato conquistado.</div>
               <input
+                id="cfg-cpa"
+                aria-describedby="cfg-cpa-hint"
                 type="number"
                 step="0.01"
                 value={configForm.targetCpa}
@@ -968,9 +1028,12 @@ export function TenantDetailPage() {
                 className={inputCls}
               />
             </div>
-            <div>
-              <label className={labelCls}>Meta de CTR (%)</label>
+            <div className={metricCls}>
+              <FieldLabel icon={MousePointerClick} htmlFor="cfg-ctr">Meta de CTR (%)</FieldLabel>
+              <div id="cfg-ctr-hint" className={hintCls}>De cada 100 pessoas que veem o anúncio, quantas devem clicar.</div>
               <input
+                id="cfg-ctr"
+                aria-describedby="cfg-ctr-hint"
                 type="number"
                 step="0.01"
                 value={configForm.targetCtr}
@@ -980,9 +1043,12 @@ export function TenantDetailPage() {
                 className={inputCls}
               />
             </div>
-            <div>
-              <label className={labelCls}>Utilização de Budget (%)</label>
+            <div className={metricCls}>
+              <FieldLabel icon={Wallet} htmlFor="cfg-budget">Utilização de Budget (%)</FieldLabel>
+              <div id="cfg-budget-hint" className={hintCls}>Quanto do orçamento da campanha deve ser gasto no período. Ex.: 80 = gastar 80% do previsto.</div>
               <input
+                id="cfg-budget"
+                aria-describedby="cfg-budget-hint"
                 type="number"
                 value={configForm.targetBudgetUtilization}
                 onChange={(e) =>
@@ -998,24 +1064,21 @@ export function TenantDetailPage() {
           <button onClick={saveConfig} disabled={saving} className={btnCls}>
             <Save className="w-4 h-4" /> Salvar
           </button>
-        </div>
+        </FormSection>
       )}
 
       {/* ── Metas ───────────────────────────────────── */}
       {tab === "metas" && (
-        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-admin-text mb-1">
-              Metas do Cliente
-            </h3>
-            <p className="text-xs text-admin-text-faint mb-4">
-              Objetivos e orçamento que a IA usa para otimizar campanhas.
-            </p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className={labelCls}>Objetivo da campanha</label>
+        <FormSection
+          icon={Flag}
+          title="Objetivo do Cliente"
+          description="Objetivos e orçamento que a IA usa para otimizar campanhas."
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <FieldLabel icon={Flag} htmlFor="goals-objective">Objetivo da campanha</FieldLabel>
               <select
+                id="goals-objective"
                 value={goalsForm.objective}
                 onChange={(e) =>
                   setGoalsForm({ ...goalsForm, objective: e.target.value })
@@ -1031,8 +1094,9 @@ export function TenantDetailPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Nicho do negócio</label>
+              <FieldLabel icon={Tag} htmlFor="goals-niche">Nicho do negócio</FieldLabel>
               <input
+                id="goals-niche"
                 value={goalsForm.niche}
                 onChange={(e) =>
                   setGoalsForm({ ...goalsForm, niche: e.target.value })
@@ -1042,8 +1106,9 @@ export function TenantDetailPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Produto ou serviço principal</label>
+              <FieldLabel icon={ShoppingBag} htmlFor="goals-product">Produto ou serviço principal</FieldLabel>
               <input
+                id="goals-product"
                 value={goalsForm.mainProduct}
                 onChange={(e) =>
                   setGoalsForm({ ...goalsForm, mainProduct: e.target.value })
@@ -1052,10 +1117,10 @@ export function TenantDetailPage() {
                 className={inputCls}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Orçamento mensal (R$)</label>
+                <FieldLabel icon={Wallet} htmlFor="goals-budget">Orçamento mensal (R$)</FieldLabel>
                 <input
+                  id="goals-budget"
                   type="number"
                   min={300}
                   step={50}
@@ -1070,8 +1135,9 @@ export function TenantDetailPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>CPA alvo (R$)</label>
+                <FieldLabel icon={Receipt} htmlFor="goals-cpa">CPA alvo (R$)</FieldLabel>
                 <input
+                  id="goals-cpa"
                   type="number"
                   min={1}
                   step={1}
@@ -1082,29 +1148,25 @@ export function TenantDetailPage() {
                   className={inputCls}
                 />
               </div>
-            </div>
           </div>
           <button onClick={saveGoals} disabled={saving} className={btnCls}>
             <Save className="w-4 h-4" /> Salvar Metas
           </button>
-        </div>
+        </FormSection>
       )}
 
       {/* ── Público ──────────────────────────────────── */}
       {tab === "publico" && (
-        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-admin-text mb-1">
-              Público Padrão
-            </h3>
-            <p className="text-xs text-admin-text-faint mb-4">
-              Dados usados como padrão ao criar novas campanhas.
-            </p>
-          </div>
+        <FormSection
+          icon={UserRoundSearch}
+          title="Público Padrão"
+          description="Dados usados como padrão ao criar novas campanhas."
+        >
           <div className="space-y-4">
             <div>
-              <label className={labelCls}>Descrição do Público</label>
+              <FieldLabel icon={FileText} htmlFor="audience-context">Descrição do Público</FieldLabel>
               <textarea
+                id="audience-context"
                 value={businessContext}
                 onChange={(e) => setBusinessContext(e.target.value)}
                 placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do ady ao gerar criativos."
@@ -1124,10 +1186,12 @@ export function TenantDetailPage() {
               admin
               tenantId={id}
             />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Faixa etária</label>
+              <FieldLabel icon={Cake} htmlFor="audience-age-min">Faixa etária</FieldLabel>
               <div className="flex items-center gap-3">
                 <select
+                  id="audience-age-min"
                   value={audienceForm.ageMin}
                   onChange={(e) => {
                     const v = Number(e.target.value);
@@ -1147,6 +1211,7 @@ export function TenantDetailPage() {
                 </select>
                 <span className="text-admin-text-faint text-sm">até</span>
                 <select
+                  aria-label="Idade máxima"
                   value={audienceForm.ageMax}
                   onChange={(e) =>
                     setAudienceForm({
@@ -1167,7 +1232,7 @@ export function TenantDetailPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Gênero</label>
+              <FieldLabel icon={VenusAndMars}>Gênero</FieldLabel>
               <div className="grid grid-cols-3 gap-2">
                 {GENDERS.map((g) => (
                   <button
@@ -1187,21 +1252,19 @@ export function TenantDetailPage() {
                 ))}
               </div>
             </div>
+            </div>
           </div>
           <button onClick={saveAudience} disabled={saving} className={btnCls}>
             <Save className="w-4 h-4" /> Salvar Público
           </button>
-        </div>
+        </FormSection>
       )}
 
       {/* ── Brand Kit ────────────────────────────────── */}
       {tab === "brandkit" && (
-        <div className="space-y-6">
-          {/* Logo */}
-          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-admin-text mb-4">
-              Logo da Marca
-            </h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormSection icon={ImageIcon} title="Logo da Marca">
             <input
               ref={logoInputRef}
               type="file"
@@ -1245,13 +1308,9 @@ export function TenantDetailPage() {
                 </p>
               </div>
             )}
-          </div>
+          </FormSection>
 
-          {/* Cores */}
-          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-admin-text mb-4">
-              Paleta de Cores
-            </h3>
+          <FormSection icon={Palette} title="Paleta de Cores">
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <label className={labelCls}>Cor Principal</label>
@@ -1292,14 +1351,12 @@ export function TenantDetailPage() {
                 </div>
               </div>
             </div>
+          </FormSection>
           </div>
 
-          {/* Tom de Voz */}
-          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-admin-text mb-4">
-              Tom de Voz
-            </h3>
+          <FormSection icon={MessageCircle} title="Tom de Voz">
             <select
+              aria-label="Tom de Voz"
               value={brandForm.voiceTone}
               onChange={(e) =>
                 setBrandForm({ ...brandForm, voiceTone: e.target.value })
@@ -1313,18 +1370,13 @@ export function TenantDetailPage() {
                 </option>
               ))}
             </select>
-          </div>
+          </FormSection>
 
-          {/* Fotos */}
-          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-admin-text">
-                Biblioteca de Fotos
-              </h3>
-              <span className="text-xs text-admin-text-faint">
-                {photoUrls.length}/20 fotos
-              </span>
-            </div>
+          <FormSection
+            icon={Images}
+            title="Biblioteca de Fotos"
+            right={<span className="text-xs text-admin-text-faint shrink-0">{photoUrls.length}/20 fotos</span>}
+          >
             <input
               ref={photosInputRef}
               type="file"
@@ -1363,7 +1415,7 @@ export function TenantDetailPage() {
                 </div>
               )}
             </div>
-          </div>
+          </FormSection>
 
           <button
             onClick={saveBrandKit}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import app from '../index.js';
 import { db } from '@fury/db';
 import * as schema from '@fury/db';
@@ -69,6 +69,7 @@ describe('Escopo do parceiro no admin — integração', () => {
   });
 
   afterAll(async () => {
+    await db.delete(schema.adyRbacAuditLog).where(inArray(schema.adyRbacAuditLog.entityKey, [userA, userB]));
     await db.delete(schema.tenants).where(inArray(schema.tenants.id, tenantIds));
     await db.delete(schema.adyPartners).where(inArray(schema.adyPartners.id, partnerIds));
     await rbacService.bumpVersion();
@@ -178,6 +179,94 @@ describe('Escopo do parceiro no admin — integração', () => {
     expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ name: 'Novo', role: 'admin' })).status).toBe(200);
   });
 
+  it('parceiro só cria Membro, até 2 por cliente, e não troca cargo', async () => {
+    const c = await register('cli-limite');
+    await db.update(schema.tenants).set({ partnerId: partnerA }).where(eq(schema.tenants.id, c.user.tenantId));
+    const add = (tag: string, role?: string, as = asPartner) => request(app).post('/api/admin/users').set(as())
+      .send({ tenantId: c.user.tenantId, name: tag, email: `ps-lim-${tag}-${id}@test.com`, password, ...(role ? { role } : {}) });
+
+    expect((await add('owner', 'owner')).status).toBe(403);
+    expect((await add('adm', 'admin')).status).toBe(403);
+
+    // simultâneas: só 2 passam
+    const all = await Promise.all(['a', 'b', 'c', 'd'].map((t) => add(t)));
+    expect(all.map((r) => r.status).sort()).toEqual([201, 201, 409, 409]);
+    expect(all.find((r) => r.status === 409)?.body.error.code).toBe('MEMBER_LIMIT');
+    const created = all.find((r) => r.status === 201)!.body.data;
+    expect(created.role).toBe('member');
+
+    const url = `/api/admin/users/${created.id}`;
+    expect((await request(app).patch(url).set(asPartner()).send({ role: 'owner' })).status).toBe(403);
+    expect((await request(app).patch(`/api/admin/users/${c.user.id}`).set(asPartner()).send({ role: 'member' })).status).toBe(403);
+    // mesmo cargo: editar o nome continua liberado
+    expect((await request(app).patch(url).set(asPartner()).send({ name: 'Novo', role: 'member' })).status).toBe(200);
+
+    // removeu um: libera a vaga; super não tem limite
+    expect((await request(app).delete(url).set(asPartner())).status).toBe(200);
+    expect((await add('e')).status).toBe(201);
+    expect((await add('f')).status).toBe(409);
+    expect((await add('g', 'member', asSuper)).status).toBe(201);
+  });
+
+  it('remover o titular: sai o cliente inteiro, libera a vaga e o parceiro não reavê', async () => {
+    const c = await register('cli-titular');
+    const tenantId = c.user.tenantId;
+    await db.update(schema.tenants).set({ partnerId: partnerA }).where(eq(schema.tenants.id, tenantId));
+    await db.update(schema.subscriptions).set({ status: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) }).where(eq(schema.subscriptions.tenantId, tenantId));
+    const member = await request(app).post('/api/admin/users').set(asPartner())
+      .send({ tenantId, name: 'M', email: `ps-tit-m-${id}@test.com`, password });
+    expect(member.status).toBe(201);
+
+    const res = await request(app).delete(`/api/admin/users/${c.user.id}`).set(asPartner());
+    expect(res.status).toBe(200);
+    expect(res.body.data.tenantRemoved).toBe(true);
+
+    const [tenant] = await db.select().from(schema.tenants).where(eq(schema.tenants.id, tenantId));
+    expect(tenant?.deletedAt).not.toBeNull();
+    // cliente some do parceiro; titular e membro perdem o acesso
+    expect((await request(app).get(`/api/admin/tenants/${tenantId}`).set(asPartner())).status).toBe(404);
+    expect((await request(app).post('/api/auth/login').send({ email: `ps-tit-m-${id}@test.com`, password })).status).toBe(401);
+    expect((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${c.token}`)).status).toBe(401);
+    expect((await request(app).post(`/api/admin/deleted-tenants/${tenantId}/restore`).set(asPartner())).status).toBe(403);
+
+    // remover membro segue só removendo ele
+    const other = await request(app).post('/api/admin/users').set(asPartner())
+      .send({ tenantId: clientA, name: 'M2', email: `ps-tit-m2-${id}@test.com`, password });
+    expect((await request(app).delete(`/api/admin/users/${other.body.data.id}`).set(asPartner())).body.data).toBeNull();
+    const [a] = await db.select().from(schema.tenants).where(eq(schema.tenants.id, clientA));
+    expect(a?.deletedAt).toBeNull();
+  });
+
+  it('integrações: membro só usa; titular passa da checagem', async () => {
+    const owner = await register('cli-integ');
+    await db.update(schema.tenants).set({ partnerId: partnerA }).where(eq(schema.tenants.id, owner.user.tenantId));
+    const email = `ps-integ-m-${id}@test.com`;
+    expect((await request(app).post('/api/admin/users').set(asPartner()).send({ tenantId: owner.user.tenantId, name: 'M', email, password })).status).toBe(201);
+    const login = await request(app).post('/api/auth/login').send({ email, password });
+    const member = { Authorization: `Bearer ${login.body.data.token}` };
+    const fake = '00000000-0000-4000-8000-000000000000';
+
+    const blocked = [
+      request(app).get('/api/meta/auth/url').set(member),
+      request(app).post('/api/meta/save-selection').set(member).send({}),
+      request(app).patch(`/api/meta/connections/${fake}/select-account`).set(member).send({}),
+      request(app).delete(`/api/meta/connections/${fake}`).set(member),
+      request(app).get('/api/google/auth/url').set(member),
+      request(app).delete(`/api/google/connections/${fake}`).set(member),
+      request(app).put('/api/google/settings').set(member).send({}),
+      request(app).post('/api/google/profiles').set(member).send({}),
+    ];
+    for (const res of await Promise.all(blocked)) {
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('INTEGRATION_OWNER_ONLY');
+    }
+    // membro continua lendo a conexão do titular
+    expect((await request(app).get('/api/meta/connections').set(member)).status).toBe(200);
+    // titular não é barrado por esta regra
+    const asOwner = await request(app).delete(`/api/meta/connections/${fake}`).set('Authorization', `Bearer ${owner.token}`);
+    expect(asOwner.body.error?.code).not.toBe('INTEGRATION_OWNER_ONLY');
+  });
+
   it('e-mail não é editável, nem pelo super_admin', async () => {
     for (const as of [asPartner, asSuper]) {
       const res = await request(app).patch(`/api/admin/users/${userA}`).set(as()).send({ email: `ps-novo-${id}@test.com` });
@@ -209,6 +298,44 @@ describe('Escopo do parceiro no admin — integração', () => {
       request(app).get('/api/admin/healthchecks/users'),
     ];
     for (const call of calls) expect((await call.set(asPartner())).status).toBe(403);
+  });
+
+  it('troca de senha pelo suporte: só no escopo, senha forte e derruba as sessões', async () => {
+    const [a] = await db.select().from(schema.users).where(eq(schema.users.id, userA));
+    const login = (pw: string) => request(app).post('/api/auth/login').send({ email: a!.email, password: pw });
+    const before = await login(password);
+    expect(before.status).toBe(200);
+    const oldRefresh = before.body.data.refreshToken as string;
+    const newPassword = 'NovaSenha#2026';
+
+    expect((await request(app).post(`/api/admin/users/${userB}/password`).set(asPartner()).send({ password: newPassword })).status).toBe(404);
+    expect((await request(app).post(`/api/admin/users/${userA}/password`).set(asPartner()).send({ password: 'fraca' })).status).toBe(400);
+    expect((await request(app).post(`/api/admin/users/${userA}/password`).send({ password: newPassword })).status).toBe(401);
+
+    const res = await request(app).post(`/api/admin/users/${userA}/password`).set(asPartner()).send({ password: newPassword });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(newPassword);
+
+    // antes de logar de novo: token do mesmo segundo sairia igual
+    expect(oldRefresh).toBeTruthy();
+    expect((await request(app).post('/api/auth/refresh').send({ refreshToken: oldRefresh })).status).toBe(401);
+    expect((await login(password)).status).toBe(401);
+    expect((await login(newPassword)).status).toBe(200);
+
+    // super também alcança cliente de outro parceiro
+    expect((await request(app).post(`/api/admin/users/${userB}/password`).set(asSuper()).send({ password: newPassword })).status).toBe(200);
+
+    // histórico: quem trocou, de quem e quando; tentativas recusadas não entram
+    const [partnerUser] = await db.select().from(schema.users).where(eq(schema.users.partnerId, partnerA));
+    const logs = await db.select().from(schema.adyRbacAuditLog)
+      .where(and(eq(schema.adyRbacAuditLog.action, 'user_password_reset'), inArray(schema.adyRbacAuditLog.entityKey, [userA, userB])));
+    expect(logs).toHaveLength(2);
+    const byPartner = logs.find((l) => l.entityKey === userA)!;
+    expect(byPartner).toMatchObject({ actorUserId: partnerUser!.id, entityType: 'user', partnerId: partnerA });
+    expect(byPartner.details).toEqual({ tenantId: clientA, email: a!.email, byPartner: true });
+    expect(byPartner.createdAt).toBeInstanceOf(Date);
+    expect((logs.find((l) => l.entityKey === userB)!.details as { byPartner: boolean }).byPartner).toBe(false);
+    expect(JSON.stringify(logs)).not.toContain(newPassword);
   });
 
   it('parceiro exclui (soft) o próprio cliente', async () => {
@@ -251,6 +378,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'POST /plans',
       'POST /tenants/:tenantId/reset-quota',
       'POST /users',
+      'POST /users/:id/password',
       'PUT /my-partner/ai-key',
       'PUT /tenants/:tenantId/goals',
     ]);

@@ -1,25 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, CirclePlus } from 'lucide-react';
 import api from '@/lib/api';
-
-interface PlanLimits {
-  creativesPerMonth: number | null;
-  modificationsPerCreative: number | null;
-  // vídeo: chave ausente vale 0 (vídeo desligado no plano)
-  videosPerMonth?: number | null;
-  modificationsPerVideo?: number | null;
-}
-
-const INPUT_CLASS = 'w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint';
-const EMPTY_LIMITS: PlanLimits = { creativesPerMonth: null, modificationsPerCreative: null, videosPerMonth: 0, modificationsPerVideo: 0 };
-
-function parseLimit(raw: string): number | null {
-  return raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
-}
-
-function videoLimit(v: number | null | undefined): number | '' {
-  return v === undefined ? 0 : v ?? '';
-}
+import { PlanCard } from './plans/PlanCard';
+import { PlanFormModal } from './plans/PlanFormModal';
+import { EMPTY_LIMITS, normalizeLimits, planChanges, type PlanDraft, type PlanLimits } from './plans/planForm';
 
 interface Plan {
   id: string;
@@ -32,20 +16,21 @@ interface Plan {
   subscriberCount: number;
 }
 
+type FormState = { mode: 'new' } | { mode: 'edit'; plan: Plan };
+
+const NEW_PLAN: PlanDraft = { name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS };
+
+function toDraft(plan: Plan): PlanDraft {
+  return { name: plan.name, priceCents: plan.priceCents, interval: plan.interval, isActive: plan.isActive, limits: normalizeLimits(plan.limits) };
+}
+
 export function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [newPlan, setNewPlan] = useState({
-    name: '',
-    priceCents: 0,
-    interval: 'monthly',
-    isActive: true,
-    limits: EMPTY_LIMITS,
-  });
-  const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
+  const [form, setForm] = useState<FormState | null>(null);
+  const [formError, setFormError] = useState('');
 
   const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
   const [migrateTo, setMigrateTo] = useState('');
@@ -53,54 +38,43 @@ export function PlansPage() {
   useEffect(() => {
     api.get('/admin/plans').then((r) => {
       setPlans(r.data.data);
-      const eds: Record<string, Partial<Plan>> = {};
-      for (const p of r.data.data) {
-        eds[p.id] = {};
-      }
-      setEditing(eds);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const createPlan = async () => {
-    if (!newPlan.name || newPlan.priceCents <= 0) return;
+  const reloadPlans = async () => {
+    const r = await api.get('/admin/plans');
+    setPlans(r.data.data);
+  };
+
+  const closeForm = useCallback(() => { setForm(null); setFormError(''); }, []);
+  // abre sempre sem erro antigo
+  const openForm = (next: FormState) => { setFormError(''); setForm(next); };
+
+  const createPlan = async (draft: PlanDraft) => {
     setSaving(true);
+    setFormError('');
     try {
-      await api.post('/admin/plans', { ...newPlan, priceCents: Math.round(newPlan.priceCents * 100) });
+      await api.post('/admin/plans', draft);
       setMsg('Plano criado');
-      setShowNew(false);
-      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS });
-      const r = await api.get('/admin/plans');
-      setPlans(r.data.data);
-    } catch { setMsg('Erro ao criar'); }
+      setForm(null);
+      await reloadPlans();
+    } catch { setFormError('Erro ao criar'); }
     finally { setSaving(false); }
   };
 
-  const savePlan = async (planId: string) => {
-    const updates = editing[planId];
-    const keys = Object.keys(updates);
-    if (keys.length === 0) return;
+  const savePlan = async (plan: Plan, draft: PlanDraft) => {
+    // só os campos alterados
+    const updates = planChanges(toDraft(plan), draft);
+    if (Object.keys(updates).length === 0) return;
     setSaving(true);
+    setFormError('');
     try {
-      await api.patch(`/admin/plans/${planId}`, updates);
+      await api.patch(`/admin/plans/${plan.id}`, updates);
       setMsg('Plano atualizado');
-      setEditing({ ...editing, [planId]: {} });
-      const r = await api.get('/admin/plans');
-      setPlans(r.data.data);
-    } catch { setMsg('Erro ao salvar'); }
+      setForm(null);
+      await reloadPlans();
+    } catch { setFormError('Erro ao salvar'); }
     finally { setSaving(false); }
-  };
-
-  const setEdit = (planId: string, field: string, value: unknown) => {
-    setEditing((prev) => ({
-      ...prev,
-      [planId]: { ...(prev[planId] || {}), [field]: value },
-    }));
-  };
-
-  const setLimitEdit = (plan: Plan, field: keyof PlanLimits, raw: string) => {
-    const value = parseLimit(raw);
-    const base = editing[plan.id]?.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
-    setEdit(plan.id, 'limits', { ...base, [field]: value });
   };
 
   const handleDeleteClick = (plan: Plan) => {
@@ -112,12 +86,11 @@ export function PlansPage() {
     if (!deleteTarget) return;
     setSaving(true);
     try {
-      const params = withMigration && migrateTo ? `?migrateTo=${migrateTo}` : '';
+      const params = withMigration && migrateTo ? `?migrateTo=${encodeURIComponent(migrateTo)}` : '';
       await api.delete(`/admin/plans/${deleteTarget.id}${params}`);
       setMsg(withMigration ? 'Assinantes migrados e plano deletado' : 'Plano deletado');
       setDeleteTarget(null);
-      const r = await api.get('/admin/plans');
-      setPlans(r.data.data);
+      await reloadPlans();
     } catch (err: unknown) {
       const data = (err as { response?: { data?: { error?: { code?: string; message?: string; details?: { subscriberCount?: number } } } } })?.response?.data;
       if (data?.error?.code === 'PLAN_HAS_SUBSCRIBERS') {
@@ -137,7 +110,7 @@ export function PlansPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div style={{
             width: 38, height: 38, borderRadius: 10,
@@ -155,7 +128,7 @@ export function PlansPage() {
             <span className="text-sm text-text-tertiary">{plans.length} planos cadastrados</span>
           </div>
         </div>
-        <button onClick={() => setShowNew(!showNew)}
+        <button onClick={() => openForm({ mode: 'new' })}
           className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2">
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Plano
         </button>
@@ -167,151 +140,40 @@ export function PlansPage() {
         </div>
       )}
 
-      {showNew && (
-        <div className="mb-4 bg-surface border border-border rounded-2xl p-5 space-y-3">
-          <div className="grid grid-cols-5 gap-3">
-            <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-              placeholder="Nome do plano" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-            <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
-              placeholder="Preço (R$)" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-            <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
-              className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
-              <option value="monthly">Mensal</option>
-              <option value="yearly">Anual</option>
-            </select>
-            <button onClick={createPlan} disabled={saving}
-              className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors">
-              Criar
-            </button>
-            <button onClick={() => setShowNew(false)}
-              className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors">
-              Cancelar
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
-              <input type="number" min={0} value={newPlan.limits.creativesPerMonth ?? ''}
-                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, creativesPerMonth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-            </div>
-            <div>
-              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
-              <input type="number" min={0} value={newPlan.limits.modificationsPerCreative ?? ''}
-                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-            </div>
-            <div>
-              <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
-              <input type="number" min={0} value={videoLimit(newPlan.limits.videosPerMonth)}
-                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, videosPerMonth: parseLimit(e.target.value) } })}
-                placeholder="Sem limite" className={INPUT_CLASS} />
-            </div>
-            <div>
-              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
-              <input type="number" min={0} value={videoLimit(newPlan.limits.modificationsPerVideo)}
-                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerVideo: parseLimit(e.target.value) } })}
-                placeholder="Sem limite" className={INPUT_CLASS} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {plans.map((plan) => {
-          const edit = editing[plan.id] || {};
-          const hasChanges = Object.keys(edit).length > 0;
-          const effectiveLimits = edit.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
-          return (
-            <div key={plan.id} className="bg-surface border border-border rounded-2xl p-5 space-y-3 hover:border-brand/30 transition-colors">
-              <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mb-3 ${
-                plan.name.toUpperCase() === 'STARTER'
-                  ? 'bg-surface-secondary text-text-secondary'
-                  : plan.name.toUpperCase() === 'PRO'
-                    ? 'bg-brand/15 text-[#17708A] dark:text-[#1E88A8]'
-                    : plan.name.toUpperCase() === 'ENTERPRISE'
-                      ? 'bg-spark/15 text-[#B55F02] dark:text-spark'
-                      : 'bg-surface-secondary text-text-secondary'
-              }`}>
-                {plan.name.toUpperCase() === 'STARTER' ? 'BÁSICO' : plan.name.toUpperCase() === 'PRO' ? 'INTERMEDIÁRIO' : plan.name.toUpperCase() === 'ENTERPRISE' ? 'EMPRESARIAL' : plan.name}
-              </div>
-              <div className="grid grid-cols-5 gap-3 items-end">
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Nome</label>
-                  <input value={edit.name ?? plan.name} onChange={(e) => setEdit(plan.id, 'name', e.target.value)}
-                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Preço</label>
-                  <input type="number" step="0.01" value={edit.priceCents !== undefined ? edit.priceCents / 100 : (plan.priceCents / 100)}
-                    onChange={(e) => setEdit(plan.id, 'priceCents', Math.round(parseFloat(e.target.value || '0') * 100))}
-                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Intervalo</label>
-                  <select value={edit.interval ?? plan.interval} onChange={(e) => setEdit(plan.id, 'interval', e.target.value)}
-                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
-                    <option value="monthly">Mensal</option>
-                    <option value="yearly">Anual</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Ativo</label>
-                  <select value={String(edit.isActive ?? plan.isActive)} onChange={(e) => setEdit(plan.id, 'isActive', e.target.value === 'true')}
-                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
-                    <option value="true">Sim</option>
-                    <option value="false">Não</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
-                    className="ady-btn bg-brand/10 hover:bg-brand/20 border border-brand/20 text-[#17708A] dark:text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-sm font-semibold transition-colors px-4 py-2.5 flex items-center justify-center gap-2">
-                    <Save className="w-4 h-4" /> Salvar
-                  </button>
-                  <button onClick={() => handleDeleteClick(plan)} disabled={saving}
-                    className="ady-btn bg-error/15 hover:bg-error/25 disabled:opacity-30 text-error px-3 py-2.5 rounded-full text-sm transition-colors"
-                    title="Deletar plano">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
-                  <input type="number" min={0} value={effectiveLimits.creativesPerMonth ?? ''}
-                    onChange={(e) => setLimitEdit(plan, 'creativesPerMonth', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
-                  <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
-                    onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
-                  <input type="number" min={0} value={videoLimit(effectiveLimits.videosPerMonth)}
-                    onChange={(e) => setLimitEdit(plan, 'videosPerMonth', e.target.value)}
-                    placeholder="Sem limite" className={INPUT_CLASS} />
-                </div>
-                <div>
-                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
-                  <input type="number" min={0} value={videoLimit(effectiveLimits.modificationsPerVideo)}
-                    onChange={(e) => setLimitEdit(plan, 'modificationsPerVideo', e.target.value)}
-                    placeholder="Sem limite" className={INPUT_CLASS} />
-                </div>
-              </div>
-              <div className="text-xs text-text-tertiary">
-                ID: {plan.id} · Features: {Object.keys(plan.features).length}
-                {' · '}
-                <strong className={`font-normal ${plan.subscriberCount > 0 ? 'text-[#B55F02] dark:text-spark' : 'text-text-tertiary'}`}>
-                  {plan.subscriberCount} assinante{plan.subscriberCount !== 1 ? 's' : ''}
-                </strong>
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {plans.map((plan) => (
+          <PlanCard
+            key={plan.id}
+            plan={toDraft(plan)}
+            subscriberCount={plan.subscriberCount}
+            disabled={saving}
+            onEdit={() => openForm({ mode: 'edit', plan })}
+            onDelete={() => handleDeleteClick(plan)}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => openForm({ mode: 'new' })}
+          aria-label="Novo Plano (card)"
+          className="ady-btn min-h-56 rounded-2xl border-2 border-dashed border-admin-border text-admin-text-muted hover:border-admin-petrol hover:text-admin-petrol transition-colors flex flex-col items-center justify-center gap-2 font-semibold"
+        >
+          <CirclePlus className="w-7 h-7 text-[#17708A] dark:text-[#1E88A8]" />
+          Novo Plano
+        </button>
       </div>
+
+      {form && (
+        <PlanFormModal
+          key={form.mode === 'edit' ? form.plan.id : 'new'}
+          mode={form.mode}
+          initial={form.mode === 'edit' ? toDraft(form.plan) : NEW_PLAN}
+          subscriberCount={form.mode === 'edit' ? form.plan.subscriberCount : 0}
+          saving={saving}
+          error={formError}
+          onClose={closeForm}
+          onSubmit={(draft) => (form.mode === 'edit' ? savePlan(form.plan, draft) : createPlan(draft))}
+        />
+      )}
 
       {/* Delete/Migration Modal */}
       {deleteTarget && (

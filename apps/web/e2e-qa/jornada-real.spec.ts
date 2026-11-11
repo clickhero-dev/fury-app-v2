@@ -134,8 +134,8 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.goto('/criar-campanha');
       const next = page.getByRole('button', { name: 'Continuar' });
 
-      // objetivo: Gerar Conversas + os dois cards de destino. A conta QA tem Meta conectado.
-      await page.getByRole('button', { name: /Gerar Conversas/ }).click();
+      // objetivo: Direct do Instagram (antigo Gerar Conversas) + os dois cards de destino. A conta QA tem Meta conectado.
+      await page.getByRole('button', { name: /Atrair Clientes no Direct do Instagram/ }).click();
       const instagram = page.getByRole('checkbox', { name: /instagram/i });
       const facebook = page.getByRole('checkbox', { name: /facebook/i });
       await expect(instagram).toBeVisible({ timeout: 60_000 });
