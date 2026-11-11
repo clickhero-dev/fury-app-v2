@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import api from '@/lib/api';
+import { isMemberAccount } from '@/lib/platform-role';
 import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { PeriodSelector } from '@/components/PeriodSelector';
@@ -673,12 +674,12 @@ function InstagramEngagementSection({
           className={`${SURFACE} flex flex-col items-center justify-center gap-2 px-6 py-14 text-center`}
         >
           <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Conecte seu Instagram para ver as métricas</p>
-          <Link
+          {!isMemberAccount() && <Link
             to="/configuracoes/integracoes"
             className="inline-flex items-center gap-1 text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
           >
             Ir para integrações <ArrowRight className="size-3.5" />
-          </Link>
+          </Link>}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -935,7 +936,7 @@ export function Dashboard() {
         </div>
 
         {demo && <div className="rounded-2xl border border-[#1E88A8]/30 bg-[#1E88A8]/10 px-5 py-3 text-sm font-medium text-[#0F4C5C] dark:text-[#7DCEE5]">Você está vendo dados demonstrativos, preparados para uma apresentação comercial.</div>}
-        {!isMetaConnected && <MetaBanner />}
+        {!isMetaConnected && !isMemberAccount() && <MetaBanner />}
 
         {isDataDegraded && <MetaSyncNotice firstSyncPending={firstSyncPending} syncedAt={latestSyncedAt} />}
 

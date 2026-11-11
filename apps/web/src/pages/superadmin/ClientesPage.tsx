@@ -143,7 +143,7 @@ export function ClientesPage() {
               <span className="text-xs font-medium text-text-secondary">Nome da empresa</span>
               <input required className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
-            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Dono do cliente</div>
+            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Usuário titular</div>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-text-secondary">Nome</span>
               <input required className={inputCls} value={form.userName} onChange={(e) => setForm({ ...form, userName: e.target.value })} />

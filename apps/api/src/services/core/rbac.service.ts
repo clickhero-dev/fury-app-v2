@@ -1,6 +1,6 @@
 import { getRedis } from '../../lib/redis.js';
 import { RBAC_ALL_KEY } from '../../lib/rbac-services.js';
-import { RBAC_VIEWS } from '../../lib/rbac-views.js';
+import { DISABLED_SERVICE_KEYS, RBAC_VIEWS } from '../../lib/rbac-views.js';
 import { RbacRepository, type RbacUserContext } from '../../repository/rbac.repository.js';
 
 const CACHE_TTL_SECONDS = 300;
@@ -94,6 +94,8 @@ export class RbacService {
     const v = await this.version();
     const ctx = await this.context(v, userId);
     if (!ctx) return 'unknown_user';
+    // desativado vale para todos, inclusive super_admin
+    if (serviceKeys.some((k) => DISABLED_SERVICE_KEYS.includes(k))) return 'blocked';
     if (ctx.platformRole === SUPER_ADMIN_ROLE || serviceKeys.length === 0) return 'allowed';
 
     const blocked = await this.cached(

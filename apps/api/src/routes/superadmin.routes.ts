@@ -34,6 +34,7 @@ partnerRouter.get("/users", controllers.superadmin.listUsers);
 partnerRouter.post("/users", controllers.superadmin.createUser);
 partnerRouter.get("/users/check-email/:email", controllers.superadmin.checkEmail);
 partnerRouter.patch("/users/:id", controllers.superadmin.updateUser);
+partnerRouter.post("/users/:id/password", controllers.superadmin.resetUserPassword);
 partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
 
 // Clientes do parceiro (vagas + Novo Cliente)
