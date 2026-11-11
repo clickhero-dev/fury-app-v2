@@ -3,7 +3,7 @@ import { isReady } from '../lib/api-state.js';
 
 /** Mantém somente o endpoint de diagnóstico disponível enquanto a API inicia. */
 export function startupGate(req: Request, res: Response, next: NextFunction): void {
-  if (req.path === '/health' || req.path === '/health/') {
+  if (req.path === '/health' || req.path === '/health/' || req.path === '/api/health' || req.path === '/api/health/') {
     next();
     return;
   }

@@ -18,3 +18,11 @@ const client = postgres(connectionString, {
 export const db = drizzle(client, { schema });
 
 export type Database = typeof db;
+
+/** Conexão isolada permite encerrar o probe mesmo se o servidor não responder ao cancelamento. */
+export function createDatabaseProbe(): PromiseLike<unknown> & { cancel(): void } {
+  const probe = postgres(connectionString, { max: 1, connect_timeout: 10, prepare: false });
+  const query = probe`SELECT 1`;
+  const result = Promise.resolve(query).finally(() => probe.end({ timeout: 0 }));
+  return Object.assign(result, { cancel: () => { void probe.end({ timeout: 0 }).catch(() => {}); } });
+}

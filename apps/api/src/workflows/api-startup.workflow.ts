@@ -1,7 +1,7 @@
 import type { WorkflowDefinition } from '../services/stateMachine/stageInterface.js';
 import { RetryDependencyError, WorkflowFailedError } from '../services/stateMachine/workflow.engine.js';
-import { db } from '@fury/db';
-import { sql } from 'drizzle-orm';
+import { createDatabaseProbe } from '@fury/db';
+import { runDatabaseProbe } from '../lib/database-probe.js';
 import { waitForRedisReady } from '../lib/redis.js';
 import { runMigrationsAndValidate } from '@fury/db/migrate';
 import { setCheck, setStatus, handleCriticalFailure, getMissingEnvs, databaseCheckErrorDetail, classifyDatabaseError } from '../lib/api-state.js';
@@ -13,6 +13,10 @@ export interface ApiStartupContext {
 
 let dbAttempt = 0;
 let dbHadFailure = false;
+
+function safeCapture(event: string, properties: Record<string, unknown>): void {
+  try { captureServerEvent(event, properties); } catch { /* telemetria não controla readiness */ }
+}
 
 function runtimeEnvironment(): 'production' | 'development' | 'test' | 'unknown' {
   const value = process.env.NODE_ENV;
@@ -32,11 +36,11 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
         dbAttempt += 1;
         const start = Date.now();
         try {
-          await db.execute(sql`SELECT 1`);
+          await runDatabaseProbe(createDatabaseProbe);
           const latencyMs = Date.now() - start;
           setCheck('db', true, `latency ${latencyMs}ms`);
           if (dbHadFailure) {
-            captureServerEvent('db_health_probe_recovered', {
+            safeCapture('db_health_probe_recovered', {
               service: 'api',
               environment: runtimeEnvironment(),
               category: 'healthy',
@@ -50,7 +54,7 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
           const category = classifyDatabaseError(error);
           dbHadFailure = true;
           setCheck('db', false, databaseCheckErrorDetail(error), category);
-          captureServerEvent('db_health_probe_failed', {
+          safeCapture('db_health_probe_failed', {
             service: 'api',
             environment: runtimeEnvironment(),
             category,

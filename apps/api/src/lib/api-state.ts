@@ -116,7 +116,7 @@ export function classifyDatabaseError(error: unknown): DatabaseFailureCategory {
     const code = String((current as { code?: unknown }).code ?? '').toUpperCase();
     if (TIMEOUT_CODES.has(code)) return 'timeout';
     if (UNAVAILABLE_CODES.has(code) || code.startsWith('08')) return 'unavailable';
-    if (/^\d{5}$/.test(code)) return 'query_error';
+    if (/^(?:[0-9]{2}|XX)[0-9A-Z]{3}$/.test(code)) return 'query_error';
     current = (current as { cause?: unknown }).cause;
   }
 
