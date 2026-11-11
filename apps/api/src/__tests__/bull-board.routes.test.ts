@@ -36,6 +36,7 @@ const { setBasePath, registeredQueueNames, adapterOptions, boardRegistrations, m
   historyProviders: [] as any[],
 }));
 
+vi.mock('../di.js', () => ({ controllers: new Proxy({}, { get: () => new Proxy({}, { get: () => vi.fn() }) }) }));
 vi.mock('../lib/queue.js', () => ({ getRedisConnection: vi.fn(async () => ({})) }));
 // papel vem do platform_role no banco (superadminMiddleware); aqui o id do token diz o papel
 vi.mock('../services/core/rbac.service.js', () => ({
@@ -88,6 +89,7 @@ vi.mock('@bull-board/express', async () => {
 });
 
 import bullBoardRoutes from '../routes/bull-board.routes.js';
+import mainRoutes from '../routes/index.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 
 function buildApp() {
@@ -207,4 +209,19 @@ describe('Bull Board routes', () => {
       .set('Authorization', `Bearer ${authToken('superadmin')}`);
     expect(response.status).toBe(200);
   });
+  it('prompts for browser credentials through the main API router', async () => {
+    const app = express();
+    app.use('/api', mainRoutes);
+    app.use(errorHandler);
+
+    const anonymous = await request(app).get('/api/admin/queues');
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers['www-authenticate']).toMatch(/^Basic /);
+
+    const panel = await request(app).get('/api/admin/queues').auth('board-admin@example.test', 'board-test-password');
+    expect(panel.status).toBe(200);
+    expect(panel.text).toContain('Bull Board');
+  });
+
+
 });

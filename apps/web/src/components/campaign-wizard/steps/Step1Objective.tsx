@@ -23,14 +23,20 @@ const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
   {
     value: 'whatsapp',
     emoji: '📲',
-    title: 'Gerar Conversas',
+    title: 'Atrair Clientes no Direct do Instagram',
     description: 'Receba mensagens de clientes interessados no Facebook Messenger ou Instagram.',
   },
   {
     value: 'leads',
     emoji: '📋',
-    title: 'Formulário de captação',
+    title: 'Atrair Clientes para seu Whatsapp',
     description: 'Colete nome, e-mail e telefone dos interessados e leve eles pro seu WhatsApp.',
+  },
+  {
+    value: 'followers',
+    emoji: '📈',
+    title: 'Aumentar Seguidores do Instagram',
+    description: 'Deixe o ady escolher seu melhor post e impulsione-o para aumentar o seu Instagram',
   },
 ];
 
@@ -88,6 +94,12 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
 
       {value === 'leads' && whatsapp && onWhatsappChange && (
         <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} mode="whatsapp_only" />
+      )}
+
+      {value === 'followers' && (
+        <p className="rounded-xl border border-brand/20 bg-brand/5 p-4 text-sm text-text-secondary">
+          Na próxima etapa, o ady vai analisar seus posts e Reels e recomendar o conteúdo com maior potencial para atrair seguidores.
+        </p>
       )}
     </div>
   );
@@ -317,7 +329,7 @@ function BrandKitPhoneField({
   whatsapp: WizardWhatsappState;
   onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
 }) {
-  const { brandKit, isLoading: isLoadingBrandKit } = useBrandKit();
+  const { brandKit, isLoading: isLoadingBrandKit, isError, refetch } = useBrandKit();
   const brandKitDigits = brandKit?.whatsapp_number?.replace(/\D/g, '') ?? '';
 
   // Pre-preenche uma unica vez com o numero do Brand Kit (usuario pode editar).
@@ -333,8 +345,15 @@ function BrandKitPhoneField({
 
   return (
     <div>
-      <label className="text-sm font-bold text-text-primary mb-1 block">WhatsApp que vai atender</label>
+      <label htmlFor="brand-kit-whatsapp" className="text-sm font-bold text-text-primary mb-1 block">WhatsApp que vai atender</label>
+      {isError && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-error">
+          <p role="alert">Não foi possível carregar o número do Brand Kit. Preencha-o manualmente ou tente novamente.</p>
+          <button type="button" className="underline" onClick={() => void refetch()}>Tentar novamente</button>
+        </div>
+      )}
       <input
+        id="brand-kit-whatsapp"
         type="text"
         inputMode="tel"
         value={formatPhoneDisplay(digits)}

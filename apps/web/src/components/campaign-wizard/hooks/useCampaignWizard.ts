@@ -147,7 +147,8 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
           // isValidBusinessPhone aceita nacional 10/11 (DDD 55 do RS incluso)
           // ou completo 12/13 com DDI — não exige WABA/phoneNumberId.
           (state.objective !== 'leads' ||
-            (state.whatsapp.pageId && isValidBusinessPhone(state.whatsapp.phoneNumberDisplay ?? '')))
+            (state.whatsapp.pageId && isValidBusinessPhone(state.whatsapp.phoneNumberDisplay ?? ''))) &&
+          (state.objective !== 'followers' || (state.whatsapp.pageId && state.whatsapp.hasInstagram))
       ),
       2: isCreativesStepValid(state.creatives, state.objective),
       3: Boolean(

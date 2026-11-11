@@ -2,6 +2,7 @@ import {
   db as defaultDb,
   type Database,
   creativeAssets,
+  creativeAssetRatings,
 } from '@fury/db';
 import { alias } from 'drizzle-orm/pg-core';
 import { and, asc, count, desc, eq, isNull, isNotNull, or, sql, type SQL } from 'drizzle-orm';
@@ -67,6 +68,23 @@ export class StudioRepository extends TenantScopedRepository {
     return this.db.query.creativeAssets.findFirst({
       where: and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, this.tenantId)),
     });
+  }
+
+  async findUserById(id: string) {
+    return this.db.query.users.findFirst({ where: (users, { and, eq }) => and(eq(users.id, id), eq(users.tenantId, this.tenantId)) });
+  }
+
+  async upsertAssetRating(userId: string, creativeAssetId: string, rating: number) {
+    const now = new Date();
+    const [row] = await this.db
+      .insert(creativeAssetRatings)
+      .values({ tenantId: this.tenantId, userId, creativeAssetId, rating, updatedAt: now })
+      .onConflictDoUpdate({
+        target: [creativeAssetRatings.tenantId, creativeAssetRatings.userId, creativeAssetRatings.creativeAssetId],
+        set: { rating, updatedAt: now },
+      })
+      .returning();
+    return row;
   }
 
   async findAssetByUrl(url: string) {

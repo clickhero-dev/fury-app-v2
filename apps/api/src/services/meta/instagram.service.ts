@@ -10,7 +10,7 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { MetaRepository } from '../../repository/meta.repository.js';
 import { MetaService, metaService } from './meta.service.js';
 
-export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
+export type InstagramRankingObjective = 'visits' | 'followers' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 
 export interface RankedInstagramPost {
   id: string;
@@ -26,11 +26,21 @@ export interface RankedInstagramPost {
 }
 
 function getRecommendationReason(objective: InstagramRankingObjective): string | undefined {
+  if (objective === 'followers') return 'Mais chance de trazer novos seguidores.';
   if (objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads') {
     return 'Mais chance de trazer novos clientes.';
   }
 
   return undefined;
+}
+
+function compareFollowersPosts(a: { like_count: number; comments_count: number; insights: InstagramMediaInsights }, b: { like_count: number; comments_count: number; insights: InstagramMediaInsights }): number {
+  const metricsA = [a.insights.follows, a.insights.saved, a.insights.shares, a.comments_count, a.like_count];
+  const metricsB = [b.insights.follows, b.insights.saved, b.insights.shares, b.comments_count, b.like_count];
+  for (let i = 0; i < metricsA.length; i += 1) {
+    if (metricsA[i] !== metricsB[i]) return metricsB[i] - metricsA[i];
+  }
+  return 0;
 }
 
 function computeScore(
@@ -45,6 +55,12 @@ function computeScore(
 
   if (objective === 'visits') {
     return insights.reach * 0.5 + insights.shares * 0.3 + commentsCount * 0.2;
+  }
+
+  if (objective === 'followers') {
+    // O score é mantido para compatibilidade da API; a ordenação usa o
+    // comparador abaixo para preservar a prioridade literal dos critérios.
+    return insights.follows * 1_000_000_000_000 + insights.saved * 1_000_000_000 + insights.shares * 1_000_000 + commentsCount * 1_000 + likeCount;
   }
 
   if (objective === 'messages' || objective === 'whatsapp') {
@@ -194,7 +210,7 @@ export class InstagramService {
       // albuns de carrossel). Videos/Reels nao tem `media_url` estatica e a
       // thumbnail usada como fallback nao representa o post real.
       const imageMedia = media.filter(
-        (item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM'
+        (item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM' || (objective === 'followers' && item.media_type === 'VIDEO')
       );
 
       const posts: RankedInstagramPost[] = await Promise.all(
@@ -226,7 +242,9 @@ export class InstagramService {
         })
       );
 
-      posts.sort((a, b) => b.score - a.score);
+      posts.sort((a, b) => objective === 'followers'
+        ? compareFollowersPosts(a, b)
+        : b.score - a.score);
       if (posts[0]) {
         posts[0].recommended = true;
         const recommendationReason = getRecommendationReason(objective);

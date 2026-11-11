@@ -62,6 +62,7 @@ export function useStudioLibrary() {
       const res = await api.get<ApiResponse<LibraryPhoto[]>>('/brand-kit/library');
       return res.data.data;
     },
+    retry: false,
   });
 }
 
@@ -98,7 +99,10 @@ export function useUploadLibraryPhotos() {
           });
           saved.push(...res.data.data);
         } catch (err) {
-          const apiMessage = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
+          const responseData = (err as {
+            response?: { data?: { message?: string; error?: { message?: string } } };
+          }).response?.data;
+          const apiMessage = responseData?.error?.message ?? responseData?.message;
           throw new LibraryUploadError(saved, apiMessage ?? 'Não foi possível enviar.');
         }
         onProgress?.(Math.min(i + UPLOAD_BATCH, files.length), files.length);

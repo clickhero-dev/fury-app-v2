@@ -371,6 +371,7 @@ export interface InstagramMediaInsights {
   saved: number;
   shares: number;
   replies: number;
+  follows: number;
 }
 
 const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
@@ -378,6 +379,7 @@ const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
   saved: 'saved',
   shares: 'shares',
   replies: 'replies',
+  follows: 'follows',
 };
 
 /**
@@ -391,9 +393,9 @@ export async function getInstagramMediaInsights(
   accessToken: string,
   mediaProductType?: InstagramMediaItem['media_product_type']
 ): Promise<InstagramMediaInsights> {
-  const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
+  const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0, follows: 0 };
 
-  const metricsToFetch = ['reach', 'saved', 'shares'];
+  const metricsToFetch = ['reach', 'saved', 'shares', 'follows'];
   if (mediaProductType === 'STORY') metricsToFetch.push('replies');
 
   for (const metric of metricsToFetch) {

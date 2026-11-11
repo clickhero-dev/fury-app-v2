@@ -166,6 +166,9 @@ const STEPS: MigrationStep[] = [
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
   { tag: '0058_public_trial_signup' },
+  { tag: '0059_public_trial_signup_limits' },
+  { tag: '0061_public_trial_first_access' },
+  { tag: '0062_public_trial_link_uses' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
@@ -173,6 +176,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added demo to user_role');
     },
   },
+  { tag: '0056_demo_tenant' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

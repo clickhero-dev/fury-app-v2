@@ -400,6 +400,7 @@ export function EstudioHome() {
       videoMeta: parseVideoMeta(complianceNotes),
       modificationsRemaining,
     });
+    setIsNewGeneration(true);
     // usuário pode ter saído da tela de progresso durante o await
     setView((v) => (v === 'video-progress' ? 'result' : v));
   };

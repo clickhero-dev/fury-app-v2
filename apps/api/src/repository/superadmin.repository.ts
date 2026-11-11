@@ -15,6 +15,7 @@ import {
 } from '@fury/db';
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
+import { provisionTrialSubscription } from '../services/billing/trial-signup.js';
 
 type Tenant = typeof tenants.$inferSelect;
 type User = typeof users.$inferSelect;
@@ -49,6 +50,25 @@ export type ExpiredAccountRow = {
   isNonExpirable: boolean;
   currentPeriodEnd: Date | null;
 };
+
+const SETUP_TENANT_CONSTRAINTS = new Set([
+  'tenants_slug_key',
+  'tenants_slug_unique',
+  'users_email_key',
+  'users_email_unique',
+  'users_email_lower_unique',
+]);
+
+function knownSetupTenantConflict(error: unknown): boolean {
+  let current = error as { code?: unknown; constraint?: unknown; constraint_name?: unknown; cause?: unknown } | undefined;
+  for (let depth = 0; current && depth < 3; depth += 1) {
+    if (current.code === '23505' && typeof (current.constraint ?? current.constraint_name) === 'string') {
+      return SETUP_TENANT_CONSTRAINTS.has((current.constraint ?? current.constraint_name) as string);
+    }
+    current = current.cause as typeof current;
+  }
+  return false;
+}
 
 export function countExpiredAccounts(rows: ExpiredAccountRow[], now: Date): number {
   return new Set(
@@ -119,6 +139,52 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
   async findTenantBySlug(slug: string) {
     return this.db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
+  }
+
+  async findUserByEmailCaseInsensitive(email: string) {
+    return this.db.query.users.findFirst({
+      where: eq(sql`lower(${users.email})`, email.toLowerCase()),
+    });
+  }
+
+  /** Cria o par administrativo como uma unidade; o resultado de conflito não contém dados existentes. */
+  async createTenantWithUser(data: {
+    name: string;
+    slug: string;
+    userName: string;
+    userEmail: string;
+    passwordHash: string;
+    userRole: User['role'];
+  }) {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [tenant] = await tx.insert(tenants).values({ name: data.name, slug: data.slug }).returning();
+        const [user] = await tx.insert(users).values({
+          tenantId: tenant.id,
+          name: data.userName,
+          email: data.userEmail,
+          passwordHash: data.passwordHash,
+          role: data.userRole,
+        }).returning();
+        await provisionTrialSubscription({
+          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: eq(plans.technicalKey, key) })) ?? null,
+          querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) })) ?? null,
+          insertSubscription: async (values) => {
+            const [subscription] = await tx.insert(subscriptions).values(values as typeof subscriptions.$inferInsert).returning({ id: subscriptions.id });
+            return subscription;
+          },
+        }, tenant.id, new Date());
+        return { status: 'created' as const, tenant, user };
+      });
+    } catch (error) {
+      if (!knownSetupTenantConflict(error)) throw error;
+
+      // A transação já foi revertida. A ordem é parte do contrato: slug prevalece
+      // quando os dois recursos estão em conflito.
+      if (await this.findTenantBySlug(data.slug)) return { status: 'conflict' as const, code: 'SLUG_EXISTS' as const };
+      if (await this.findUserByEmailCaseInsensitive(data.userEmail)) return { status: 'conflict' as const, code: 'EMAIL_EXISTS' as const };
+      throw error;
+    }
   }
 
   // ── Clientes do parceiro ─────────────────────────────────────────

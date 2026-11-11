@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
@@ -11,6 +11,7 @@ import { useSubscription } from '../../hooks/useBilling';
 import { useBlockedViews } from '../../hooks/useBlockedViews';
 import { viewKeyForPath } from '../../lib/rbac-views';
 import { NotFoundPage } from '../../pages/NotFoundPage';
+import { TrialPasswordModal } from './TrialPasswordModal';
 import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
@@ -54,14 +55,20 @@ export function AuthenticatedShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const token = localStorage.getItem('token');
   const location = useLocation();
-  const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
+  const storedUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') ?? '{}') as { type?: string }; } catch { return {}; }
+  })();
+  // A flag antiga só mantém compatibilidade com sessões já abertas; APIs e
+  // datasets demo continuam protegidos pela identidade persistida no backend.
+  const isDemoUser = storedUser.type === 'demo' || localStorage.getItem('ady-demo-session') === 'true';
   // O role vem da sessão assinada pelo backend; o frontend apenas espelha o
   // modo para evitar gates de onboarding/Meta que não existem na demonstração.
   const userRole = useAppSelector(selectUserRole);
-  const isDemoUser = userRole === 'demo';
+  const isDemoSession = userRole === 'demo' || isDemoUser;
   const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
+  const [showTrialPasswordModal, setShowTrialPasswordModal] = useState(() => localStorage.getItem('fury-trial-password-pending') === 'true');
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -73,7 +80,7 @@ export function AuthenticatedShell() {
   // /policy/current uma única vez para decidir (sem loop: /politica é isenta).
   const isPolicyRoute = location.pathname.startsWith('/politica');
   const isPolicyExempt =
-    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
+    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding || isDemoSession;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
   const { isBlocked } = useBlockedViews();
   const viewKey = viewKeyForPath(location.pathname);
@@ -100,8 +107,8 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser && !isPublicTrial;
-  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoSession && !isPublicTrial;
+  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoSession;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
@@ -132,15 +139,8 @@ export function AuthenticatedShell() {
       if (connections.length > 0) {
         dispatch(setMetaId(connections[0].id ?? null));
       }
-      if (connections.length === 0) {
-        // ponytail: limpa flag stale que impede o redirect de onboarding
-        localStorage.removeItem('fury-meta-connected');
-        navigate('/onboarding/conectar-meta', { replace: true });
-      } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
-        navigate('/onboarding/selecionar-conta', { replace: true });
-      }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
+  }, [connections, isLoading, isFetched, shouldCheck, dispatch]);
 
   // ── Verificação de assinatura ──────
   const {
@@ -195,6 +195,7 @@ export function AuthenticatedShell() {
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">
+      {showTrialPasswordModal && <TrialPasswordModal onComplete={() => { localStorage.removeItem('fury-trial-password-pending'); setShowTrialPasswordModal(false); }} />}
       {/* Overlay escuro ao abrir sidebar no mobile */}
       {mobileOpen && (
         <div

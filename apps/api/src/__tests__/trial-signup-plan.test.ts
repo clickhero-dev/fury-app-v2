@@ -1,7 +1,7 @@
 /*
 Funcionalidade: provisionar Trial no cadastro de um tenant novo
 Cenário: existe um único plano Trial ativo
-  Dado que o catálogo possui trial_new_signup ativo
+  Dado que o catálogo possui public_trial_signup ativo
   Quando o tenant novo for provisionado
   Então uma assinatura trial de 7 dias e quota 5 será criada sem identificador Asaas
 
@@ -13,7 +13,7 @@ Cenário: o plano Trial não existe ou é inválido
 import { describe, expect, it, vi } from 'vitest';
 import { provisionTrialSubscription, isTrialExpired } from '../services/billing/trial-signup.js';
 
-const plan = { id: 'plan-trial', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } };
+const plan = { id: 'plan-trial', technicalKey: 'public_trial_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } };
 
 describe('provisionTrialSubscription', () => {
   it('cria uma assinatura Trial única, com quota e sem Asaas', async () => {
@@ -25,12 +25,21 @@ describe('provisionTrialSubscription', () => {
     const start = new Date('2026-10-30T12:00:00.000Z');
 
     await expect(provisionTrialSubscription(tx, 'tenant-1', start)).resolves.toEqual({ id: 'sub-1' });
+    expect(tx.queryPlan).toHaveBeenCalledWith('public_trial_signup');
     expect(tx.insertSubscription).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-1', planId: 'plan-trial', status: 'trial',
       creativesRemaining: 5, asaasSubscriptionId: null, asaasCustomerId: null,
       trialEndsAt: new Date('2026-11-06T12:00:00.000Z'),
       currentPeriodEnd: new Date('2026-11-06T12:00:00.000Z'),
     }));
+  });
+
+  it('rejeita plano ausente ou inválido', async () => {
+    for (const candidate of [null, { ...plan, isActive: false }, { ...plan, limits: { creativesPerMonth: 4 } }]) {
+      const tx = { queryPlan: vi.fn().mockResolvedValue(candidate), querySubscription: vi.fn(), insertSubscription: vi.fn() };
+      await expect(provisionTrialSubscription(tx, 'tenant-1', new Date())).rejects.toMatchObject({ code: 'INVALID_TRIAL_PLAN' });
+      expect(tx.insertSubscription).not.toHaveBeenCalled();
+    }
   });
 
   it('não duplica uma concessão existente', async () => {

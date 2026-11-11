@@ -16,12 +16,21 @@ describe('POST /api/public/trial/signup', () => {
     return { app, service };
   }
 
-  it('aceita cadastro válido sem revelar existência', async () => {
+  it('retorna o contrato de acesso temporário para uma conta nova', async () => {
     const { app, service } = createApp();
+    service.signup.mockResolvedValue({ created: true, redirectUrl: 'https://app.example/trial/acesso#token=opaque' });
     const response = await request(app).post('/api/public/trial/signup').send({ name: 'Ana', email: 'ANA@example.com' });
-    expect(response.status).toBe(202);
-    expect(response.body).toEqual({ message: 'Se for possível, enviaremos um link de acesso.' });
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ created: true, redirect_url: 'https://app.example/trial/acesso#token=opaque', message: 'Cadastro criado com sucesso.' });
     expect(service.signup).toHaveBeenCalledWith({ name: 'Ana', email: 'ana@example.com' });
+  });
+
+  it('informa EMAIL_JA_CADASTRADO sem expor dados da conta', async () => {
+    const { app, service } = createApp();
+    service.signup.mockResolvedValue({ created: false, error: 'EMAIL_JA_CADASTRADO' });
+    const response = await request(app).post('/api/public/trial/signup').send({ name: 'Ana', email: 'ana@example.com' });
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ erro: 'EMAIL_JA_CADASTRADO' });
   });
 
   it('retorna 400 para payload inválido e não chama o serviço', async () => {
