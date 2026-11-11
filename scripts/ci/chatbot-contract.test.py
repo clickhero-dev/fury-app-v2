@@ -2,6 +2,7 @@
 from pathlib import Path
 import importlib.util
 import os
+import socket
 import sys
 import tempfile
 import unittest
@@ -172,6 +173,42 @@ class ContainerOwnershipSafety(unittest.TestCase):
         self.assertEqual(self.gate.OWNED, [])
         self.assertEqual(self.docker.call_count, 1)
         self.assertEqual(self.docker.call_args.args[0], 'create')
+
+    # Funcionalidade: o gate deve rejeitar listeners que não pertencem ao E2E.
+    # Cenário: uma porta loopback já está ocupada.
+    # Dado que outro processo está escutando nessa porta
+    # Quando o gate verifica a disponibilidade
+    # Então a execução falha antes de se conectar a esse serviço.
+    def test_gate_refuses_a_loopback_port_already_in_use(self):
+        guard = getattr(self.gate, 'assert_ports_available', None)
+        if not callable(guard):
+            self.fail('The gate must preflight E2E listener ports')
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            with self.assertRaises(RuntimeError) as raised:
+                guard((port,))
+            self.assertIn(f':{port} is already in use', str(raised.exception))
+
+    # Funcionalidade: iniciar o E2E real somente com as portas próprias livres.
+    # Cenário: alguma porta fixa do E2E está indisponível.
+    # Dado que o gate inicia a fase mock
+    # Quando chega à fase real e o preflight recusa as portas
+    # Então nenhum servidor E2E é iniciado.
+    def test_real_e2e_preflights_api_web_and_chat_ports_before_start(self):
+        guard = getattr(self.gate, 'assert_ports_available', None)
+        if not callable(guard):
+            self.fail('The gate must preflight E2E listener ports')
+        with patch.object(self.gate, 'run') as run, \
+             patch.object(self.gate, 'assert_no_skips'), \
+             patch.object(self.gate, 'start') as start, \
+             patch.object(self.gate, 'assert_ports_available', side_effect=RuntimeError('port already in use')) as preflight:
+            with self.assertRaisesRegex(RuntimeError, 'port already in use'):
+                self.gate.e2e_tests()
+        self.assertEqual(run.call_count, 1)
+        preflight.assert_called_once_with((3199, 5199, 8199))
+        start.assert_not_called()
 
 
 if __name__ == '__main__':

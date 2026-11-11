@@ -93,6 +93,15 @@ def wait_http(url):
     raise RuntimeError(f'Healthcheck timed out: {url}')
 
 
+def assert_ports_available(ports):
+    for port in ports:
+        try:
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', port))
+        except OSError as error:
+            raise RuntimeError(f'E2E port 127.0.0.1:{port} is already in use') from error
+
+
 def start(args, name, cwd):
     log = (ART / f'{name}.log').open('w')
     try:
@@ -189,9 +198,8 @@ def e2e_tests():
         ENV['CHAT_E2E_OUTPUT_DIR'] = str(ART / f'e2e-{phase}')
         ENV['PLAYWRIGHT_JUNIT_OUTPUT_FILE'] = str(ART / f'e2e-{phase}-junit.xml')
         if phase == 'real':
-            # Python harness binds 8199; fail rather than attach to a foreign server.
-            with socket.socket() as probe:
-                probe.bind(('127.0.0.1', 8199))
+            # Reject foreign listeners before any harness/API server can start.
+            assert_ports_available((3199, 5199, 8199))
             ENV.update({'PORT': '3199', 'ADY_API_URL': 'http://127.0.0.1:3199',
                         'CHAT_SERVICE_URL': 'http://127.0.0.1:8199',
                         'CHAT_E2E_WEB_URL': 'http://127.0.0.1:5199',

@@ -12,12 +12,13 @@ A evolução do assistente tem testes locais verdes, mas a revisão identificou 
 4. O source estava em branch de uma PR antiga já mergeada e defasado da hmg. Worktree dedicado integra feature e WIP relacionado sem mover o checkout compartilhado.
 
 ## Resolução e estado
-- Integração em `feat/422-chatbot-ready`, baseada na hmg `46afe276`: conflitos de DI, repository de Studio e registro de migrations resolvidos mantendo também dashboard demo, avaliação de assets e migrations de trial recentes.
+- Integração em `feat/422-chatbot-ready`, atualizada sobre `origin/hmg` `62b27666` (merge sem conflitos): conflitos de DI, repository de Studio e registro de migrations resolvidos mantendo também dashboard demo, avaliação de assets e migrations de trial recentes.
 - Corrigidos e validados: imagem Python com módulo de orçamento; cleanup delegado sem relock/metadados; cleanup humano draft-only; regressão Python→HTTP Node→PostgreSQL; scheduler de recuperação de vídeos BullMQ com concorrência global; guard DB antes de conexão e teardown de containers por ID.
 - Novo workflow `Chatbot / real DB, E2E and image`, com dependências nativas explícitas (FFmpeg/Poppler/util-linux), sem skips silenciosos e com evidências publicadas.
-- Gate completo no checkout integrado: **623 Python**, **305 API em 47 arquivos**, **51 E2E mock + 1 E2E real**, todos sem falhas ou skips. Smoke da imagem real passou; web teve 237 testes e build/TypeScript verdes. Contrato do gate teve 11 testes verdes. API TypeScript e lint dos fontes alterados passaram.
-- Primeira rodada E2E teve 50 passados/1 falha antes da renderização por `ERR_NETWORK_CHANGED` em módulos locais; trace preservado fora do repo. Gate completo serial seguinte passou sem alterar as asserções.
-- Commit/push da branch autorizados pelo usuário; merge e PR não autorizados nesta etapa.
+- Gate completo no candidato: **623 Python**, **311 API em 47 arquivos**, **51 E2E mock + 1 E2E real**, todos sem falhas ou skips. Smoke da imagem real passou. Builds TypeScript/API e TypeScript/Vite web passaram; o build web emitiu apenas avisos não bloqueantes do Vite e tamanho de chunk. Contrato do gate teve **13 testes verdes**.
+- Revisão independente encontrou risco de conectar a API E2E a um serviço alheio na porta 3199; o gate agora pré-verifica 3199/5199/8199 antes de iniciar processos, coberto por regressões de porta ocupada e ordem de startup. A alegação de senha PostgreSQL divergente não se confirmou: comparação em memória (sem imprimir credencial) coincidiu e o gate executou migrations e testes DB.
+- A primeira rodada E2E teve 50 passados/1 falha antes da renderização por `ERR_NETWORK_CHANGED` em módulos locais; trace preservado fora do repo. A execução serial posterior e o gate completo atual passaram sem skips.
+- Commit/push/PR para `hmg` autorizados pelo usuário em 2026-11-11; merge continua não autorizado. O check remoto anterior foi executado na branch/SHA antiga, não no candidato integrado; o CI do SHA final ainda precisa ser acompanhado após abrir a PR.
 - Configuração EasyPanel de homologação e produção solicitada para depois das validações; exige acesso autenticado e fonte deployável verificada. Nenhum segredo deve ser documentado aqui.
 
 ## Critérios de aceite
