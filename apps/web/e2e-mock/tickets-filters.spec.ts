@@ -19,6 +19,10 @@ test('superadmin filtra tickets localmente por assunto e status e preserva filtr
       await route.fulfill({ json: { data: { open: tickets, resolved: [{ ...tickets[0], id: 'four', name: '[N2] Publicação resolvida' }] }, partial_failures: [] } });
     } else if (path === '/api/admin/tickets/assignees') {
       await route.fulfill({ json: { data: [] } });
+    } else if (path === '/api/admin/tickets/statuses') {
+      await route.fulfill({ json: { data: [{ value: 'release', label: 'Release', type: 'custom' }, { value: 'monitoring', label: 'Monitoring', type: 'custom' }] } });
+    } else if (path === '/api/rbac/blocked-views') {
+      await route.fulfill({ json: { data: { blocked: [] } } });
     } else {
       await route.fulfill({ status: 404, json: { error: 'unexpected isolated API request' } });
     }
@@ -41,6 +45,6 @@ test('superadmin filtra tickets localmente por assunto e status e preserva filtr
   await expect(page.getByRole('searchbox', { name: 'Pesquisar por assunto' })).toHaveValue(' PUBLICAÇÃO ');
   await expect(page.getByRole('tabpanel').getByText('[N2] Publicação resolvida')).toBeVisible();
   await page.screenshot({ path: '/home/diogo/.hermes/cache/scratch/tickets-status-search.png', fullPage: true });
-  expect(apiCalls.every((path) => ['/api/admin/tickets', '/api/admin/tickets/assignees'].includes(path))).toBe(true);
+  expect(apiCalls.every((path) => ['/api/admin/tickets', '/api/admin/tickets/assignees', '/api/admin/tickets/statuses', '/api/rbac/blocked-views'].includes(path))).toBe(true);
   expect(errors).toEqual([]);
 });

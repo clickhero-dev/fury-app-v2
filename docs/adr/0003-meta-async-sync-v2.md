@@ -100,8 +100,8 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
    atrasados e mudanças na Meta. O resultado diário de insights tem chave única
    tenant + campanha + data para reexecução segura.
 10. **Notificação**: falha TOTAL de run envia email para `SYNC_ALERT_EMAILS`
-   (default `diogommtdes@gmail.com;diogo.souza@clickhero.com.br`, env var
-   sobrepõe) com template `syncFailureEmailTemplate` (mensagem client-safe,
+   (default `diogo.souza@clickhero.com.br`, env var sobrepõe;
+   `diogommtdes@gmail.com` é excluído mesmo quando configurado) com template `syncFailureEmailTemplate` (mensagem client-safe,
    sem token/payload/stack), com **dedupe de 6h por `(tenant, error_code)`**
    via Redis `SET NX EX 21600`. Sucesso não gera email. Falha parcial
    (`partial_failures`) não gera email.

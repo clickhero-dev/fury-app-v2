@@ -31,14 +31,14 @@ describe('getInstagramMediaInsights', () => {
   it('consulta apenas métricas válidas para mídia de feed', async () => {
     const result = await getInstagramMediaInsights('feed', 'token', 'FEED');
     const metrics = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]: [string]) => new URL(url).searchParams.get('metric'));
-    expect(metrics).toEqual(['reach', 'saved', 'shares']);
-    expect(result).toEqual({ reach: 7, saved: 7, shares: 7, replies: 0 });
+    expect(metrics).toEqual(['reach', 'saved', 'shares', 'follows']);
+    expect(result).toEqual({ reach: 7, saved: 7, shares: 7, replies: 0, follows: 7 });
   });
 
   it('não consulta plays nem replies para Reels', async () => {
     const result = await getInstagramMediaInsights('reel', 'token', 'REELS');
     const metrics = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]: [string]) => new URL(url).searchParams.get('metric'));
-    expect(metrics).toEqual(['reach', 'saved', 'shares']);
+    expect(metrics).toEqual(['reach', 'saved', 'shares', 'follows']);
     expect(result.reach).toBe(7);
   });
 
@@ -56,6 +56,6 @@ describe('getInstagramMediaInsights', () => {
     const result = await getInstagramMediaInsights('story', 'token', 'STORY');
     const metrics = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]: [string]) => new URL(url).searchParams.get('metric'));
     expect(metrics).toContain('replies');
-    expect(result).toEqual({ reach: 7, saved: 0, shares: 7, replies: 7 });
+    expect(result).toEqual({ reach: 7, saved: 0, shares: 7, replies: 7, follows: 7 });
   });
 });
