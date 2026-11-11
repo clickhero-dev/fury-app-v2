@@ -1,14 +1,21 @@
-import { setCheck, setStatus } from './api-state.js';
+import { setCheck } from './api-state.js';
 import { startMetaSyncManager } from './meta-sync-manager.js';
+import { startSyncJobsWorker } from './sync-jobs.js';
 
-/** Report startup failure and let the existing degraded watchdog restart the process. */
-export async function startObservedMetaSyncManager(): Promise<void> {
+async function observeStartup(name: string, code: string, start: () => Promise<void>): Promise<void> {
   try {
-    await startMetaSyncManager();
-    setCheck('meta-sync', true);
+    await start();
+    setCheck(name, true);
   } catch {
-    console.error('[meta-sync] META_SYNC_START_FAILED');
-    setCheck('meta-sync', false, 'META_SYNC_START_FAILED');
-    setStatus('degraded');
+    console.error(`[${name}] ${code}`);
+    setCheck(name, false, code);
   }
+}
+
+export function startObservedMetaSyncManager(): Promise<void> {
+  return observeStartup('meta-sync', 'META_SYNC_START_FAILED', startMetaSyncManager);
+}
+
+export function startObservedInitialSyncWorker(): Promise<void> {
+  return observeStartup('meta-initial-sync', 'META_INITIAL_SYNC_START_FAILED', startSyncJobsWorker);
 }

@@ -18,7 +18,7 @@ const swaggerJson = JSON.parse(readFileSync(join(__dirname, '..', 'swagger.json'
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
 import { startNotificationRetentionWorker, stopNotificationRetentionWorker } from './workers/notification-retention.worker.js';
 import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue, closeMetaSyncQueue } from './lib/queue.js';
-import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
+import { stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
 import { startSubscriptionRenewalManager, stopSubscriptionRenewalManager } from './lib/subscription-renewal-manager.js';
@@ -30,7 +30,7 @@ import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { stopMetaSyncManager } from './lib/meta-sync-manager.js';
-import { startObservedMetaSyncManager } from './lib/meta-sync-startup.js';
+import { startObservedInitialSyncWorker, startObservedMetaSyncManager } from './lib/meta-sync-startup.js';
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
@@ -283,9 +283,7 @@ app.use((req, res) => {
       void initializeBullBoardRoutes().catch((error) => {
         console.error('Failed to start Bull Board metrics recorder:', error);
       });
-      void startSyncJobsWorker().catch((error) => {
-        console.error('Failed to start Meta sync worker:', error);
-      });
+      void startObservedInitialSyncWorker();
       void startRuleEngine().catch((error) => {
         console.error('Failed to start rule engine:', error);
       });
