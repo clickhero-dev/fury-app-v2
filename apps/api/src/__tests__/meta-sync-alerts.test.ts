@@ -27,6 +27,11 @@ Funcionalidade: Alerta de falha de sincronização Meta por email
     Quando ocorre (tenant, META_TOKEN_EXPIRED)
     Então envia novo email
 
+  Cenário: destinatário permitido repetido recebe um único alerta
+    Dado SYNC_ALERT_EMAILS contém o mesmo endereço permitido mais de uma vez
+    Quando o alerta é processado
+    Então chama o provedor uma única vez para esse endereço
+
   Cenário: sucesso não gera email
     Dado run com status success
     Quando o worker processa
@@ -112,6 +117,13 @@ describe('BDD: notifyMetaSyncFailure (integração worker + dedupe)', () => {
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
     expect(sendEmail).not.toHaveBeenCalled();
     expect(fakeRedis.set).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: destinatário permitido repetido recebe um único alerta', async () => {
+    vi.stubEnv('SYNC_ALERT_EMAILS', ' outro@example.com ;OUTRO@example.com; outro@example.com ');
+    await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'outro@example.com' }));
   });
 
   it('Cenário: dedupe 6h — mesmo (tenant, error_code) não reenvia', async () => {
