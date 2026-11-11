@@ -19,3 +19,11 @@ PR #401; base `hmg`. Avaliação realizada em ambiente isolado com PostgreSQL 16
 - CI remoto e cobertura completa devem ser conferidos para o commit final; homologação e política de reinício do supervisor não foram verificadas.
 - No teste de recuperação com processo real, a API iniciou com conexão recusada, expôs `unavailable`, e passou a `healthy` após um proxy TCP isolado restabelecer acesso ao banco antes da terceira tentativa; Redis e banco eram exclusivos do teste.
 - O log remoto do CI anterior foi recuperado: a cobertura terminou com 12 arquivos falhos e nove testes falhos; os testes de rotas recebiam 503 porque a aplicação importada nos fixtures não havia passado pelo startup. Um fixture explícito de aplicação pronta corrigiu o cenário reproduzido em `studio-asset-detail` (nove falhas antes, nove sucessos depois). Os testes específicos de startup continuam usando a aplicação sem esse fixture.
+
+## Revalidação independente — 11/11/2026
+
+- No commit `2ecedb95` (PR complementar #428), cinco suítes passaram: 16 testes, incluindo gate HTTP, processo real com banco indisponível, classificação e eventos, timeout e cancelamento em PostgreSQL 16 isolado. O banco de teste foi descartado após a execução.
+- A primeira tentativa local falhou por dependências ausentes; após `npm ci --ignore-scripts` e compilação dos pacotes `@fury/shared` e `@fury/db`, as mesmas suítes passaram. Não foi identificada regressão por essas falhas de preparação.
+- O log da terceira tentativa do job `jornada-real` da #401 confirma falha de DNS dos repositórios Ubuntu durante instalação do Chromium, antes da execução da jornada. Uma quarta tentativa estava em andamento; é necessário confirmar o resultado do CI no commit final.
+- A implementação complementar usa `APP_ENV` validado para distinguir homologação e produção, retornando `unknown` para valores ausentes ou inválidos. A configuração real dos serviços ainda requer verificação.
+- Sem acesso aos eventos individuais do PostHog, aos logs de infraestrutura e à configuração do supervisor, continuam sem comprovação a origem e o ambiente das seis ocorrências históricas, o comportamento em homologação e o reinício automático após falha terminal. Não declarar a entrega integralmente validada ou pronta para merge até resolver essas pendências e confirmar o CI.
