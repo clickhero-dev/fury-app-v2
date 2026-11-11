@@ -29,7 +29,8 @@ import { startComplianceSweeper, stopComplianceSweeper } from './workers/complia
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
-import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
+import { stopMetaSyncManager } from './lib/meta-sync-manager.js';
+import { startObservedMetaSyncManager } from './lib/meta-sync-startup.js';
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
@@ -316,9 +317,7 @@ app.use((req, res) => {
       void startGoogleSyncManager().catch((error) => {
         console.error('Failed to start google-sync manager:', error);
       });
-      void startMetaSyncManager().catch((error) => {
-        console.error('Failed to start meta-sync manager:', error);
-      });
+      void startObservedMetaSyncManager();
       void startLeadStatusManager().catch((error) => {
         console.error('Failed to start lead-status manager:', error);
       });
