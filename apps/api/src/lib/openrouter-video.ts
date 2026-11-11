@@ -67,7 +67,8 @@ export const openrouterVideoClient = {
   async submit(p: VideoSubmitParams): Promise<string> {
     let key: string;
     try { key = await apiKey(); }
-    catch {
+    catch (error) {
+      if (error instanceof AppError && error.code === 'AI_CONTEXT_MISSING') throw error;
       reportFailure('submit', 'authentication');
       throw new AppError(503, 'OPENROUTER_VIDEO_KEY_UNAVAILABLE', 'Chave de vídeo indisponível.', { notSubmitted: true });
     }
