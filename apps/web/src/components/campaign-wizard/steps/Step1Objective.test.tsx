@@ -14,8 +14,19 @@ const mockAssetSelection = vi.hoisted(() => ({
   isError: false,
 }));
 
+const mockBrandKit = vi.hoisted(() => ({
+  brandKit: null as { whatsapp_number?: string } | null,
+  isLoading: false,
+  isError: false,
+  refetch: vi.fn(),
+}));
+
 vi.mock('../hooks/useMetaAssetSelection', () => ({
   useMetaAssetSelection: () => mockAssetSelection,
+}));
+
+vi.mock('@/hooks/useBrandKit', () => ({
+  useBrandKit: () => mockBrandKit,
 }));
 
 /*
@@ -64,15 +75,18 @@ Funcionalidade: seleção do objetivo da campanha
 Cenário: exibir somente os objetivos de conversas e captação
   Dado que a pessoa inicia a criação de uma campanha
   Quando a etapa de objetivo é exibida
-  Então ela vê "Gerar Conversas" e "Formulário de captação"
+  Então ela vê "Atrair Clientes no Direct do Instagram" e "Atrair Clientes para seu Whatsapp"
+  E vê "Aumentar Seguidores do Instagram"
   E não vê "Conversas WhatsApp"
 */
 describe('Step1Objective — tipos de campanha', () => {
-  it('exibe somente os objetivos Gerar Conversas e Formulário de captação', () => {
+  it('exibe os objetivos com os textos comerciais atualizados e o fluxo de seguidores', () => {
     render(<Step1Objective value={null} onChange={vi.fn()} />);
 
-    expect(screen.getByText('Gerar Conversas')).toBeInTheDocument();
-    expect(screen.getByText('Formulário de captação')).toBeInTheDocument();
+    expect(screen.getByText('Atrair Clientes no Direct do Instagram')).toBeInTheDocument();
+    expect(screen.getByText('Atrair Clientes para seu Whatsapp')).toBeInTheDocument();
+    expect(screen.getByText('Aumentar Seguidores do Instagram')).toBeInTheDocument();
+    expect(screen.getByText('Deixe o ady escolher seu melhor post e impulsione-o para aumentar o seu Instagram')).toBeInTheDocument();
     expect(screen.queryByText('Conversas WhatsApp')).not.toBeInTheDocument();
   });
 
@@ -80,7 +94,7 @@ describe('Step1Objective — tipos de campanha', () => {
     render(<Step1Objective value={null} onChange={vi.fn()} />);
 
     // A descrição de "Gerar Conversas" mantém Facebook/Messenger e Instagram.
-    const gerarConversasCard = screen.getByText('Gerar Conversas').closest('button');
+    const gerarConversasCard = screen.getByText('Atrair Clientes no Direct do Instagram').closest('button');
     expect(gerarConversasCard).not.toBeNull();
     expect(gerarConversasCard!.textContent).not.toMatch(/whatsapp/i);
     expect(gerarConversasCard!.textContent).toMatch(/facebook|messenger/i);
@@ -106,6 +120,10 @@ describe('Step1Objective — destinos de mensagens', () => {
   beforeEach(() => {
     mockAssetSelection.isLoading = false;
     mockAssetSelection.isError = false;
+    mockBrandKit.brandKit = null;
+    mockBrandKit.isLoading = false;
+    mockBrandKit.isError = false;
+    mockBrandKit.refetch.mockReset();
   });
 
   it('exibe Instagram e Facebook como cartões selecionáveis', () => {
@@ -134,5 +152,22 @@ describe('Step1Objective — destinos de mensagens', () => {
     const instagram = screen.getByRole('checkbox', { name: /instagram/i });
     expect(instagram).toBeDisabled();
     expect(screen.getByText(/conecte sua conta do instagram/i)).toBeInTheDocument();
+  });
+
+  it('Cenário: falha ao carregar o Brand Kit mantém o telefone editável e oferece retry', () => {
+    mockBrandKit.isError = true;
+
+    render(
+      <Step1Objective
+        value="leads"
+        onChange={vi.fn()}
+        whatsapp={{ pageId: 'page-1', hasInstagram: true, destinations: ['whatsapp'] }}
+        onWhatsappChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível carregar o número do Brand Kit');
+    expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: 'WhatsApp que vai atender' })).toBeEnabled();
   });
 });

@@ -140,13 +140,13 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       const facebook = page.getByRole('checkbox', { name: /facebook/i });
       await expect(instagram).toBeVisible({ timeout: 60_000 });
       await expect(facebook).toBeVisible({ timeout: 60_000 });
-      await page.getByTestId('message-destination-instagram_direct').click();
-      await page.getByTestId('message-destination-messenger').click();
+      await instagram.click();
+      await facebook.click();
       await expect(instagram).toBeChecked();
       await expect(facebook).toBeChecked();
       // O QA usa a API HMG implantada; publica com um destino simples, enquanto
       // a combinação dos canais é coberta pelos testes de payload/backend do PR.
-      await page.getByTestId('message-destination-instagram_direct').click();
+      await instagram.click();
       await expect(instagram).not.toBeChecked();
       await expect(facebook).toBeChecked();
       await expect(next).toBeEnabled({ timeout: 60_000 });

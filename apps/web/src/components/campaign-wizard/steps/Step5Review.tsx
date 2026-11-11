@@ -13,6 +13,7 @@ const REGION_TYPE_LABELS = { country: 'País', region: 'Estados', city: 'Cidades
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
   visits: 'Visitas',
+  followers: 'Aumentar Seguidores do Instagram',
   engagement: 'Engajamento',
   messages: 'Atração de Clientes',
   whatsapp: 'Conversas no WhatsApp',

@@ -37,6 +37,7 @@ router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.
 router.post('/assets/:assetId/restore', authMiddleware, tenantMiddleware, controllers.studioPublishing.restoreAsset);
 router.get('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.getAsset);
 router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, controllers.studioPublishing.getComplianceStatus);
+router.put('/assets/:assetId/rating', authMiddleware, tenantMiddleware, controllers.studioRating.rate);
 router.post('/assets/:assetId/set-active', authMiddleware, tenantMiddleware, controllers.studioPublishing.setActive);
 router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.studioPublishing.generateImage);
 router.post('/render-creative', authMiddleware, tenantMiddleware, controllers.studioPublishing.renderCreative);

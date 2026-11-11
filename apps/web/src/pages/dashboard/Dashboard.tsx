@@ -19,6 +19,9 @@ import {
   MessageCircle,
   Bookmark,
   ArrowRight,
+  AlertTriangle,
+  Trophy,
+  Heart,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -88,6 +91,20 @@ interface DailyMetric {
 }
 
 type Sparkline = { date: string; value: number }[];
+
+interface DemoDashboard {
+  demo: true;
+  summary: MetricsSummary;
+  goals: { objective: string; targetConversions: number; projectedConversions: number };
+  daily: DailyMetric[];
+  campaigns: Array<{ id: string; name: string; status: string; spend: number; conversions: number; roas: number; cpa: number }>;
+  instagram: { comments: number; saves: number; followers: number };
+  insights: {
+    bestCreatives: Array<{ id: string; name: string; conversions: number; customers: number; periodLabel: string }>;
+    topPosts: Array<{ id: string; title: string; engagement: number; likes: number; comments: number; saves: number; periodLabel: string }>;
+    tiredCreatives: Array<{ id: string; name: string; reason: string; frequency: number; ctrDropPercent: number; cpaIncreasePercent: number }>;
+  };
+}
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -684,17 +701,49 @@ function InstagramEngagementSection({
   );
 }
 
+function ActionableInsights({ demo }: { demo?: DemoDashboard }) {
+  const insights = demo?.insights;
+  const empty = (label: string) => <p className="py-7 text-sm text-slate-600 dark:text-[#9A9D96]">Ainda não há {label} no período selecionado.</p>;
+  return (
+    <section className="grid gap-4 lg:grid-cols-3">
+      <article className={`${SURFACE} p-5`}>
+        <div className="flex items-center gap-2"><Trophy className="size-5 text-[#CF6F03]" /><h2 className="font-semibold text-slate-900 dark:text-[#ECEDEF]">Melhores criativos</h2></div>
+        <p className="mt-1 text-xs text-slate-600 dark:text-[#9A9D96]">Mais conversões e clientes no período</p>
+        {insights && insights.bestCreatives.length > 0 ? <ul className="mt-4 space-y-3">{insights.bestCreatives.map((item, index) => <li key={item.id} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 dark:border-[#262824]"><div><p className="text-sm font-medium text-slate-800 dark:text-[#ECEDEF]">{index + 1}. {item.name}</p><p className="text-xs text-slate-500 dark:text-[#9A9D96]">{item.periodLabel}</p></div><span className="text-right text-sm font-semibold text-[#17708A] dark:text-[#2A9BC0]">{fmtInt(item.conversions)} conv.<br/><span className="text-xs font-normal">{fmtInt(item.customers)} clientes</span></span></li>)}</ul> : empty('criativos com resultado')}
+      </article>
+      <article className={`${SURFACE} p-5`}>
+        <div className="flex items-center gap-2"><Heart className="size-5 text-[#1E88A8]" /><h2 className="font-semibold text-slate-900 dark:text-[#ECEDEF]">Posts com maior engajamento</h2></div>
+        <p className="mt-1 text-xs text-slate-600 dark:text-[#9A9D96]">Destaques orgânicos que mais conectaram</p>
+        {insights && insights.topPosts.length > 0 ? <ul className="mt-4 space-y-3">{insights.topPosts.map((item) => <li key={item.id} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 dark:border-[#262824]"><div><p className="text-sm font-medium text-slate-800 dark:text-[#ECEDEF]">{item.title}</p><p className="text-xs text-slate-500 dark:text-[#9A9D96]">{fmtInt(item.saves)} salvamentos · {fmtInt(item.comments)} comentários</p></div><span className="text-sm font-semibold text-[#17708A] dark:text-[#2A9BC0]">{fmtInt(item.engagement)}</span></li>)}</ul> : empty('posts com engajamento')}
+      </article>
+      <article className={`${SURFACE} p-5`}>
+        <div className="flex items-center gap-2"><AlertTriangle className="size-5 text-[#CF6F03]" /><h2 className="font-semibold text-slate-900 dark:text-[#ECEDEF]">Criativos cansados</h2></div>
+        <p className="mt-1 text-xs text-slate-600 dark:text-[#9A9D96]">Hora de renovar para proteger a performance</p>
+        {insights && insights.tiredCreatives.length > 0 ? <ul className="mt-4 space-y-3">{insights.tiredCreatives.map((item) => <li key={item.id} className="border-b border-slate-100 pb-3 last:border-0 dark:border-[#262824]"><p className="text-sm font-medium text-slate-800 dark:text-[#ECEDEF]">{item.name}</p><p className="mt-1 text-xs text-[#9A4F02] dark:text-[#E08A2E]">{item.reason}</p></li>)}</ul> : empty('alertas de fadiga')}
+      </article>
+    </section>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
   const [period, setPeriod] = useState<Period>('this_month');
   const { startDate, endDate } = getPeriodDates(period);
 
+  const { data: demoResponse, isLoading: loadingDemo } = useQuery<{ demo: false } | DemoDashboard>({
+    queryKey: ['dashboard-demo'],
+    queryFn: async () => (await api.get<{ success: boolean; data: { demo: false } | DemoDashboard }>('/v2/dashboard/demo')).data.data,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const demo = demoResponse?.demo === true ? demoResponse : undefined;
+  const realQueriesEnabled = !loadingDemo && !demo;
   const {
     data: goalsData,
     isFetching: fetchingGoals,
     isLoading: loadingGoals,
-  } = useGoalsProgress(startDate, endDate);
+  } = useGoalsProgress(startDate, endDate, realQueriesEnabled);
   const queryClient = useQueryClient();
   const location = useLocation();
 
@@ -724,9 +773,10 @@ export function Dashboard() {
     },
     staleTime: 30 * 1000,
     refetchOnMount: true,
+    enabled: realQueriesEnabled,
   });
 
-  const isMetaConnected = (metaConnections?.length ?? 0) > 0;
+  const isMetaConnected = Boolean(demo) || (metaConnections?.length ?? 0) > 0;
 
   const { data: summaryRaw, isFetching: fetchingSummary } = useQuery({
     queryKey: ['metrics-summary', startDate, endDate],
@@ -743,6 +793,7 @@ export function Dashboard() {
     },
     refetchInterval: 5 * 60 * 1000,
     placeholderData: null,
+    enabled: realQueriesEnabled,
   });
 
   const {
@@ -781,6 +832,7 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000,
     placeholderData: { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false, syncedAt: null },
     refetchInterval: (query) => query.state.data?.degraded ? 30_000 : false,
+    enabled: realQueriesEnabled,
   });
   const activeCampaigns = activeCampaignsResult?.campaigns ?? [];
   const activeCampaignPartialFailures = activeCampaignsResult?.partialFailures ?? [];
@@ -799,23 +851,28 @@ export function Dashboard() {
     },
     staleTime: 5 * 60 * 1000,
     placeholderData: [],
+    enabled: realQueriesEnabled,
   });
 
-  const isPeriodDataLoading =
+  const isPeriodDataLoading = loadingDemo ||
     (fetchingGoals && !goalsData) || (fetchingSummary && !summaryRaw) ||
     (fetchingActiveCampaigns && !activeCampaignsResult) || (fetchingDaily && !dailyData);
   const isDataDegraded = Boolean(goalsData?.degraded || activeCampaignsResult?.degraded || summaryRaw?.degraded);
   const firstSyncPending = Boolean(goalsData?.firstSyncPending || activeCampaignsResult?.firstSyncPending || summaryRaw?.firstSyncPending);
   const latestSyncedAt = getLatestSync(goalsData?.syncedAt, activeCampaignsResult?.syncedAt, summaryRaw?.syncedAt);
 
-  const g = goalsData;
+  const g = demo ? {
+    hasGoals: true, objective: demo.goals.objective,
+    goals: [{ id: 'demo-conversions', name: 'Conversões', metric: 'conversions', unit: 'pessoas', current_value: demo.summary.conversions, target_value: demo.goals.targetConversions, progress_pct: Math.round((demo.summary.conversions / demo.goals.targetConversions) * 100), projected_value: demo.goals.projectedConversions, deadline: '', status: 'on_track' as const, sparkline: [] }],
+    primary_goal: { id: 'demo-conversions', name: 'Conversões', metric: 'conversions', unit: 'pessoas', current_value: demo.summary.conversions, target_value: demo.goals.targetConversions, progress_pct: Math.round((demo.summary.conversions / demo.goals.targetConversions) * 100), projected_value: demo.goals.projectedConversions, deadline: '', status: 'on_track' as const, sparkline: [] }, ideal_line: [],
+  } : goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
   const objective = g?.objective ?? 'gerar_leads';
 
-  const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
+  const hasRealData = Boolean(demo) || (g?.goals ?? []).some((goal) => goal.current_value > 0);
   const hasGoals = g?.hasGoals ?? false;
 
-  const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
+  const s = demo?.summary ?? summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
   const goalConversions = g?.goals?.find((goal) => goal.metric === 'conversions');
   const goalBudget = g?.goals?.find((goal) => goal.metric === 'spend');
@@ -877,6 +934,7 @@ export function Dashboard() {
           </div>
         </div>
 
+        {demo && <div className="rounded-2xl border border-[#1E88A8]/30 bg-[#1E88A8]/10 px-5 py-3 text-sm font-medium text-[#0F4C5C] dark:text-[#7DCEE5]">Você está vendo dados demonstrativos, preparados para uma apresentação comercial.</div>}
         {!isMetaConnected && <MetaBanner />}
 
         {isDataDegraded && <MetaSyncNotice firstSyncPending={firstSyncPending} syncedAt={latestSyncedAt} />}
@@ -941,11 +999,12 @@ export function Dashboard() {
             />
           </section>
 
-          <InstagramEngagementSection startDate={startDate} endDate={endDate} />
+          {demo ? <section className="grid gap-4 sm:grid-cols-3"><InstagramMetricCard icon={MessageCircle} label="Comentários"><p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">{fmtInt(demo.instagram.comments)}</p></InstagramMetricCard><InstagramMetricCard icon={Bookmark} label="Salvamentos"><p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">{fmtInt(demo.instagram.saves)}</p></InstagramMetricCard><InstagramMetricCard icon={Users} label="Novos seguidores"><FollowersValue value={demo.instagram.followers} /></InstagramMetricCard></section> : <InstagramEngagementSection startDate={startDate} endDate={endDate} />}
 
-          <WeeklyChart data={dailyData ?? []} hasRealData={hasRealData} idealLine={idealLine} />
+          <WeeklyChart data={demo?.daily ?? dailyData ?? []} hasRealData={hasRealData} idealLine={idealLine} />
 
-          <ActiveCampaignsTable campaigns={activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />
+          <ActiveCampaignsTable campaigns={demo?.campaigns.map((campaign) => ({ ...campaign, metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa } })) ?? activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />
+          <ActionableInsights demo={demo} />
           </>
         )}
         </div>

@@ -34,7 +34,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // O alias usado pelo frontend pertence ao workspace web; apontar para
+      // ./src na raiz fazia os testes importar um caminho inexistente.
+      '@': path.resolve(__dirname, './apps/web/src'),
     },
   },
 });

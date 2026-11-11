@@ -173,6 +173,7 @@ const authSlice = createSlice({
       state.plan = null;
       state.planExpiration = null;
       localStorage.removeItem('fury-public-trial');
+      localStorage.removeItem('fury-trial-password-pending');
       state.policy = null;
       localStorage.removeItem(PLAN_KEY);
       localStorage.removeItem(PLAN_EXPIRATION_KEY);
