@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
-import { getStoredPlatformRole } from "@/lib/platform-role";
+import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
 
 interface User {
   id: string;
   name: string | null;
   email: string;
   role: string;
+  platformRole?: string | null;
   tenantId: string;
   tenantName: string | null;
   createdAt: string;
@@ -80,7 +81,7 @@ export function UsersPage() {
 
   // Validators
   function validateTenantName(v: string) {
-    if (!v.trim()) return "Nome do tenant é obrigatório";
+    if (!v.trim()) return "Nome do cliente é obrigatório";
     return "";
   }
 
@@ -269,7 +270,7 @@ export function UsersPage() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar por nome, email ou tenant..."
+                placeholder="Buscar por nome, e-mail ou cliente..."
                 className="w-80 bg-surface border border-border rounded-full pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 transition-colors"
               />
             </form>
@@ -287,10 +288,10 @@ export function UsersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-text-tertiary text-xs uppercase tracking-wider font-medium">
-                  <th className="px-5 py-4">Tenant</th>
+                  <th className="px-5 py-4">Cliente</th>
                   <th className="px-5 py-4">Nome</th>
                   <th className="px-5 py-4">Email</th>
-                  <th className="px-5 py-4">Perfil</th>
+                  <th className="px-5 py-4">Cargo</th>
                   <th className="px-5 py-4">Criado em</th>
                 </tr>
               </thead>
@@ -307,12 +308,7 @@ export function UsersPage() {
                     <td className="px-5 py-4 text-text-secondary">{u.name ?? "—"}</td>
                     <td className="px-5 py-4 text-text-tertiary">{u.email}</td>
                     <td className="px-5 py-4">
-                      <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                        u.role === "owner" ? "bg-spark/15 text-[#B55F02] dark:text-spark"
-                          : u.role === "admin" ? "bg-spark/10 text-[#B55F02] dark:text-spark"
-                          : u.role === "superadmin" ? "bg-brand/15 text-[#17708A] dark:text-[#1E88A8]"
-                            : "bg-success/10 text-text-secondary"
-                      }`}>{u.role}</div>
+                      <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${roleBadgeClass(u)}`}>{roleLabel(u)}</div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs text-text-tertiary">
                       {new Date(u.createdAt).toLocaleDateString("pt-BR")}
@@ -370,7 +366,7 @@ export function UsersPage() {
               {/* Tenant Name */}
               <div>
                 <label htmlFor="setup-tenant-name" className="block text-xs font-medium text-admin-text-muted mb-1.5">
-                  Nome do Tenant
+                  Nome do cliente
                 </label>
                 <input
                   id="setup-tenant-name"
@@ -491,16 +487,16 @@ export function UsersPage() {
               {/* Role */}
               <div>
                 <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
-                  Perfil
+                  Cargo
                 </label>
                 <select
                   value={form.userRole}
                   onChange={(e) => setForm({ ...form, userRole: e.target.value })}
                   className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                 >
-                  <option value="owner">Owner</option>
-                  <option value="admin">Admin</option>
-                  <option value="member">Membro</option>
+                  <option value="owner">Usuário Titular</option>
+                  <option value="admin">Administrador</option>
+                  <option value="member">Usuário</option>
                 </select>
               </div>
 

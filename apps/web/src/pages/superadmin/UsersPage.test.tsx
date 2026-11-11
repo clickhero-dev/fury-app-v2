@@ -40,7 +40,7 @@ function renderPage() {
 
 async function fillForm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Novo Cliente' }));
-  await user.type(screen.getByLabelText('Nome do Tenant'), 'Cliente novo');
+  await user.type(screen.getByLabelText('Nome do cliente'), 'Cliente novo');
   await user.type(screen.getByLabelText('Nome do Usuário'), 'Owner');
   await user.type(screen.getByLabelText('Email'), 'owner@example.com');
   await user.type(screen.getByLabelText('Senha'), 'SenhaSegura1!');

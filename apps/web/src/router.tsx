@@ -38,7 +38,6 @@ import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
-import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { RoadmapPage } from './pages/roadmap/RoadmapPage';
 import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
@@ -53,6 +52,7 @@ import { ClientesPage } from './pages/superadmin/ClientesPage';
 import { MyIntegrationsPage } from './pages/superadmin/IntegrationsPanel';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
+import { CampanhasClientesPage } from './pages/superadmin/CampanhasClientesPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
 import { TicketsPage } from './pages/superadmin/TicketsPage';
 import { HealthchecksPage } from './pages/superadmin/HealthchecksPage';
@@ -181,7 +181,7 @@ export const router = createBrowserRouter([
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
-      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
+      // Orçamento Smart fora do ar até ser finalizado (rbac-views da API: budget disabled)
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },
@@ -221,6 +221,7 @@ export const router = createBrowserRouter([
       { path: 'users', element: <UsersPage /> },
       { path: 'tenants/:id', element: <TenantDetailPage /> },
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
+      { path: 'campanhas', element: <CampanhasClientesPage /> },
       { path: 'planos', element: <PlansPage /> },
       { path: 'parceiros', element: <PartnersPage /> },
       { path: 'parceiros/padrao', element: <DefaultPermissionsPage /> },
