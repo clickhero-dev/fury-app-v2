@@ -30,7 +30,7 @@ import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { stopMetaSyncManager } from './lib/meta-sync-manager.js';
-import { startObservedInitialSyncWorker, startObservedMetaSyncManager } from './lib/meta-sync-startup.js';
+import { startObservedInitialSyncWorker, startObservedMetaSyncManager, stopObservedMetaSyncWorkers } from './lib/meta-sync-startup.js';
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
@@ -335,6 +335,7 @@ app.use((req, res) => {
       server.close(async () => {
         await stopPublishDueManager();
         await stopGoogleSyncManager();
+        await stopObservedMetaSyncWorkers();
         await stopMetaSyncManager();
         await stopLeadStatusManager();
         await stopNotificationRetentionWorker();

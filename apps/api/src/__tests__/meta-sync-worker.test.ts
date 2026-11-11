@@ -252,6 +252,15 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     await stopMetaSyncManager();
   });
 
+  it('Dado erro ao agendar, quando tenta novamente, não deixa consumidor duplicado', async () => {
+    queueUpsertJobSchedulerSpy.mockImplementationOnce(() => { throw new Error('indisponível'); });
+    await expect(startMetaSyncManager()).rejects.toThrow('indisponível');
+    expect(workerInstances).toHaveLength(0);
+    await startMetaSyncManager();
+    expect(workerInstances).toHaveLength(1);
+    await stopMetaSyncManager();
+  });
+
   it('Cenário: segundo startup reaproveita o scheduler estável sem criar tick repetível', async () => {
     await startMetaSyncManager();
     await startMetaSyncManager();
