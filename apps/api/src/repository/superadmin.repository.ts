@@ -283,7 +283,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
   // troca a senha e registra quem fez, nunca a senha
   async resetUserPassword(
-    user: { id: string; tenantId: string; email: string },
+    user: { id: string; tenantId: string; email: string; partnerId?: string | null },
     passwordHash: string,
     actor: { userId: string; partnerId: string | null },
   ) {
@@ -295,7 +295,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
         action: 'user_password_reset',
         entityType: 'user',
         entityKey: user.id,
-        partnerId: tenant?.partnerId ?? null,
+        partnerId: tenant?.partnerId ?? user.partnerId ?? null,
         details: { tenantId: user.tenantId, email: user.email, byPartner: actor.partnerId !== null },
       });
     });

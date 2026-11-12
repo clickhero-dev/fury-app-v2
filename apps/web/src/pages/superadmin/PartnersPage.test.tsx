@@ -15,7 +15,7 @@ Cenário: limite abaixo dos clientes atuais
   Quando o limite digitado é 5
   Então o Salvar fica desligado e o aviso aparece
 */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +27,7 @@ const mockPost = vi.hoisted(() => vi.fn());
 const mockPatch = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api', () => ({ default: { get: mockGet, post: mockPost, patch: mockPatch } }));
 
-const partnerA = { id: 'p-1', name: 'Parceira Um', maxTenants: 10, usedTenants: 7, accountEmail: 'um@x.com', keyLast4: 'a1b2' };
+const partnerA = { id: 'p-1', name: 'Parceira Um', maxTenants: 10, usedTenants: 7, accountEmail: 'um@x.com', accountUserId: 'u-p1', keyLast4: 'a1b2' };
 const partnerB = { id: 'p-2', name: 'Parceira Dois', maxTenants: 5, usedTenants: 0, accountEmail: 'dois@x.com', keyLast4: null };
 
 beforeEach(() => {
@@ -38,13 +38,14 @@ beforeEach(() => {
 });
 
 describe('PartnersPage', () => {
-  it('mostra vagas, chave mascarada e totais', async () => {
+  it('mostra vagas por parceiro e chave mascarada, sem card de vagas usadas', async () => {
     render(<MemoryRouter><PartnersPage /></MemoryRouter>);
 
     expect(await screen.findByText('Parceira Um')).toBeInTheDocument();
     expect(screen.getByText('•••• a1b2')).toBeInTheDocument();
     expect(screen.getByText('Sem chave')).toBeInTheDocument();
-    expect(screen.getByText('7 de 15')).toBeInTheDocument();
+    expect(screen.queryByText('Vagas usadas')).not.toBeInTheDocument();
+    expect(screen.getByText('Clientes de parceiros')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Configurar' })[0]).toHaveAttribute('href', '/admin/parceiros/p-1');
   });
 
@@ -86,5 +87,34 @@ describe('PartnerConfigPage', () => {
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled();
     expect(screen.getByText(/menor que os 7 clientes atuais/)).toBeInTheDocument();
     expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  const renderConfig = () =>
+    render(
+      <MemoryRouter initialEntries={['/admin/parceiros/p-1']}>
+        <Routes><Route path="/admin/parceiros/:id" element={<PartnerConfigPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+  it('troca a senha da conta do parceiro em Dados da empresa', async () => {
+    mockPost.mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    renderConfig();
+    await user.click(await screen.findByRole('button', { name: 'Trocar senha' }));
+    const dialog = screen.getByRole('dialog', { name: 'Trocar senha' });
+    await user.type(within(dialog).getByLabelText('Nova senha'), 'NovaSenha#1');
+    await user.type(within(dialog).getByLabelText('Confirmar senha'), 'NovaSenha#1');
+    await user.click(within(dialog).getByRole('button', { name: /Trocar senha/ }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/users/u-p1/password', { password: 'NovaSenha#1' }));
+    expect(await screen.findByText('Senha do parceiro alterada')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('sem conta de parceiro não mostra o botão de senha', async () => {
+    mockGet.mockResolvedValue({ data: { data: { ...partnerA, accountEmail: null, accountUserId: null } } });
+    renderConfig();
+    expect(await screen.findByRole('tab', { name: 'Dados da empresa' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trocar senha' })).not.toBeInTheDocument();
   });
 });

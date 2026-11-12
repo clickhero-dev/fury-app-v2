@@ -48,7 +48,7 @@ describe('buildSectionSummaries', () => {
       { isSuperAdmin: false, maxMembers: 2, labels },
     );
     expect(s.users).toEqual({ line1: '2 usuários', line2: 'Vagas: 1 de 2' });
-    expect(s.subscription).toEqual({ line1: 'Pro', line2: 'Status: active' });
+    expect(s.subscription).toEqual({ line1: 'Pro', line2: 'Status: Ativo' });
     expect(s.config).toEqual({ line1: 'ROAS 3.5x', line2: 'CPA R$ 25,00' });
     expect(s.metas).toEqual({ line1: 'Aumentar Vendas', line2: 'R$ 3.000,00/mês' });
     expect(s.publico).toEqual({ line1: '25 até 45 · Mulheres', line2: 'Maringá, Paraná' });

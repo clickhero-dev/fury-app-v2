@@ -89,7 +89,10 @@ describe('TenantDetailPage — créditos de imagem', () => {
     expect(await screen.findByText('2 de 10 disponíveis')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Básico Parceiro/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Básico Parceiro - R$ 50,00/mês' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ativo' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Teste' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Fim do período de teste')).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith('/admin/tenants/tenant-1/assignable-plans');
     expect(mockGet).not.toHaveBeenCalledWith('/admin/plans');
   });
@@ -103,7 +106,7 @@ describe('TenantDetailPage — créditos de imagem', () => {
   }
   const person = (id: string, role: string) => ({ id, name: `U ${id}`, email: `${id}@x.com`, role, createdAt: '2026-01-01' });
 
-  it('parceiro não vê cargo ao criar nem ao editar; super vê', async () => {
+  it('ninguém escolhe cargo dentro do cliente, nem o super', async () => {
     partnerWithUsers([person('t', 'owner')]);
     const user = userEvent.setup();
     const { unmount } = renderPage();
@@ -118,7 +121,11 @@ describe('TenantDetailPage — créditos de imagem', () => {
     localStorage.setItem('user', JSON.stringify({ platformRole: 'super_admin' }));
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
-    expect(await screen.findByRole('option', { name: 'Usuário Titular' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Criar Usuário' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Usuário Titular' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(screen.getAllByTitle('Editar usuário')[0]!);
+    expect(screen.queryByRole('option', { name: 'Usuário Titular' })).not.toBeInTheDocument();
   });
 
   it('com 2 membros o parceiro vê o aviso de limite e não consegue abrir a criação', async () => {
@@ -240,7 +247,7 @@ describe('TenantDetailPage — cards de seção', () => {
 
   it('card de Assinatura resume plano e status', async () => {
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Assinatura' })).toHaveAccessibleDescription('Pro Status: active');
+    expect(await screen.findByRole('button', { name: 'Assinatura' })).toHaveAccessibleDescription('Pro Status: Ativo');
   });
 
   it('salvar Objetivo mantém o mesmo payload da API', async () => {
@@ -315,7 +322,7 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
     mockPost.mockResolvedValue({ data: { success: true } });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByTitle('Trocar senha'));
+    await user.click(await screen.findByRole('button', { name: 'Trocar senha' }));
     const dialog = screen.getByRole('dialog', { name: 'Trocar senha' });
     expect(within(dialog).getByText('Pessoa 1')).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText('Nova senha'), 'NovaSenha#1');
@@ -332,7 +339,7 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
     mockPost.mockRejectedValue(new Error('falha'));
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByTitle('Trocar senha'));
+    await user.click(await screen.findByRole('button', { name: 'Trocar senha' }));
     await user.type(screen.getByLabelText('Nova senha'), 'NovaSenha#1');
     await user.type(screen.getByLabelText('Confirmar senha'), 'NovaSenha#1');
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Trocar senha/ }));

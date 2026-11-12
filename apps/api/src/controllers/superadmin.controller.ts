@@ -161,11 +161,11 @@ function partnerOf(req: Request): string | null {
   return req.adminScope.partnerId;
 }
 
-// parceiro só cria Membro e não troca cargo
-function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
-  if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
+// dentro do cliente só nasce Membro e o cargo não muda (super_admin incluso)
+function assertRoleAllowed(newRole?: string, currentRole?: string) {
+  if (newRole === undefined || newRole === currentRole) return;
   if (currentRole !== undefined || newRole !== "member")
-    throw new AppError(403, "ROLE_FORBIDDEN", "O parceiro só pode criar Usuários");
+    throw new AppError(403, "ROLE_FORBIDDEN", "Dentro do cliente só é possível criar Usuários, sem troca de cargo");
 }
 
 // só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
@@ -352,7 +352,7 @@ export class SuperAdminController {
       const repo = this.repo;
       const body = createUserSchema.parse(req.body);
       const tenant = await this.tenantInScope(req, body.tenantId);
-      assertRoleAllowed(req, body.role);
+      assertRoleAllowed(body.role);
 
       const existing = await repo.findUserByEmail(body.email);
       if (existing)
@@ -486,7 +486,7 @@ export class SuperAdminController {
       const body = updateUserSchema.parse(req.body);
 
       const existing = await this.userInScope(req, req.params.id);
-      assertRoleAllowed(req, body.role, existing.role);
+      assertRoleAllowed(body.role, existing.role);
       // e-mail não é editável, nem pelo super_admin
       if (body.email !== undefined && body.email !== existing.email)
         throw new AppError(400, "EMAIL_NOT_EDITABLE", "O e-mail não pode ser alterado");

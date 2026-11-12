@@ -10,6 +10,7 @@ export interface Partner {
   maxTenants: number;
   usedTenants: number;
   accountEmail: string | null;
+  accountUserId?: string | null;
   keyLast4: string | null;
 }
 
@@ -67,7 +68,6 @@ export function PartnersPage() {
   }
 
   const used = partners.reduce((s, p) => s + p.usedTenants, 0);
-  const max = partners.reduce((s, p) => s + p.maxTenants, 0);
 
   if (loading) return <div className="text-text-tertiary text-sm">Carregando...</div>;
 
@@ -99,10 +99,9 @@ export function PartnersPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3 mb-6">
+      <div className="grid gap-3 sm:grid-cols-2 mb-6">
         {[
           { label: "Parceiros ativos", value: String(partners.length) },
-          { label: "Vagas usadas", value: `${used} de ${max}` },
           { label: "Clientes de parceiros", value: String(used) },
         ].map((k) => (
           <div key={k.label} className="bg-surface border border-border rounded-2xl p-5">

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
 import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
+import { RoleHelp } from "./RoleHelp";
 
 interface User {
   id: string;
@@ -260,7 +261,7 @@ export function UsersPage() {
             }}
             className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2"
           >
-            <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
+            <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo cliente ady
           </button>
           )}
           <div className="relative">
@@ -350,10 +351,15 @@ export function UsersPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
           <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-text-primary">
-                Novo Cliente
-              </h2>
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">
+                  Novo cliente ady
+                </h2>
+                <div className="text-sm text-text-secondary mt-1">
+                  Cria um cliente e um usuário da ady, sem vínculo com parceiro. Para cadastrar um parceiro, use Parceiros → Novo parceiro.
+                </div>
+              </div>
               <button
                 onClick={() => setShowModal(false)}
                 className="ady-btn text-text-tertiary hover:text-text-primary transition-colors"
@@ -486,10 +492,14 @@ export function UsersPage() {
 
               {/* Role */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
-                  Cargo
-                </label>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label htmlFor="new-user-role" className="text-xs font-medium text-admin-text-muted">
+                    Cargo
+                  </label>
+                  <RoleHelp />
+                </div>
                 <select
+                  id="new-user-role"
                   value={form.userRole}
                   onChange={(e) => setForm({ ...form, userRole: e.target.value })}
                   className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
