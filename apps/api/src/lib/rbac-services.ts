@@ -37,6 +37,8 @@ export const RBAC_EXEMPT_PREFIXES: readonly string[] = [
   '/health',
   '/public',
   '/auth',
+  // Conversa requer autenticação; ações delegadas verificam o RBAC da rota de destino.
+  '/chat',
   '/faqs',
   '/announcements',
   // sino: isolado por cliente/usuário no próprio controller

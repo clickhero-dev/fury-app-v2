@@ -5,6 +5,8 @@ import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
 import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { ChatProfileService } from './services/core/chat-profile.service.js';
+import { ChatProfileController } from './controllers/chat-profile.controller.js';
 import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
 import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
@@ -94,6 +96,16 @@ import { StudioVariationsController } from './controllers/studio-variations.cont
 import { WorkflowJobRepository } from './repository/workflow-job.repository.js';
 import { PublicTrialService } from './services/core/public-trial.service.js';
 import { PublicTrialController } from './controllers/public-trial.controller.js';
+import { ChatMediaController } from './controllers/chat-media.controller.js';
+import { ChatMediaValidator } from './services/chat/chat-media-validator.js';
+import { ChatTranscriptionService } from './services/chat/chat-transcription.service.js';
+import { ChatAttachmentService } from './services/chat/chat-attachment.service.js';
+import { ChatAttachmentReader } from './services/chat/chat-attachment-reader.js';
+import { OpenRouterChatMediaClient } from './services/chat/openrouter-chat-media.client.js';
+import { ChatAttachmentRepository } from './repository/chat-attachment.repository.js';
+import { createChatPrivateStorage } from './services/storage/chat-private-storage.js';
+import { createChatPlanRuntime } from './services/chat/chat-plan-runtime.js';
+import { getChatPlanQueue } from './workers/chat-plan.worker.js';
 
 /**
  * Composition root (DI) da API.
@@ -191,7 +203,22 @@ export const wppVerificationService = new WppVerificationService(
   (tenantId: string) => new WppVerificationRepository(tenantId),
 );
 
+const chatMediaValidator = new ChatMediaValidator();
+const chatMediaProvider = new OpenRouterChatMediaClient();
+export const chatTranscriptionService = new ChatTranscriptionService(chatMediaValidator, chatMediaProvider);
+export const chatAttachmentService = new ChatAttachmentService(
+  (tenantId, userId) => new ChatAttachmentRepository(tenantId, userId),
+  createChatPrivateStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
+);
+export const chatPlanRuntime = createChatPlanRuntime({
+  baseUrl: process.env.INTERNAL_NODE_API_ORIGIN ?? `http://127.0.0.1:${process.env.PORT || '3000'}`,
+  secret: process.env.CHAT_DELEGATION_SECRET ?? '',
+  queue: { enqueue: async (wake, delayMs) => (await getChatPlanQueue()).enqueue(wake, delayMs) },
+});
+
 export const controllers = {
+  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService),
+  chatPlan: chatPlanRuntime.controller,
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
   announcement: new AnnouncementController(announcementRepository),
@@ -214,6 +241,7 @@ export const controllers = {
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
   demoDashboard: new DemoDashboardController(demoDashboardService),
+  chatProfile: new ChatProfileController(new ChatProfileService()),
   businessContext: businessContextController,
   publicTrial: new PublicTrialController(publicTrialService),
   automation: new AutomationController(automationService),
