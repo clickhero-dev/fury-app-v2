@@ -126,6 +126,9 @@ function MessageList({messages, approvals, conversationId, children}: {messages:
 
 export function ChatPage() {
   const selectionVersion = useRef(0);
+  const selectedConversation = useRef<string | null>(null);
+  const streamSnapshots = useRef(new Map<string, {messages: Message[]; approvals: Approval[]; responseRun: string | null; error: string; uncertain: boolean; active: boolean; recovered: boolean}>());
+  const approvalVersion = useRef(0);
   const sendingRef = useRef(false);
   const creatingRef = useRef(false);
   const creatingRequest = useRef<AbortController | null>(null);
@@ -197,7 +200,7 @@ export function ChatPage() {
   useEffect(() => {
     if (!current || (!hasRunningJob && (responseRun !== 'running' || busy))) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => { try { const data = await (await request(`/conversations/${current}`)).json(); if (!cancelled) { setApprovals(normalizeApprovals(data.approvals || [])); if (!busy && responseRun === 'running') { setMessages(data.messages || []); setResponseRun(data.response_run?.status || null); } } } catch { if (!cancelled) setError('Não foi possível atualizar o andamento. Tentaremos novamente.'); } finally { if (!cancelled) timer = setTimeout(poll, 3000); } };
+    const poll = async () => { const version = approvalVersion.current; try { const data = await (await request(`/conversations/${current}`)).json(); if (!cancelled && version === approvalVersion.current) { const polled = normalizeApprovals(data.approvals || []); const snapshot = streamSnapshots.current.get(current); if (snapshot) { const byId = new Map(polled.map((item: Approval) => [item.id, item])); snapshot.approvals = snapshot.approvals.map(item => byId.get(item.id) as Approval || item); for (const item of polled) if (!snapshot.approvals.some(existing => existing.id === item.id)) snapshot.approvals.push(item); setApprovals(snapshot.approvals); } else setApprovals(polled); if (!busy && responseRun === 'running') { setMessages(data.messages || []); setResponseRun(data.response_run?.status || null); } } } catch { if (!cancelled) setError('Não foi possível atualizar o andamento. Tentaremos novamente.'); } finally { if (!cancelled) timer = setTimeout(poll, 3000); } };
     timer = setTimeout(poll, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [current, hasRunningJob, responseRun, busy]);
@@ -211,7 +214,7 @@ export function ChatPage() {
       setError('');
       const c = await (await request('/conversations', {method:'POST',signal:controller.signal})).json();
       if (controller.signal.aborted || version !== selectionVersion.current) return null;
-      setConversations(v => [c,...v]); setCurrent(c.id); setSendUncertain(false);
+      setConversations(v => [c,...v]); selectedConversation.current = c.id; setCurrent(c.id); setSendUncertain(false);
       setHistoryOpen(false);
       followLatest.current = true; setAwayFromLatest(false);
       try { sessionStorage.setItem('ady-chat-current', c.id); } catch { /* Sem persistência de aba. */ }
@@ -233,10 +236,15 @@ export function ChatPage() {
       if (media.ready.some(file => c.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) { setInput(''); media.clear(); }
       setSendUncertain(false);
       if (typeof c.title === 'string') setConversations(items => items.map(item => item.id === id ? {...item, title:c.title} : item));
-      setCurrent(id);
+      selectedConversation.current = id; setCurrent(id);
       try { sessionStorage.setItem('ady-chat-current', id); } catch { /* Sem persistência de aba. */ }
       followLatest.current = true; setAwayFromLatest(false);
-      setMessages(c.messages || []); setApprovals(normalizeApprovals(c.approvals || [])); setResponseRun(c.response_run?.status || null);
+      const storedSnapshot = streamSnapshots.current.get(id);
+      const snapshot = storedSnapshot && !storedSnapshot.active && (storedSnapshot.uncertain || storedSnapshot.recovered) ? undefined : storedSnapshot;
+      if (storedSnapshot && !snapshot) streamSnapshots.current.delete(id);
+      setMessages(snapshot?.messages ?? c.messages ?? []); setApprovals(snapshot?.approvals ?? normalizeApprovals(c.approvals || [])); setResponseRun(snapshot ? snapshot.responseRun : c.response_run?.status || null);
+      if (snapshot) { setError(snapshot.error); setSendUncertain(snapshot.uncertain); }
+      if (snapshot && !snapshot.active) streamSnapshots.current.delete(id);
     } catch { if (selectionVersion.current === version) setError('Não foi possível abrir a conversa.'); }
     finally { if (selectionVersion.current === version) setOpening(false); }
   }
@@ -245,7 +253,7 @@ export function ChatPage() {
     deletingRef.current = true; setDeleting(true); dictation.cancel();
     try {
       await request(`/conversations/${current}`, {method:'DELETE'});
-      media.clear(); setConversations(v => v.filter(c => c.id !== current)); setCurrent(null);
+      media.clear(); setConversations(v => v.filter(c => c.id !== current)); selectedConversation.current = null; setCurrent(null);
       try { sessionStorage.removeItem('ady-chat-current'); } catch { /* Sem persistência de aba. */ }
       setMessages([]); setApprovals([]); setResponseRun(null); setSendUncertain(false);
     } catch { setError('Não foi possível excluir a conversa.'); }
@@ -267,27 +275,35 @@ export function ChatPage() {
       setSavingTitle(false);
     }
   }
+  function updateVisibleApprovals(update: (items: Approval[]) => Approval[]) {
+    const snapshot = current ? streamSnapshots.current.get(current) : undefined;
+    if (snapshot) {
+      snapshot.approvals = update(snapshot.approvals);
+      setApprovals(snapshot.approvals);
+    } else setApprovals(update);
+  }
   async function approve(id: string) {
     if (approving) return;
+    approvalVersion.current++;
     setApproving(id);
     try {
       setError('');
       const outcome = await (await request(`/approvals/${id}/confirm`, {method:'POST'})).json();
       if (!['completed', 'processing'].includes(outcome.status)) throw new Error('incomplete');
-      setApprovals(v => v.map(a => a.id === id ? {...a,status:outcome.status,result:outcome.result} : a));
+      updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:outcome.status,result:outcome.result} : a));
     } catch (err) {
       const failure = err instanceof ChatRequestError ? err.approvalFailure : null;
       if (failure) {
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'failed',result:{code:failure.code,error:failure.message}} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'failed',result:{code:failure.code,error:failure.message}} : a));
       } else if ((err as {status?: number}).status === 409) {
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'expired'} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'expired'} : a));
         setError('O recurso mudou. Solicite uma nova proposta antes de confirmar.');
       } else {
         rememberUncertain(id);
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'unknown'} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'unknown'} : a));
         setError('Não foi possível confirmar a ação.');
       }
-    } finally { setApproving(null); void plans.refetch(); }
+    } finally { approvalVersion.current++; setApproving(null); void plans.refetch(); }
   }
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -305,26 +321,37 @@ export function ChatPage() {
     const current = conversationId;
     if (!current || busy) return; setError(''); setBusy(true); setResponseRun(null); const replyId = crypto.randomUUID();
     const isMessage = text !== undefined;
+    const streamSelectionVersion = selectionVersion.current;
     let accepted = false;
-    setMessages(v => [...v, ...(isMessage ? [{id:crypto.randomUUID(),role:'user',content:text || '',attachments}] : []), {id:replyId,role:'assistant',content:''}]);
+    const snapshot = {messages: [...messages, ...(isMessage ? [{id:crypto.randomUUID(),role:'user',content:text || '',attachments}] : []), {id:replyId,role:'assistant',content:''}], approvals: [...approvals], responseRun: null as string | null, error: '', uncertain: false, active: true, recovered: false};
+    streamSnapshots.current.set(current, snapshot);
+    const visible = () => selectedConversation.current === current;
+    const updateMessages = (update: (items: Message[]) => Message[]) => { snapshot.messages = update(snapshot.messages); if (visible()) setMessages(snapshot.messages); };
+    const updateApprovals = (update: (items: Approval[]) => Approval[]) => { snapshot.approvals = update(snapshot.approvals); if (visible()) setApprovals(snapshot.approvals); };
+    const updateError = (value: string) => { snapshot.error = value; if (visible()) setError(value); };
+    if (visible()) setMessages(snapshot.messages);
     try {
       const response = await request(`/conversations/${current}/${isMessage ? 'messages' : 'retry'}`, {method:'POST',body:JSON.stringify(isMessage ? {...(text ? {content:text} : {}), ...(attachments.length ? {attachmentIds:attachments.map(item => item.id)} : {})} : {})});
       accepted = true;
-      onAccepted?.();
+      if (visible()) onAccepted?.();
       if (!response.body) throw new Error('stream ausente');
-      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false;
-      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if (event === 'token') setMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); if (event === 'done') { completed = true; if (typeof data.message?.content === 'string') setMessages(v => v.map(m => m.id === replyId ? {...m, content:data.message.content, created_at:data.message.created_at} : m)); void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') setApprovals(v => [...v,data]); if (event === 'error') setError(data.message || 'Não foi possível concluir a resposta.'); };
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false; let responseText = '';
+      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if (event === 'token' && typeof data.content === 'string') { responseText += data.content; updateMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); } if (event === 'done') { completed = true; if (typeof data.message?.content === 'string') { responseText = data.message.content; updateMessages(v => v.map(m => m.id === replyId ? {...m, content:data.message.content, created_at:data.message.created_at} : m)); } if (visible()) void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') updateApprovals(v => [...v,data]); if (event === 'error') updateError(data.message || 'Não foi possível concluir a resposta.'); };
       while (true) { const {value,done} = await reader.read(); buffer += decoder.decode(value, {stream:!done}); const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || ''; frames.forEach(process); if (done) { if (buffer.trim()) process(buffer); break; } }
       if (!completed) throw new Error('stream interrompido');
+      if (!responseText.trim()) {
+        updateMessages(v => v.filter(m => m.id !== replyId));
+        updateError('Não foi possível concluir a resposta. Atualize a conversa para conferir o estado.');
+      }
     } catch {
       try {
         const saved = await (await request(`/conversations/${current}`)).json();
-        if (!accepted && attachments.some(file => saved.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) onAccepted?.();
+        if (visible() && !accepted && attachments.some(file => saved.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) onAccepted?.();
         if (typeof saved.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:saved.title} : item));
-        setMessages(saved.messages || []); setApprovals(normalizeApprovals(saved.approvals || [])); setResponseRun(saved.response_run?.status || null);
-        setError('A conexão foi interrompida. A conversa foi atualizada; confira o estado antes de tentar novamente.');
-      } catch { setSendUncertain(true); setError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.'); }
-    } finally { setBusy(false); }
+        updateMessages(() => saved.messages || []); updateApprovals(() => normalizeApprovals(saved.approvals || [])); snapshot.responseRun = saved.response_run?.status || null; snapshot.recovered = true; if (visible()) setResponseRun(snapshot.responseRun);
+        updateError('A conexão foi interrompida. A conversa foi atualizada; confira o estado antes de tentar novamente.');
+      } catch { snapshot.uncertain = true; if (visible()) setSendUncertain(true); updateError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.'); }
+    } finally { snapshot.active = false; if (visible() && selectionVersion.current === streamSelectionVersion) streamSnapshots.current.delete(current); setBusy(false); }
   }
   const filteredConversations = conversations.filter(c => (c.title || 'Nova conversa').toLocaleLowerCase('pt-BR').includes(historySearch.trim().toLocaleLowerCase('pt-BR')));
   const currentTitle = current ? conversations.find(c => c.id === current)?.title || 'Sua conversa' : 'Nova conversa';
@@ -334,7 +361,7 @@ export function ChatPage() {
 {historyOpen && error && <p role="alert">{error}</p>}
 <input className="ady-chat-search" aria-label="Buscar conversas" placeholder="Buscar conversas" value={historySearch} onChange={e => setHistorySearch(e.target.value)}/>
 {filteredConversations.length === 0 && <p className="ady-chat-history-empty">{historySearch.trim() ? 'Nenhuma conversa encontrada. Tente outro termo.' : 'Suas conversas ficam salvas aqui. Comece com uma ideia.'}</p>}
-<nav aria-label="Histórico de conversas">{filteredConversations.map(c => <button key={c.id} className="ady-chat-conversation" aria-label={c.title || 'Nova conversa'} title={c.title || 'Nova conversa'} onClick={() => { setHistoryOpen(false); setEditingTitle(false); setTitleError(''); void open(c.id); }} disabled={creating || deleting || busy || approving !== null || savingTitle} aria-current={current === c.id ? 'page' : undefined}>
+<nav aria-label="Histórico de conversas">{filteredConversations.map(c => <button key={c.id} className="ady-chat-conversation" aria-label={c.title || 'Nova conversa'} title={c.title || 'Nova conversa'} onClick={() => { setHistoryOpen(false); setEditingTitle(false); setTitleError(''); void open(c.id); }} disabled={creating || deleting || approving !== null || savingTitle} aria-current={current === c.id ? 'page' : undefined}>
   <span className="ady-chat-avatar" aria-hidden="true"><AdySymbol size={25}/></span>
   <span className="ady-chat-conversation-title">{c.title || 'Nova conversa'}</span>
 </button>)}</nav>
