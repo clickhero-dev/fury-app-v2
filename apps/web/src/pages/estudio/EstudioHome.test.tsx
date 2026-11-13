@@ -27,6 +27,9 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
+const blocked = vi.hoisted(() => ({ keys: [] as string[] }));
+vi.mock('@/hooks/useBlockedViews', () => ({ useBlockedViews: () => ({ isBlocked: (k: string) => blocked.keys.includes(k) }) }));
+
 vi.mock('@/components/campaign-wizard/CampaignWizard', () => ({
   CampaignWizard: () => null,
 }));
@@ -702,5 +705,31 @@ describe('EstudioHome — deep-link ?criar=rapida (FAB "Criar imagem")', () => {
 
     expect(await screen.findByRole('heading', { name: /estúdio de anúncios/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /criação rápida/i })).toBeNull();
+  });
+});
+
+describe('EstudioHome — funcionalidades do plano', () => {
+  afterEach(() => { blocked.keys = []; });
+
+  it('sem gerador de imagem (e sem vídeo): some "Criação rápida" e o deep-link não abre', async () => {
+    blocked.keys = ['studio.image', 'studio.video'];
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({ data: { assets: [], creativesRemaining: null, creativesLimit: null } });
+    renderWithProviders('/estudio?criar=rapida');
+
+    expect(await screen.findByRole('heading', { name: /estúdio de anúncios/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /criação rápida/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /criar anúncio/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /criação rápida/i })).toBeNull();
+  });
+
+  it('sem criar campanha: some "Usar em campanha"', async () => {
+    blocked.keys = ['campaigns.create'];
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
+    renderWithProviders();
+
+    expect(await screen.findByText('Anúncio de imagem')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Usar em campanha$/i })).toBeNull();
   });
 });

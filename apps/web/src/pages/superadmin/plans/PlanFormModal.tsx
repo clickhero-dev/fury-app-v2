@@ -10,7 +10,12 @@ import {
   limitMode,
   planChanges,
   setLimitQty,
+  toggleView,
   validateDraft,
+  viewVisible,
+  VIEW_GROUP_LABEL,
+  VIEW_PAIRS,
+  type PlanView,
   type LimitKey,
   type LimitMode,
   type PlanDraft,
@@ -20,6 +25,8 @@ interface PlanFormModalProps {
   mode: "new" | "edit";
   initial: PlanDraft;
   subscriberCount?: number;
+  // funcionalidades configuráveis (vazio = seção some)
+  views?: PlanView[];
   saving: boolean;
   error: string;
   onSubmit: (draft: PlanDraft) => void;
@@ -77,7 +84,7 @@ function QtyInput({ value, min, label, disabled, placeholder, onCommit }: {
 }
 
 // Modal único para criar e editar plano
-export function PlanFormModal({ mode, initial, subscriberCount = 0, saving, error, onSubmit, onClose }: PlanFormModalProps) {
+export function PlanFormModal({ mode, initial, subscriberCount = 0, views = [], saving, error, onSubmit, onClose }: PlanFormModalProps) {
   const [draft, setDraft] = useState<PlanDraft>(initial);
   const [errors, setErrors] = useState<{ name?: string; price?: string }>({});
   const nameRef = useRef<HTMLInputElement>(null);
@@ -112,6 +119,44 @@ export function PlanFormModal({ mode, initial, subscriberCount = 0, saving, erro
   }
 
   const videoOff = !draft.limits.videosPerMonth && draft.limits.videosPerMonth !== null;
+
+  function viewRow(view: PlanView) {
+    const visible = (key: string) => viewVisible(draft.blockedViews, key, views) && !views.find((v) => v.key === key)?.locked;
+    const parentOff = view.parent !== null && !visible(view.parent);
+    const on = !view.locked && viewVisible(draft.blockedViews, view.key, views);
+    const disabled = view.locked || parentOff;
+    const hint = view.locked ? "Não disponível para o seu perfil" : parentOff ? "Desligada junto com a principal" : on ? "O cliente vê" : "O cliente não vê";
+    const pair = VIEW_PAIRS[view.key];
+    const pairName = pair && views.find((v) => v.key === pair.other)?.description;
+    // ligado e o par desligado: só avisa
+    const pairWarn = pair && pairName && on && !visible(pair.other);
+    return (
+      <div key={view.key} className={`flex items-center justify-between gap-3 px-4 py-3 ${view.parent ? "pl-10" : ""} ${disabled ? "opacity-60" : ""}`}>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-admin-text">{view.description}</div>
+          <div className="text-xs text-admin-text-muted">{hint}</div>
+          {pair && pairName && (
+            <div className={`text-xs mt-0.5 ${pairWarn ? "text-[#B55F02] dark:text-spark" : "text-admin-text-faint"}`}>
+              {pairWarn ? `Recomendado manter junto com ${pairName}.` : pair.text}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label={view.description}
+          disabled={disabled}
+          onClick={() => setDraft((d) => ({ ...d, blockedViews: toggleView(d.blockedViews, view.key, views) }))}
+          className="ady-btn shrink-0 disabled:cursor-not-allowed"
+        >
+          <div className={`relative w-11 h-6 rounded-full transition-colors ${on ? "bg-admin-petrol" : "bg-admin-border"}`}>
+            <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : ""}`} />
+          </div>
+        </button>
+      </div>
+    );
+  }
 
   function limitRow(key: LimitKey) {
     const field = LIMIT_FIELDS.find((f) => f.key === key)!;
@@ -270,6 +315,20 @@ export function PlanFormModal({ mode, initial, subscriberCount = 0, saving, erro
                 {limitRow("modificationsPerVideo")}
               </div>
             </div>
+            {views.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <div className={groupTitle}>O que o cliente vê</div>
+                  <div className="text-xs text-admin-text-muted mt-1">Desligue o que quem assinar este plano não deve ver nem usar.</div>
+                </div>
+                {(["ads", "content"] as const).map((group) => (
+                  <div key={group} role="group" aria-label={VIEW_GROUP_LABEL[group]} className="border border-admin-border rounded-xl divide-y divide-admin-border">
+                    <div className="px-4 py-2 text-xs font-bold text-admin-text-muted">{VIEW_GROUP_LABEL[group]}</div>
+                    {views.filter((v) => v.group === group).map(viewRow)}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <aside className="space-y-2 lg:sticky lg:top-24 self-start">

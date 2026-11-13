@@ -367,6 +367,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'GET /my-partner',
       'GET /my-partner/ai-key',
       'GET /plans',
+      'GET /plans/configurable-views',
       'GET /tenants',
       'GET /tenants/:id',
       'GET /tenants/:tenantId/assignable-plans',

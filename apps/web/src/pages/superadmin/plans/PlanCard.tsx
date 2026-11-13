@@ -1,5 +1,5 @@
-import { Clapperboard, Film, Image as ImageIcon, Pencil, Trash2, WandSparkles, type LucideIcon } from "lucide-react";
-import { INTERVAL_LABEL, formatCents, limitText, tierBadge, type LimitKey, type PlanDraft } from "./planForm";
+import { Clapperboard, Eye, EyeOff, Film, Image as ImageIcon, Pencil, Trash2, WandSparkles, type LucideIcon } from "lucide-react";
+import { INTERVAL_LABEL, blockedSummary, formatCents, limitText, tierBadge, type LimitKey, type PlanDraft } from "./planForm";
 
 export const LIMIT_FIELDS: { key: LimitKey; label: string; icon: LucideIcon }[] = [
   { key: "creativesPerMonth", label: "Criativos por mês", icon: ImageIcon },
@@ -62,6 +62,12 @@ export function PlanCard({ plan, subscriberCount = 0, preview, onEdit, onDelete,
             </div>
           );
         })}
+      </div>
+
+      {/* o que o cliente do plano vê */}
+      <div className={`flex items-center gap-1.5 text-xs font-semibold ${plan.blockedViews.length ? "text-[#B55F02] dark:text-spark" : "text-admin-text-muted"}`}>
+        {plan.blockedViews.length ? <EyeOff aria-hidden="true" className="w-3.5 h-3.5" /> : <Eye aria-hidden="true" className="w-3.5 h-3.5" />}
+        {blockedSummary(plan.blockedViews.length)}
       </div>
 
       {!preview && (

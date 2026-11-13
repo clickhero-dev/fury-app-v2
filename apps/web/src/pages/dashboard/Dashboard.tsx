@@ -37,6 +37,7 @@ import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { PeriodSelector } from '@/components/PeriodSelector';
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { getLatestSync } from '../../lib/format-last-sync';
 
 // ─── Design tokens (ady) ──────────────────────────────────────────────────────
@@ -730,6 +731,9 @@ function ActionableInsights({ demo }: { demo?: DemoDashboard }) {
 
 export function Dashboard() {
   const [period, setPeriod] = useState<Period>('this_month');
+  // plano sem campanhas: card some e não consulta
+  const { isBlocked } = useBlockedViews();
+  const campaignsEnabled = !isBlocked('campaigns');
   const { startDate, endDate } = getPeriodDates(period);
 
   const { data: demoResponse, isLoading: loadingDemo } = useQuery<{ demo: false } | DemoDashboard>({
@@ -833,7 +837,7 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000,
     placeholderData: { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false, syncedAt: null },
     refetchInterval: (query) => query.state.data?.degraded ? 30_000 : false,
-    enabled: realQueriesEnabled,
+    enabled: realQueriesEnabled && campaignsEnabled,
   });
   const activeCampaigns = activeCampaignsResult?.campaigns ?? [];
   const activeCampaignPartialFailures = activeCampaignsResult?.partialFailures ?? [];
@@ -1004,7 +1008,7 @@ export function Dashboard() {
 
           <WeeklyChart data={demo?.daily ?? dailyData ?? []} hasRealData={hasRealData} idealLine={idealLine} />
 
-          <ActiveCampaignsTable campaigns={demo?.campaigns.map((campaign) => ({ ...campaign, metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa } })) ?? activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />
+          {campaignsEnabled && <ActiveCampaignsTable campaigns={demo?.campaigns.map((campaign) => ({ ...campaign, metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa } })) ?? activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />}
           <ActionableInsights demo={demo} />
           </>
         )}

@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ImagePlus, Megaphone, Send } from 'lucide-react';
 import { captureEvent } from '@/lib/posthog';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
 
 /**
  * Ações flutuantes de criação (canto inferior direito):
@@ -21,22 +22,25 @@ const EXCLUDED_PREFIXES = [
 ];
 
 const actions = [
-  { key: 'criar-campanha', label: 'Criar campanha', icon: Megaphone, to: '/criar-campanha' },
-  { key: 'criar-imagem', label: 'Criar imagem', icon: ImagePlus, to: '/estudio?criar=rapida' },
-  { key: 'postar', label: 'Postar', icon: Send, to: '/calendario?criar=post' },
+  { key: 'criar-campanha', label: 'Criar campanha', icon: Megaphone, to: '/criar-campanha', view: 'campaigns.create' },
+  { key: 'criar-imagem', label: 'Criar imagem', icon: ImagePlus, to: '/estudio?criar=rapida', view: 'studio.image' },
+  { key: 'postar', label: 'Postar', icon: Send, to: '/calendario?criar=post', view: 'calendar' },
 ] as const;
 
 export function FabActions() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { isBlocked } = useBlockedViews();
+  // atalho de tela bloqueada pelo plano some
+  const visible = actions.filter((a) => !isBlocked(a.view));
 
-  if (EXCLUDED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+  if (!visible.length || EXCLUDED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return null;
   }
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-      {actions.map(({ key, label, icon: Icon, to }) => (
+      {visible.map(({ key, label, icon: Icon, to }) => (
         <button
           key={key}
           type="button"

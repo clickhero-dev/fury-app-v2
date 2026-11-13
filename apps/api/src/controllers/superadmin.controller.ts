@@ -9,6 +9,9 @@ import { rbacService } from "../services/core/rbac.service.js";
 import { slugify } from "./partner.controller.js";
 import { passwordSchema } from "../lib/shared.js";
 import { revokeRefreshToken } from "../services/core/auth.service.js";
+import { RbacRepository } from "../repository/rbac.repository.js";
+import { expandBlocked } from "../lib/rbac-views.js";
+import { configurablePlanViews, describePlanViews, validatePlanViews } from "../lib/plan-views.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -110,6 +113,7 @@ const createPlanSchema = z.object({
   features: z.record(z.boolean()).default({}),
   limits: planLimitsSchema.default({}),
   isActive: z.boolean().default(true),
+  blockedViews: z.array(z.string().max(100)).max(20).default([]),
 }).superRefine((value, ctx) => {
   if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
@@ -124,6 +128,7 @@ const updatePlanSchema = z.object({
   features: z.record(z.boolean()).optional(),
   limits: planLimitsSchema.optional(),
   isActive: z.boolean().optional(),
+  blockedViews: z.array(z.string().max(100)).max(20).optional(),
 }).superRefine((value, ctx) => {
   if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
@@ -662,6 +667,8 @@ export class SuperAdminController {
           await repo.updateSubscription(sub.id, updates);
         }
       }
+      // plano pode ter mudado: recalcula o que o cliente vê
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,
@@ -865,12 +872,29 @@ export class SuperAdminController {
     }
   };
 
+  // funcionalidades que o parceiro já não tem (super_admin: nenhuma)
+  private async actorBlockedViews(req: Request): Promise<string[]> {
+    const partnerId = partnerOf(req);
+    if (!partnerId) return [];
+    return expandBlocked(await new RbacRepository().listBlockedViewKeys("user_partner", partnerId));
+  }
+
+  configurablePlanViews = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const configurable = configurablePlanViews(await this.actorBlockedViews(req));
+      res.json({ success: true, data: { views: describePlanViews(configurable) }, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createPlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
       rejectPartnerTechnicalKey(req);
-      const body = createPlanSchema.parse(req.body);
+      const { blockedViews, ...body } = createPlanSchema.parse(req.body);
+      const views = validatePlanViews(blockedViews, configurablePlanViews(await this.actorBlockedViews(req)));
       // dono vem do escopo, nunca do body
-      const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
+      const plan = await this.repo.createPlanWithViews({ ...body, partnerId: partnerOf(req) }, views, req.user!.userId);
       res
         .status(201)
         .json({ success: true, data: plan, timestamp: new Date().toISOString() });
@@ -883,10 +907,16 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       rejectPartnerTechnicalKey(req);
-      const body = updatePlanSchema.parse(req.body);
+      const { blockedViews, ...body } = updatePlanSchema.parse(req.body);
       await this.planInScope(req.params.id, partnerOf(req));
 
-      await repo.updatePlan(req.params.id, body);
+      let views: string[] | undefined;
+      if (blockedViews !== undefined) {
+        const current = (await repo.listPlanBlockedViews([req.params.id])).get(req.params.id) ?? [];
+        views = validatePlanViews(blockedViews, configurablePlanViews(await this.actorBlockedViews(req)), current);
+      }
+      await repo.updatePlanWithViews(req.params.id, body, views, req.user!.userId);
+      if (views !== undefined) await rbacService.bumpVersion();
       res.json({
         success: true,
         data: null,
@@ -925,6 +955,7 @@ export class SuperAdminController {
       }
 
       await repo.deletePlan(id);
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,
