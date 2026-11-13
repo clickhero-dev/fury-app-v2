@@ -8,6 +8,9 @@ ALLOWED = frozenset(('timeout', 'auth', 'error'))
 
 def classify_provider_error(error: Exception) -> str:
     import openai
+    from streaming import ProviderRunError
+    if isinstance(error, ProviderRunError):
+        return error.kind if error.kind in ALLOWED else 'error'
     if isinstance(error, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)):
         return 'timeout'
     if isinstance(error, openai.AuthenticationError):
