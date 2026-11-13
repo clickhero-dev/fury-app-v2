@@ -48,7 +48,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await db`insert into chat_response_runs(conversation_id,user_message_id,lease_id,status,lease_until) values (${conversation},${message},${randomUUID()},'running',now()-interval '1 minute')`;
     await page.reload();
     await page.getByRole('button',{name:'Proposta isolada'}).click();
-    const retryRequest = page.waitForRequest(req => req.url().endsWith('/retry') && req.method() === 'POST');
+    const retryRequest = page.waitForRequest(req => new URL(req.url()).pathname.endsWith('/retry') && req.method() === 'POST');
     await page.getByRole('button',{name:'Retomar resposta'}).click();
     expect((await retryRequest).headers().authorization).toBe(`Bearer ${token}`);
     await expect(page.getByText('Resposta retomada com sucesso.')).toBeVisible({timeout:30000});
