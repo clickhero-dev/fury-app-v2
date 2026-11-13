@@ -1,3 +1,4 @@
+import { rbacService } from '../core/rbac.service.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
 import {
@@ -139,7 +140,7 @@ export class BillingService {
 
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 7);
-    return this.repo(tenantId).createSubscription({
+    const created = await this.repo(tenantId).createSubscription({
       tenantId,
       planId: plan.id,
       asaasSubscriptionId: asaasSub.id,
@@ -147,6 +148,9 @@ export class BillingService {
       status: 'trial',
       trialEndsAt: trialEnd,
     });
+    // plano novo: recalcula o que o cliente vê
+    await rbacService.bumpVersion();
+    return created;
   }
 
   async getSubscription(tenantId: string) {

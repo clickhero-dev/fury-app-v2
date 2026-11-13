@@ -680,11 +680,25 @@ export class StudioAiService {
     return { type: 'image' as const, assetId: newAsset.id, imageUrl, creativeData: { headline: '', primary_text: '', cta: '' }, costUsd, processingTimeMs };
   }
 
+  async getChatAssetSnapshot(tenantId: string, assetId: string) {
+    const asset = await this.repo(tenantId).getChatAssetSnapshot(assetId);
+    if (!asset) throw new AppError(404, 'ASSET_NOT_FOUND', 'Criativo não encontrado');
+    return asset;
+  }
+
+  async editChatImage(tenantId: string, input: { assetId: string; version: string; feedback: string }) {
+    const asset = await this.repo(tenantId).findAssetByIdAndVersion(input.assetId, input.version);
+    if (!asset) throw new AppError(409, 'ASSET_CHANGED', 'O criativo mudou. Consulte novamente antes de confirmar.');
+    if (asset.type !== 'image') throw new AppError(400, 'EDIT_UNSUPPORTED', 'Edição de vídeo não está disponível.');
+    return this.regenerateAd(tenantId, input, asset);
+  }
+
   async regenerateAd(
     tenantId: string,
     input: { assetId: string; feedback: string; mask?: { buffer: Buffer; mime: string } },
+    approvedAsset?: Awaited<ReturnType<StudioRepository['findAssetByIdAndVersion']>>,
   ): Promise<Record<string, any>> {
-    const asset = await this.repo(tenantId).findAssetById(input.assetId);
+    const asset = approvedAsset ?? await this.repo(tenantId).findAssetById(input.assetId);
     if (!asset) throw new Error('ASSET_NOT_FOUND');
 
     const rootAssetId = asset.rootAssetId ?? asset.id;

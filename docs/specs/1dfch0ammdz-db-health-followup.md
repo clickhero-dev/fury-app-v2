@@ -16,3 +16,9 @@ A PR #401 contém a implementação original. Nesta continuação, o health de m
 Os valores atuais do pool são max=10 por processo, idle_timeout=20 s, connect_timeout=10 s e prepare=false; o deadline do probe também é 10 s. O cancelamento e a recuperação do pool foram exercitados no relatório anterior, mas não há evidência da capacidade disponível, número de réplicas ou limites de conexão necessários para afirmar que o dimensionamento é seguro. Não alterar esses valores sem essa informação.
 
 O log da tentativa mais recente de jornada-real no SHA 5ccf879 mostra login bem-sucedido e timeout de 20 minutos aguardando o botão Gerar Conversas, não uma falha de DNS. A execução usa o backend remoto de HMG e não comprova o comportamento do backend desta branch. A configuração real de APP_ENV, a política de reinício, o teste em HMG e a correlação histórica permanecem sem evidência e exigem acesso aos respectivos serviços.
+
+## Integração com a base de 13/11
+
+- Preservar o worker de planos do chatbot: iniciá-lo apenas após probe, migrations e seed bem-sucedidos; manter o encerramento no SIGTERM. Aceite: teste de integração do bootstrap e build da API passam.
+- Preservar todas as migrations já registradas nas duas branches, incluindo `0063_ady_rbac_plan_views_blocked` e as migrations do chatbot; validar o conjunto integrado e o CI do SHA resultante.
+- Manter a PR em rascunho até correlacionar as seis ocorrências e comprovar APP_ENV, capacidade do pool, funcionamento em HMG e restart pelo supervisor. A PR #427 continua aberta e deve ser reconciliada novamente caso seja integrada primeiro.

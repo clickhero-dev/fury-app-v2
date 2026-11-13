@@ -24,6 +24,12 @@ const QUEUE_PRESENTATION = [
     description: 'Avalia e aplica recomendações de orçamento para as contas de anúncios.',
   },
   {
+    name: 'chat-plan-execution',
+    group: 'ady',
+    displayName: 'Planos do chat',
+    description: 'Executa tarefas aprovadas em planos persistidos da conversa.',
+  },
+  {
     name: 'fury-engine',
     group: 'ady',
     displayName: 'Automações Ady',
@@ -94,6 +100,12 @@ const QUEUE_PRESENTATION = [
     group: 'studio',
     displayName: 'Vídeos',
     description: 'Gera vídeos de campanha solicitados pelo estúdio.',
+  },
+  {
+    name: 'studio-video-recovery',
+    group: 'studio',
+    displayName: 'Recuperação de vídeos',
+    description: 'Recupera vídeos pendentes e retoma o acompanhamento de gerações já enviadas.',
   },
 ];
 

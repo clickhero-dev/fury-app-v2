@@ -55,11 +55,14 @@ function libraryUploadMiddleware(req: Request, res: Response, next: NextFunction
 router.use(authMiddleware, tenantMiddleware);
 
 router.get('/', controllers.brandKit.get);
+router.get('/chat-snapshot', controllers.brandKit.chatSnapshot);
+router.patch('/chat-update', controllers.brandKit.chatUpdate);
 router.put('/', controllers.brandKit.upsert);
 router.post('/logo', logoUpload.single('file'), controllers.brandKit.uploadLogo);
 router.post('/photos', photosUpload.array('files[]'), controllers.brandKit.uploadPhotos);
 router.delete('/photos', controllers.brandKit.deletePhoto);
 router.get('/library', controllers.brandKitPhotos.list);
+router.get('/chat-library', controllers.brandKitPhotos.listChat);
 router.post('/library', libraryUploadMiddleware, controllers.brandKitPhotos.upload);
 router.post('/library/:id/hide-from-reference-panel', controllers.brandKitPhotos.hideFromReferencePanel);
 router.delete('/library/:id', controllers.brandKitPhotos.remove);

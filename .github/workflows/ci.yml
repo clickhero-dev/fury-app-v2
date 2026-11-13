@@ -126,7 +126,13 @@ jobs:
 
       # Suite completa de API com coverage (exclui web + testes de integração pesados)
       - name: Run coverage (API)
-        run: npm run test:coverage:ci
+        # Chatbot owns these suites in its dedicated real-DB gate.
+        run: >-
+          npm run test:coverage:ci --
+          --exclude '**/chat-*.test.ts'
+          --exclude '**/studio-video-*.test.ts'
+          --exclude '**/brand-whatsapp-migration.bdd.test.ts'
+          --exclude '**/openrouter-video-http.integration.test.ts'
         env:
           TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
           PROBE_E2E_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test

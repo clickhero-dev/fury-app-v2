@@ -39,7 +39,7 @@ function renderPage() {
 }
 
 async function fillForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Novo Cliente' }));
+  await user.click(await screen.findByRole('button', { name: 'Novo cliente ady' }));
   await user.type(screen.getByLabelText('Nome do cliente'), 'Cliente novo');
   await user.type(screen.getByLabelText('Nome do Usuário'), 'Owner');
   await user.type(screen.getByLabelText('Email'), 'owner@example.com');
@@ -65,7 +65,9 @@ describe('UsersPage — setup tenant', () => {
     await user.click(screen.getByRole('button', { name: 'Criar' }));
 
     expect(await screen.findByText(/Já existe um cliente com este identificador/)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Novo Cliente' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Novo cliente ady' })).toBeTruthy();
+    expect(screen.getByText(/Cria um cliente e um usuário da ady/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'O que cada cargo faz' })).toBeTruthy();
   });
 
   it('Cenário: falha inesperada mostra a mensagem genérica', async () => {

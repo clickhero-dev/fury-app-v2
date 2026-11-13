@@ -4,6 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db, performanceRules, campaigns, furyInsights, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, RULE_ENGINE_QUEUE_NAME, type RuleEngineJobPayload } from '../lib/queue.js';
+import { planSkipsTenant } from '../lib/plan-skip.js';
 
 interface RuleCheckResult {
   ruleId: string;
@@ -168,6 +169,8 @@ async function processJob(job: Job<RuleEngineJobPayload>): Promise<ProcessingSta
     const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
 
     for (const tenant of allTenants) {
+      // plano sem campanhas: não roda
+      if (await planSkipsTenant(tenant.id, ['campaigns'], 'rule-engine')) continue;
       await processTenant(tenant.id, stats);
     }
 

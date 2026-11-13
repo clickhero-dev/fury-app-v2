@@ -4,6 +4,7 @@ import { BrandKitPhotoService, BRAND_KIT_PHOTO_KINDS } from '../services/brand-k
 
 const kindSchema = z.enum(BRAND_KIT_PHOTO_KINDS);
 const listQuerySchema = z.object({ kind: kindSchema.optional() });
+const chatListQuerySchema = z.object({kind:kindSchema.optional(),page:z.coerce.number().int().min(1).max(10000).default(1),limit:z.coerce.number().int().min(1).max(50).default(20)}).strict();
 const uploadBodySchema = z.object({ kind: kindSchema });
 const idParamSchema = z.object({ id: z.string().uuid() });
 
@@ -27,6 +28,14 @@ export class BrandKitPhotoController {
     } catch (err) {
       if (!this.validationError(res, err)) next(err);
     }
+  };
+
+  listChat = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const {kind,page,limit}=chatListQuerySchema.parse(req.query);
+      const data=await this.service.listChat(req.tenant!.tenantId,kind,page,limit);
+      res.json({success:true,data});
+    } catch (err) { if (!this.validationError(res,err)) next(err); }
   };
 
   upload = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

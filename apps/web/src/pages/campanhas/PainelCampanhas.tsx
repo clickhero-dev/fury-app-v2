@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useCampaigns } from '@/hooks/useCampaigns';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { usePauseCampaign, getFriendlyPauseError } from '@/hooks/usePauseCampaign';
 import { useDeleteCampaign, getDeleteCampaignError } from '@/hooks/useDeleteCampaign';
 import type { CampaignData } from '@/types/campaigns';
@@ -44,6 +45,7 @@ const PAGE_SIZE = 10;
 
 export function PainelCampanhas() {
   const navigate = useNavigate();
+  const { isBlocked } = useBlockedViews();
   const { setPreSelectedAsset, clearPreSelectedAsset } = useCampaignWizardContext();
   const [filter, setFilter] = useState<FilterType>('todos');
   const [search, setSearch] = useState('');
@@ -234,7 +236,8 @@ export function PainelCampanhas() {
         title="Campanhas"
         description="Monitore e otimize o resultado de todas as suas campanhas"
         actions={
-          <button
+          // plano sem criar campanha: botão some
+          isBlocked('campaigns.create') ? undefined : <button
             type="button"
             onClick={handleCreateCampaign}
             className="inline-flex items-center gap-2 px-6 py-3 text-xs font-semibold text-white bg-brand hover:bg-brand-hover hover:scale-[1.02] active:scale-[0.98] rounded-full transition-all cursor-pointer shadow-md"

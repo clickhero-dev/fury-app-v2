@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRbacMiddleware, resolveServiceKeys } from '../middleware/rbac.middleware.js';
-import { RBAC_SERVICES, RBAC_EXEMPT_PREFIXES } from '../lib/rbac-services.js';
+import { RBAC_SERVICES, RBAC_EXEMPT_PREFIXES, RBAC_SERVICE_OVERRIDES } from '../lib/rbac-services.js';
 import { RBAC_VIEWS } from '../lib/rbac-views.js';
 import { RbacService } from '../services/core/rbac.service.js';
 import { generateAccessToken } from '../lib/jwt.js';
@@ -85,9 +85,10 @@ describe('resolveServiceKeys', () => {
   });
 
   it('v2 mapeia para o módulo de origem', () => {
-    expect(resolveServiceKeys('/v2/campaigns/1/leads')).toEqual(['campaigns']);
-    expect(resolveServiceKeys('/v2/leads')).toEqual(['campaigns']);
-    expect(resolveServiceKeys('/v2/lead-campaigns')).toEqual(['campaigns']);
+    expect(resolveServiceKeys('/v2/campaigns/1/leads')).toEqual(['campaigns', 'leads']);
+    // leads soma a key própria (bloqueio por plano)
+    expect(resolveServiceKeys('/v2/leads')).toEqual(['campaigns', 'leads']);
+    expect(resolveServiceKeys('/v2/lead-campaigns')).toEqual(['campaigns', 'leads']);
     expect(resolveServiceKeys('/v2/metrics/summary')).toEqual(['metrics']);
     expect(resolveServiceKeys('/v2/dashboard/instagram-insights')).toEqual(['dashboard']);
   });
@@ -538,6 +539,8 @@ describe('rbacMiddleware — Express real espelhando o index.ts', () => {
         lastServed = null;
         const res = await rawRequest('/api' + p, auth);
         if (res.status === 403) blockedHits++;
+        // a própria busca da Meta liberada não é vazamento
+        if (lastServed && RBAC_SERVICE_OVERRIDES.some((o) => o.path === (lastServed as { prefix: string }).prefix)) continue;
         if (res.status === 200 && lastServed && keysOfCanonical((lastServed as { canonical: string }).canonical).includes(key)) {
           leaks.push(`${key} vazou em ${p} (servido por ${(lastServed as { prefix: string }).prefix})`);
         }
@@ -662,5 +665,132 @@ describe('rbacMiddleware — Express real espelhando o index.ts', () => {
     await rawRequest('/api/campaigns/x', { authorization: `Bearer ${mock}` });
     expect(checkServices).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
+  });
+});
+
+// ───────────────────────── bloqueio por plano ─────────────────────────
+
+function fakePlanRepo(ctx: Record<string, unknown> | null, planViews: string[], partnerViews: string[] = []) {
+  return {
+    findUserContext: vi.fn(async () => ctx as never),
+    listBlockedServiceKeys: vi.fn(async () => []),
+    listBlockedViewKeys: vi.fn(async () => partnerViews),
+    listPlanBlockedViewKeys: vi.fn(async () => planViews),
+  };
+}
+
+describe('RbacService — plano do cliente', () => {
+  const owner = { platformRole: 'user', partnerId: null, tenantId: 't1', role: 'owner' };
+
+  it('titular e usuário perdem a funcionalidade e as filhas', async () => {
+    for (const role of ['owner', 'member']) {
+      const svc = new RbacService(fakePlanRepo({ ...owner, role }, ['studio']), () => fakeRedis());
+      const views = await svc.listBlockedViews('u1');
+      expect(views).toEqual(expect.arrayContaining(['studio', 'studio.image', 'studio.video']));
+      expect(views).not.toContain('campaigns');
+      expect(await svc.checkServices('u1', ['studio'])).toBe('blocked');
+      expect(await svc.checkServices('u1', ['studio.image'])).toBe('blocked');
+      expect(await svc.checkServices('u1', ['campaigns'])).toBe('allowed');
+    }
+  });
+
+  it('administrador, super_admin e parceiro não seguem o plano', async () => {
+    for (const ctx of [
+      { ...owner, role: 'admin' },
+      { ...owner, platformRole: 'super_admin' },
+      { ...owner, platformRole: 'admin_partner', partnerId: 'p1' },
+    ]) {
+      const repo = fakePlanRepo(ctx, ['studio']);
+      const svc = new RbacService(repo, () => fakeRedis());
+      expect(await svc.listBlockedViews('u1')).toEqual([]);
+      expect(await svc.checkServices('u1', ['studio'])).toBe('allowed');
+      expect(repo.listPlanBlockedViewKeys).not.toHaveBeenCalled();
+    }
+  });
+
+  it('soma com o bloqueio do parceiro sem duplicar', async () => {
+    const svc = new RbacService(fakePlanRepo({ ...owner, platformRole: 'user_partner', partnerId: 'p1' }, ['leads', 'planner'], ['planner']), () => fakeRedis());
+    const views = await svc.listBlockedViews('u1');
+    expect(views.filter((v) => v === 'planner')).toHaveLength(1);
+    expect(views).toEqual(expect.arrayContaining(['leads', 'planner']));
+  });
+
+  it('plano tirando campaigns bloqueia leads e criar campanha na API', async () => {
+    const svc = new RbacService(fakePlanRepo(owner, ['campaigns']), () => fakeRedis());
+    expect(await svc.checkServices('u1', ['campaigns', 'leads'])).toBe('blocked');
+    expect(await svc.checkServices('u1', ['campaigns.create'])).toBe('blocked');
+    expect(await svc.checkServices('u1', ['dashboard'])).toBe('allowed');
+  });
+
+  it('sem bloqueio no plano: tudo liberado', async () => {
+    const svc = new RbacService(fakePlanRepo(owner, []), () => fakeRedis());
+    expect(await svc.listBlockedViews('u1')).toEqual([]);
+    expect(await svc.checkServices('u1', ['leads'])).toBe('allowed');
+  });
+
+  it('cache por versão; bumpVersion recarrega o plano', async () => {
+    const redis = fakeRedis();
+    const repo = fakePlanRepo(owner, ['leads']);
+    const svc = new RbacService(repo, () => redis);
+    await svc.checkServices('u1', ['leads']);
+    await svc.checkServices('u1', ['leads']);
+    expect(repo.listPlanBlockedViewKeys).toHaveBeenCalledTimes(1);
+    repo.listPlanBlockedViewKeys.mockResolvedValue([]);
+    await svc.bumpVersion();
+    expect(await svc.checkServices('u1', ['leads'])).toBe('allowed');
+  });
+
+  it('tenantBlocks (workers) segue a herança e ignora cargo', async () => {
+    const svc = new RbacService(fakePlanRepo(null, ['campaigns']), () => fakeRedis(false));
+    expect(await svc.tenantBlocks('t1', 'leads')).toBe(true);
+    expect(await svc.tenantBlocks('t1', 'planner')).toBe(false);
+  });
+
+  it('leads depende de campanhas; leads de uma campanha exige leads', async () => {
+    const svc = new RbacService(fakePlanRepo(owner, ['campaigns']), () => fakeRedis());
+    expect(await svc.listBlockedViews('u1')).toEqual(expect.arrayContaining(['leads']));
+    const onlyLeads = new RbacService(fakePlanRepo(owner, ['leads']), () => fakeRedis());
+    expect(resolveServiceKeys('/v2/campaigns/c1/leads')).toEqual(expect.arrayContaining(['campaigns', 'leads']));
+    expect(resolveServiceKeys('/campaigns/c1/leads')).toEqual(expect.arrayContaining(['leads']));
+    expect(await onlyLeads.checkServices('u1', resolveServiceKeys('/v2/campaigns/c1/leads')!)).toBe('blocked');
+    expect(await onlyLeads.checkServices('u1', resolveServiceKeys('/v2/campaigns')!)).toBe('allowed');
+  });
+
+  it('planejador e automações não entram no plano; calendário bloqueia só o calendário', async () => {
+    const hidden = new RbacService(fakePlanRepo(owner, ['planner', 'automation']), () => fakeRedis());
+    expect(await hidden.checkServices('u1', resolveServiceKeys('/planner/generate')!)).toBe('allowed');
+    expect(await hidden.checkServices('u1', resolveServiceKeys('/fury/rules')!)).toBe('allowed');
+    expect(await hidden.listBlockedViews('u1')).not.toContain('planner');
+
+    const noCalendar = new RbacService(fakePlanRepo(owner, ['calendar']), () => fakeRedis());
+    expect(await noCalendar.checkServices('u1', resolveServiceKeys('/planner/calendar')!)).toBe('blocked');
+    expect(await noCalendar.checkServices('u1', resolveServiceKeys('/planner/posts/x1/move')!)).toBe('allowed');
+  });
+
+  it('regras de campanha não entram no plano', async () => {
+    const noRules = new RbacService(fakePlanRepo(owner, ['campaigns.rules']), () => fakeRedis());
+    expect(await noRules.checkServices('u1', resolveServiceKeys('/automation/rules')!)).toBe('allowed');
+    expect(resolveServiceKeys('/automation/rules')).toEqual(expect.arrayContaining(['campaigns.rules']));
+  });
+
+  it('buscas da Meta escapam do bloqueio de campanhas só no caminho exato', async () => {
+    const noCampaigns = new RbacService(fakePlanRepo(owner, ['campaigns']), () => fakeRedis());
+    for (const p of ['/campaigns/meta-locations', '/campaigns/meta-interests', '/campaigns/meta-city-by-coords']) {
+      expect(resolveServiceKeys(p)).toEqual(['meta']);
+      expect(await noCampaigns.checkServices('u1', resolveServiceKeys(p)!)).toBe('allowed');
+      expect(await noCampaigns.checkServices('u1', resolveServiceKeys(p + '/x')!)).toBe('blocked');
+      // só leitura: PATCH/DELETE no mesmo caminho seguem bloqueados
+      expect(await noCampaigns.checkServices('u1', resolveServiceKeys(p, 'PATCH')!)).toBe('blocked');
+      expect(await noCampaigns.checkServices('u1', resolveServiceKeys(p, 'DELETE')!)).toBe('blocked');
+    }
+  });
+
+  it('rotas de imagem e vídeo do Estúdio respeitam a funcionalidade', async () => {
+    const noImage = new RbacService(fakePlanRepo(owner, ['studio.image']), () => fakeRedis());
+    for (const p of ['/studio/generate-image', '/studio/ai/generate-image', '/studio/ai/regenerate', '/studio/ai/regenerate-ad', '/studio/select-layout', '/studio/preview-png', '/studio/creative/variations'])
+      expect(await noImage.checkServices('u1', resolveServiceKeys(p)!)).toBe('blocked');
+    expect(await noImage.checkServices('u1', resolveServiceKeys('/studio/assets')!)).toBe('allowed');
+    const noVideo = new RbacService(fakePlanRepo(owner, ['studio.video']), () => fakeRedis());
+    expect(await noVideo.checkServices('u1', resolveServiceKeys('/studio/ai/generate-video')!)).toBe('blocked');
   });
 });

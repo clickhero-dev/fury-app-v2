@@ -23,6 +23,8 @@ router.get('/models', controllers.studioAi.getModels);
 
 router.post('/enhance-prompt', authMiddleware, tenantMiddleware, controllers.studioAi.enhancePrompt);
 router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.studioAi.generateImage);
+router.get('/assets/:assetId/chat-snapshot', authMiddleware, tenantMiddleware, controllers.studioAi.chatSnapshot);
+router.post('/chat-edit', authMiddleware, tenantMiddleware, controllers.studioAi.chatEdit);
 router.post('/generate-video', authMiddleware, tenantMiddleware, controllers.studioAi.generateVideo);
 router.post('/regenerate', authMiddleware, tenantMiddleware, controllers.studioAi.regenerate);
 router.post(
