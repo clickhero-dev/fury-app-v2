@@ -88,7 +88,7 @@ async def _summarize_facts_bounded(facts, summarize, *, force=False):
     return current
 
 
-async def consolidate(pool, conversation_id, summarize, min_responses=5, message_repository=None):
+async def consolidate(pool, conversation_id, summarize, min_responses=5, message_repository=None, *, owner_run=None):
     """Resume lotes limitados; só grava se o resumo e o snapshot forem válidos."""
     import json
     import asyncio
@@ -111,9 +111,28 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
         has_complete_batch = False
         for response_count in range(requested, 0, -1):
             candidate = await snapshot(conn, response_count)
-            if (sum(row['role'] == 'assistant' for row in candidate) < response_count
-                    or sum(row['role'] == 'user' for row in candidate) < response_count):
+            if owner_run and candidate:
+                # Never summarize turns that occurred after this request's input.
+                after_cutoff = await conn.fetchval('''SELECT EXISTS (SELECT 1 FROM chat_messages m
+                    WHERE m.conversation_id=$1 AND m.id=ANY($2::uuid[])
+                    AND (m.created_at,m.id) >= (SELECT created_at,id FROM chat_messages WHERE id=$3 AND conversation_id=$1))''',
+                    conversation_id, [r['id'] for r in candidate], owner_run[2])
+                if after_cutoff:
+                    continue
+            users = [row['id'] for row in candidate if row['role'] == 'user']
+            assistants = [row['id'] for row in candidate if row['role'] == 'assistant']
+            if len(users) != response_count or len(assistants) != response_count:
                 continue
+            if [row['role'] for row in candidate] != ['user', 'assistant'] * response_count:
+                # Interleaved turns are safe only when every selected message is
+                # paired to a completed run inside the same snapshot.
+                paired = await conn.fetchval('''SELECT count(DISTINCT user_message_id)=$4
+                    AND count(DISTINCT assistant_message_id)=$4 FROM chat_response_runs
+                    WHERE conversation_id=$1 AND status='completed'
+                    AND user_message_id=ANY($2::uuid[]) AND assistant_message_id=ANY($3::uuid[])''',
+                    conversation_id, users, assistants, response_count)
+                if not paired:
+                    continue
             has_complete_batch = True
             if _summary_payload_tokens(previous, candidate) <= SUMMARY_INPUT_TOKEN_BUDGET:
                 rows = candidate
@@ -132,6 +151,15 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', str(conversation_id))
+            # Beginning/completing a run uses this same row lock. Do not rewrite
+            # history or memory underneath any in-flight request.
+            await conn.fetchval('SELECT id FROM chat_conversations WHERE id=$1 FOR UPDATE', conversation_id)
+            if owner_run:
+                valid = await conn.fetchval("SELECT 1 FROM chat_response_runs WHERE id=$1 AND lease_id=$2 AND user_message_id=$3 AND conversation_id=$4 AND status='running' AND lease_until>clock_timestamp() FOR UPDATE", *owner_run, conversation_id)
+                if not valid:
+                    return False
+            if await conn.fetchval("SELECT 1 FROM chat_response_runs WHERE conversation_id=$1 AND status='running' AND lease_until>clock_timestamp() AND ($2::uuid IS NULL OR id<>$2) LIMIT 1", conversation_id, owner_run[0] if owner_run else None):
+                return False
             current = await snapshot(conn, selected_responses, lock=True)
             current_raw = await conn.fetchval('SELECT facts FROM chat_memories WHERE conversation_id=$1 FOR UPDATE', conversation_id)
             if [dict(row) for row in current] != [dict(row) for row in rows] or (json.loads(current_raw) if current_raw else []) != previous_original:
@@ -192,6 +220,6 @@ def estimate_request_tokens(instructions, history, tools, counter=count_tokens):
     """Estima instruções, mensagens e schemas Agno com reserva de resposta e framing."""
     import json
     from agno.tools import Function
-    schemas = [Function.from_callable(tool).to_dict() for tool in tools]
+    schemas = [(tool if isinstance(tool, Function) else Function.from_callable(tool)).to_dict() for tool in tools]
     request = {'instructions':instructions, 'messages':[dict(row) for row in history], 'tools':schemas}
     return counter(json.dumps(request, ensure_ascii=False)) + 4096 + 16 * (len(instructions) + len(history) + len(tools))

@@ -22,10 +22,25 @@ ou exceção crua; a configuração de logs do cliente HTTP pertence ao caller.
 """
 
 import re
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
+from hashlib import sha256
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import httpx
+
+# Agno pre/post hooks run in the FunctionCall task, including concurrent calls.
+_plan_call_id: ContextVar[str | None] = ContextVar('plan_call_id', default=None)
+
+
+def _capture_plan_call(fc):
+    call_id = fc.call_id
+    _plan_call_id.set(call_id if isinstance(call_id, str) and call_id else None)
+
+
+def _clear_plan_call(fc):
+    _plan_call_id.set(None)
 
 from tools import ImageProposal
 
@@ -310,11 +325,14 @@ def _failure(code: str, message: str, *, status: int | None = None, uncertain: b
 class PlanTools:
     """Adapter HTTP por conversa; o backend é responsável por persistência e execução."""
 
-    def __init__(self, base_url: str, token: str, client: httpx.AsyncClient, conversation_id: str):
+    def __init__(self, base_url: str, token: str, client: httpx.AsyncClient, conversation_id: str, *, allow_create: bool = True, run_id: str | None = None, lease_id: str | None = None):
+        self._run_id = run_id
+        self._lease_id = lease_id
         self._base_url = base_url
         self._token = token
         self._client = client
         self._conversation_id = conversation_id
+        self._allow_create = allow_create
 
     async def create_plan(self, title: str, goal: str, tasks: list[dict]) -> dict:
         """Salvar um plano real para revisar antes de começar; não é só um checklist no texto.
@@ -368,13 +386,22 @@ class PlanTools:
             {plan} com ID e estado persistidos, ou {error,code,status?}. Se a criação
             tiver outcome=unknown, consulte list_plans antes de tentar criar novamente.
         """
+        if not self._allow_create:
+            return _failure('unavailable', 'A criação de planos está temporariamente indisponível nesta conversa.')
         try:
             _text(title, 200, 'um título')
             _text(goal, 4000, 'um objetivo')
             _validate_tasks(tasks, validate_parameters=True)
         except ValueError as exc:
             return _failure('invalid_input', str(exc))
-        return await self._request('POST', body={'title': title, 'goal': goal, 'tasks': tasks})
+        if self._run_id is not None or self._lease_id is not None:
+            call_id = _plan_call_id.get()
+            if not call_id:
+                return _failure('unavailable', 'Não foi possível identificar a chamada de criação do plano.')
+            operation_id = sha256(call_id.encode('utf-8')).hexdigest()
+        else:
+            operation_id = str(uuid4())
+        return await self._request('POST', body={'title': title, 'goal': goal, 'tasks': tasks}, operation_id=operation_id)
 
     async def list_plans(self) -> dict:
         """Consultar planos desta conversa e seus estados reais, inclusive tarefas pendentes."""
@@ -386,7 +413,7 @@ class PlanTools:
             return _failure('invalid_input', 'Informe o UUID do plano sem alterar seu formato.')
         return await self._request('GET', plan_id=plan_id)
 
-    async def _request(self, method: str, *, plan_id: str | None = None, body: dict | None = None) -> dict:
+    async def _request(self, method: str, *, plan_id: str | None = None, body: dict | None = None, operation_id: str = '') -> dict:
         if not _is_uuid(self._conversation_id):
             return _failure('invalid_input', 'A conversa precisa de um UUID válido antes de acessar os planos.')
         try:
@@ -394,14 +421,21 @@ class PlanTools:
         except ValueError:
             return _failure('unavailable', 'O serviço de planos não está configurado corretamente.')
         path = f'/api/chat/conversations/{self._conversation_id}/plans'
+        if method == 'POST' and (self._run_id is not None or self._lease_id is not None):
+            if not _is_uuid(self._run_id) or not _is_uuid(self._lease_id):
+                return _failure('unavailable', 'A execução da conversa não possui autorização válida.')
+            path += '/from-run'
         if plan_id is not None:
             path += '/' + plan_id
         try:
             # A standalone Request avoids merging another consumer's cookies,
             # query parameters, headers or auth from this shared connection pool.
+            headers = {'Authorization': 'Bearer ' + self._token}
+            if method == 'POST' and self._run_id is not None and self._lease_id is not None:
+                headers.update({'x-chat-run-id': self._run_id, 'x-chat-run-lease': self._lease_id, 'x-chat-operation-id': operation_id})
             request = httpx.Request(
                 method, base_url + path,
-                headers={'Authorization': 'Bearer ' + self._token},
+                headers=headers,
                 json=body, extensions={'timeout': httpx.Timeout(10.0).as_dict()},
             )
             response = await self._client.send(request, auth=None, follow_redirects=False)
@@ -425,5 +459,12 @@ def tools_for_agent(plans: PlanTools, *, read_only: bool = False) -> list:
     """Exponha apenas métodos permitidos; retomadas não podem criar novos planos."""
     tools = [plans.list_plans, plans.get_plan]
     if not read_only:
-        tools.insert(0, plans.create_plan)
+        if plans._run_id is not None or plans._lease_id is not None:
+            from agno.tools import Function
+            create = Function.from_callable(plans.create_plan)
+            create.pre_hook = _capture_plan_call
+            create.post_hook = _clear_plan_call
+            tools.insert(0, create)
+        else:
+            tools.insert(0, plans.create_plan)
     return tools

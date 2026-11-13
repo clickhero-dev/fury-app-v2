@@ -56,6 +56,7 @@ def identity(authorization: str | None = Header(default=None)):
 
 class MessageInput(BaseModel):
     content: str = Field(default='', strict=True, max_length=20000)
+    clientKey: UUID | None = None
     attachmentIds: list[UUID] = Field(default_factory=list, max_length=3)
 
     @field_validator('attachmentIds', mode='before')
@@ -75,6 +76,10 @@ class MessageInput(BaseModel):
         if not self.content.strip() and not self.attachmentIds:
             raise ValueError('Mensagem vazia')
         return self
+
+
+class RetryInput(BaseModel):
+    clientKey: UUID | None = None
 
 
 class ConversationTitleInput(BaseModel):
@@ -125,7 +130,7 @@ def create_app():
 
     @app.exception_handler(ConversationError)
     async def conversation_error(_request, error):
-        return JSONResponse(status_code=error.status_code, content={'detail':error.detail})
+        return JSONResponse(status_code=error.status_code, content={'detail':error.detail, **({'code': error.code} if error.code else {})})
 
     async def pool():
         if app.state.pool is None:
@@ -161,7 +166,9 @@ def create_app():
         await reconcile_stale_approvals(db, conversation_id, user['tenantId'], user['userId'])
         await reconcile_stale_video_jobs(db, conversation_id, user['tenantId'], user['userId'])
         approvals = await db.fetch("SELECT id,path,body,display,status,created_at,expires_at,result FROM chat_approvals WHERE conversation_id=$1 AND tenant_id=$2 AND user_id=$3 ORDER BY created_at", conversation_id, user['tenantId'], user['userId'])
-        run = await db.fetchrow("SELECT id,CASE WHEN status='running' AND lease_until<=now() THEN 'interrupted' ELSE status END AS status FROM chat_response_runs WHERE conversation_id=$1 ORDER BY created_at DESC LIMIT 1", conversation_id)
+        runs = await db.fetch("SELECT id,user_message_id,assistant_message_id,client_key,CASE WHEN status='running' AND lease_until<=now() THEN 'interrupted' ELSE status END AS status FROM chat_response_runs WHERE conversation_id=$1 ORDER BY created_at DESC,id DESC", conversation_id)
+        client_keys = await db.fetch("SELECT client_key FROM chat_send_keys WHERE conversation_id=$1", conversation_id)
+        run = runs[0] if runs else None
         ady = AdyTools(os.environ.get('ADY_API_URL', ''), request.headers['authorization'][7:], app.state.http)
         job_limit = asyncio.Semaphore(5)
         async def present(a):
@@ -192,7 +199,7 @@ def create_app():
                         if status == 'unknown': status = 'completed'
                         await db.execute("UPDATE chat_approvals SET result=$1::jsonb, status=CASE WHEN status='unknown' THEN 'completed' ELSE status END WHERE id=$2 AND tenant_id=$3 AND user_id=$4 AND COALESCE(result->'job'->>'status','') NOT IN ('done','error')", json.dumps(result), a['id'], user['tenantId'], user['userId'])
             return {'id':str(a['id']), 'action':{'/api/studio/ai/generate-image':'Criar imagem','/api/studio/video/jobs':'Criar vídeo','/api/planner/posts':'Agendar postagem','/api/campaigns/create':'Criar campanha','/api/brand-kit/chat-update':'Atualizar marca','/api/auth/me/chat-update':'Atualizar perfil e negócio','/api/studio/ai/chat-edit':'Editar imagem'}.get(a['path'], 'Cancelar agendamento' if a['path'].endswith('/chat-cancel') else ('Editar vídeo' if a['path'].endswith('/chat-adjust') else ('Alterar campanha' if a['path'].startswith('/api/campaigns/') and a['path'].endswith('/chat-update') else ('Alterar anúncio' if '/chat-ads/' in a['path'] else ('Criar anúncio pausado' if a['path'].endswith('/chat-ads-create') else 'Ação'))))), 'parameters':json.loads(a['display'] or a['body']), 'status':status, 'created_at':a['created_at'].isoformat(), 'expires_at':a['expires_at'].isoformat(), 'result':result}
-        return {**serial(row), 'messages':[{**serial(m), 'attachments':attachments.get(str(m['id']), [])} for m in messages], 'approvals':await asyncio.gather(*(present(a) for a in approvals)), 'response_run':serial(run) if run else None}
+        return {**serial(row), 'messages':[{**serial(m), 'attachments':attachments.get(str(m['id']), [])} for m in messages], 'approvals':await asyncio.gather(*(present(a) for a in approvals)), 'response_run':serial(run) if run else None, 'response_runs':[serial(r) for r in runs], 'client_keys':[str(r['client_key']) for r in client_keys]}
 
 
     @app.patch('/conversations/{conversation_id}')
@@ -243,17 +250,17 @@ def create_app():
                 pass
             raise HTTPException(502, 'Não foi possível concluir a ação; confira o estado antes de tentar novamente.') from None
 
-    async def generate_response(conversation_id, request, user, content='', retry=False, attachment_ids=()):
+    async def generate_response(conversation_id, request, user, content='', retry=False, retry_run_id=None, attachment_ids=(), client_key=None):
         db = await pool()
         await require_conversation(db, conversation_id, user)
         repository = ConversationRepository(db, user['tenantId'], user['userId'])
-        run_id, lease_id, user_message_id = await repository.begin_run(conversation_id, content, retry=retry, attachment_ids=attachment_ids)
+        run_id, lease_id, user_message_id = await repository.begin_run(conversation_id, content, retry=retry, retry_run_id=retry_run_id, attachment_ids=attachment_ids, client_key=client_key)
         fenced = FencedDB(db, run_id, lease_id)
         async def heartbeat():
             while True:
                 await asyncio.sleep(10)
                 try:
-                    updated = await db.fetchval("UPDATE chat_response_runs SET lease_until=now()+interval '45 seconds',updated_at=now() WHERE id=$1 AND lease_id=$2 AND status='running' AND lease_until>now() RETURNING 1", run_id, lease_id)
+                    updated = await fenced.heartbeat()
                     if not updated: return
                 except Exception:
                     return
@@ -263,24 +270,26 @@ def create_app():
             async def report(error):
                 await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error))
             try:
+                await emit('event: run\ndata: ' + json.dumps({'run_id': str(run_id), 'user_message_id': str(user_message_id), 'client_key': str(client_key) if client_key else None}) + '\n\n')
                 from agno.agent import Agent
                 from agno.models.openrouter import OpenRouter
                 async def read_context():
-                    facts = await repository.memories(conversation_id)
-                    history = await repository.history(conversation_id)
+                    # Cross-conversation memories have no causal watermark either.
+                    facts = [] if retry else await repository.memories(conversation_id)
+                    history = await repository.history(conversation_id, user_message_id)
                     return [json.loads(row['facts']) for row in facts], [{'role': m['role'], 'content': m['content']} for m in history]
                 context, history = await read_context()
                 attachment_repository = AttachmentRepository(db, user['tenantId'], user['userId'])
                 reader = AttachmentClient(os.environ['ADY_API_URL'], request.headers['authorization'][7:], app.state.http)
                 question = next((item['content'] for item in reversed(history) if item['role'] == 'user'), '')
-                evidence = await AttachmentContext(attachment_repository, reader).load(conversation_id, user_message_id, question)
+                evidence = await AttachmentContext(attachment_repository, reader).load(conversation_id, user_message_id, question, causal=True)
                 def agent_history():
                     return [*history, evidence.as_message()] if evidence.readings else history
                 ady = AdyTools(os.environ['ADY_API_URL'], request.headers['authorization'][7:], app.state.http)
                 async def emit_approval(approval):
                     await emit('event: approval\ndata: ' + json.dumps(approval) + '\n\n')
                 proposal = ImageProposal(fenced, user['tenantId'], user['userId'], conversation_id, emit_approval, ady)
-                plans = PlanTools(os.environ.get('ADY_API_URL', ''), request.headers['authorization'][7:], app.state.http, str(conversation_id))
+                plans = PlanTools(os.environ.get('ADY_API_URL', ''), request.headers['authorization'][7:], app.state.http, str(conversation_id), run_id=str(run_id), lease_id=str(lease_id))
                 plan_tools = tools_for_agent(plans)
                 tool_list = [ady.campaigns, ady.campaign_ads, ady.ad_details, ady.ad_assets, ady.available_ad_assets, ady.calendar, ady.brand, ady.brand_photos, ady.profile, ady.assets] + available_proposal_tools(proposal) + plan_tools
                 if retry:
@@ -301,6 +310,10 @@ def create_app():
                         return await asyncio.to_thread(estimate_request_tokens, instructions(), agent_history(), tool_list)
                     return await asyncio.to_thread(estimate_request_tokens, instructions(), agent_history(), tool_list, lambda text: len(text.encode('utf-8')))
                 if requires_compression(await context_size()):
+                    # Retry intentionally excludes unversioned memories. Pruning
+                    # into them would silently remove context from this request.
+                    if retry:
+                        raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
                     completed = sum(item['role'] == 'assistant' for item in history)
                     for _ in range(MAX_CONTEXT_COMPACTION_BATCHES):
                         if not completed or not requires_compression(await context_size()):
@@ -311,6 +324,7 @@ def create_app():
                             summarize,
                             min_responses=min(completed, MAX_SUMMARY_RESPONSES_PER_BATCH),
                             message_repository=attachment_repository,
+                            owner_run=(run_id, lease_id, user_message_id),
                         )
                         if not changed:
                             break
@@ -331,6 +345,7 @@ def create_app():
                         raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
                 agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, http_client=app.state.model_http), tools=tool_list, tool_hooks=[budget_tool_result], tool_call_limit=12, instructions=instructions())
                 chunks = []
+                model_chunks = []
                 if evidence.notice:
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
@@ -338,8 +353,11 @@ def create_app():
                 async for event in agent.arun(conversation_context(agent_history()), stream=True):
                     content = getattr(event, 'content', None)
                     if isinstance(content, str) and content:
+                        model_chunks.append(content)
                         chunks.append(content)
                         await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
+                if not ''.join(model_chunks).strip():
+                    raise ValueError('Resposta vazia')
                 provider_active = False
                 row = await fenced.complete(conversation_id, ''.join(chunks))
                 title_task = None
@@ -351,7 +369,7 @@ def create_app():
                     await consolidate(db, conversation_id, summarize, message_repository=attachment_repository)
                 except Exception as error:
                     await report(error)
-                await emit('event: done\ndata: ' + json.dumps({'message': serial(row)}) + '\n\n')
+                await emit('event: done\ndata: ' + json.dumps({'message': serial(row), 'run_id': str(run_id), 'user_message_id': str(user_message_id), 'client_key': str(client_key) if client_key else None}) + '\n\n')
                 if title_task:
                     try:
                         titled = await title_task
@@ -377,11 +395,11 @@ def create_app():
 
     @app.post('/conversations/{conversation_id}/messages')
     async def send_message(conversation_id: UUID, body: MessageInput, request: Request, user=Depends(identity)):
-        return await generate_response(conversation_id, request, user, content=body.content, attachment_ids=body.attachmentIds)
+        return await generate_response(conversation_id, request, user, content=body.content, attachment_ids=body.attachmentIds, client_key=body.clientKey)
 
     @app.post('/conversations/{conversation_id}/retry')
-    async def retry_message(conversation_id: UUID, request: Request, user=Depends(identity)):
-        return await generate_response(conversation_id, request, user, retry=True)
+    async def retry_message(conversation_id: UUID, request: Request, body: RetryInput = RetryInput(), run_id: UUID | None = None, user=Depends(identity)):
+        return await generate_response(conversation_id, request, user, retry=True, retry_run_id=run_id, client_key=body.clientKey)
     return app
 
 

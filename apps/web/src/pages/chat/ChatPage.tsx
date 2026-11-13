@@ -18,8 +18,22 @@ import { AdySymbol } from '../../components/AdySymbol';
 import './chat.css';
 
 type Message = { id: string; role: string; content: string; created_at?: string | null; attachments?: Attachment[] };
+type ResponseRun = { id: string; user_message_id: string; assistant_message_id?: string | null; status: string; client_key?: string | null };
+function latestRuns(runs: ResponseRun[]): ResponseRun[] { const seen = new Set<string>(); return runs.filter(run => { if (seen.has(run.user_message_id)) return false; seen.add(run.user_message_id); return true; }); }
+function runStatus(runs: ResponseRun[], fallback: string | null): string | null { return runs.length ? (latestRuns(runs).some(run => run.status === 'running') ? 'running' : null) : fallback; }
 type Conversation = { id: string; title: string; created_at?: string | null };
 type Approval = { id: string; action: string; parameters: Record<string, unknown>; status: string; created_at?: string | null; result?: { code?: string; error?: string; imageUrl?: string; videoUrl?: string; jobId?: string; job?: { status?: string; stage?: string; videoUrl?: string; error?: string } } };
+const pendingSendKey = 'ady-chat-pending-sends';
+const pendingPayloadKey = 'ady-chat-pending-payloads';
+type PendingPayload = { key: string; body: string; path: string };
+function readPayload(id: string, key: string): PendingPayload | undefined {
+  try { return JSON.parse(sessionStorage.getItem(pendingPayloadKey) || '{}')[id]?.[key]; } catch { return undefined; }
+}
+function storePayload(id: string, payload: PendingPayload) {
+  const stored = JSON.parse(sessionStorage.getItem(pendingPayloadKey) || '{}');
+  stored[id] ||= {}; stored[id][payload.key] = payload;
+  sessionStorage.setItem(pendingPayloadKey, JSON.stringify(stored));
+}
 const uncertainKey = 'ady-chat-uncertain-approvals';
 function uncertainIds(): string[] { try { const value = JSON.parse(sessionStorage.getItem(uncertainKey) || '[]'); return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } }
 function rememberUncertain(id: string) { try { sessionStorage.setItem(uncertainKey, JSON.stringify([...new Set([...uncertainIds(), id])])); } catch { /* O estado permanece bloqueado na tela atual. */ } }
@@ -125,8 +139,36 @@ function MessageList({messages, approvals, conversationId, children}: {messages:
 }
 
 export function ChatPage() {
+const pendingSends = useRef(new Map<string, Set<string>>()).current;
+function pendingFor(id: string): Set<string> {
+  if (!pendingSends.has(id)) {
+    try { const stored = JSON.parse(sessionStorage.getItem(pendingSendKey) || '{}'); pendingSends.set(id, new Set(Array.isArray(stored[id]) ? stored[id] : [])); }
+    catch { pendingSends.set(id, new Set()); }
+  }
+  return pendingSends.get(id)!;
+}
+function markPending(id: string, key: string, pending: boolean) {
+  const keys = pendingFor(id); if (pending) keys.add(key); else keys.delete(key);
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(pendingSendKey) || '{}');
+    stored[id] = [...keys]; sessionStorage.setItem(pendingSendKey, JSON.stringify(stored));
+    if (!pending) { const payloads = JSON.parse(sessionStorage.getItem(pendingPayloadKey) || '{}'); if (payloads[id]) delete payloads[id][key]; sessionStorage.setItem(pendingPayloadKey, JSON.stringify(payloads)); }
+  } catch { /* Retain persisted records if storage becomes unavailable. */ }
+}
+function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) {
+  for (const key of keys) markPending(id, key, false);
+  for (const run of runs) if (run.client_key) markPending(id, run.client_key, false);
+  return pendingFor(id).size > 0;
+}
+
   const selectionVersion = useRef(0);
-  const sendingRef = useRef(false);
+  const drafts = useRef(new Map<string | null, string>());
+  const selectedConversation = useRef<string | null>(null);
+  const streamSnapshots = useRef(new Map<string, {messages: Message[]; approvals: Approval[]; responseRun: string | null; runs: ResponseRun[]; error: string; uncertain: boolean; active: boolean; recovered: boolean; concurrent: boolean}>());
+  const approvalVersion = useRef(0);
+  const sendingRef = useRef(new Set<string>());
+  const retryingPending = useRef(new Set<string>());
+  const activeStreams = useRef(new Map<string, number>());
   const creatingRef = useRef(false);
   const creatingRequest = useRef<AbortController | null>(null);
   const deletingRef = useRef(false);
@@ -149,20 +191,28 @@ export function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [responseRun, setResponseRun] = useState<string | null>(null);
+  const [responseRuns, setResponseRuns] = useState<ResponseRun[]>([]);
   const [approving, setApproving] = useState<string | null>(null);
-  const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [, renderDraft] = useState(0);
+  const input = drafts.current.get(current) || '';
+  function setInput(value: string | ((previous: string) => string)) {
+    const previous = drafts.current.get(current) || '';
+    drafts.current.set(current, typeof value === 'function' ? value(previous) : value);
+    renderDraft(n => n + 1);
+  }
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [sendUncertain, setSendUncertain] = useState(false);
   useEffect(() => () => { selectionVersion.current++; creatingRequest.current?.abort(); }, []);
-  const media = useChatAttachments(async () => current || await create());
+  const media = useChatAttachments(async () => current || await create(true), current);
   const dictation = useChatDictation(text => {
     setInput(draft => draft ? `${draft}${/\s$/.test(draft) ? '' : ' '}${text}` : text);
     inputRef.current?.focus();
   });
   const plans = useChatPlans(current, Boolean(current));
-  const composerDisabled = opening || creating || deleting || busy || sendUncertain || approving !== null || responseRun === 'running';
-  function resetMedia() { dictation.cancel(); media.clear(); }
+  const composerDisabled = opening || creating || deleting || sendUncertain || approving !== null || (responseRun === 'running' && !busy);
+
   function addFiles(files: File[]) {
-    if (composerDisabled || sendingRef.current || creatingRef.current || dictation.active) return;
+    if (composerDisabled || sendingRef.current.has(current || '') || creatingRef.current || dictation.active) return;
     void media.add(files);
   }
   useLayoutEffect(() => {
@@ -197,11 +247,11 @@ export function ChatPage() {
   useEffect(() => {
     if (!current || (!hasRunningJob && (responseRun !== 'running' || busy))) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => { try { const data = await (await request(`/conversations/${current}`)).json(); if (!cancelled) { setApprovals(normalizeApprovals(data.approvals || [])); if (!busy && responseRun === 'running') { setMessages(data.messages || []); setResponseRun(data.response_run?.status || null); } } } catch { if (!cancelled) setError('Não foi possível atualizar o andamento. Tentaremos novamente.'); } finally { if (!cancelled) timer = setTimeout(poll, 3000); } };
+    const poll = async () => { const version = approvalVersion.current; try { const data = await (await request(`/conversations/${current}`)).json(); if (!cancelled && version === approvalVersion.current) { const polled = normalizeApprovals(data.approvals || []); const snapshot = streamSnapshots.current.get(current); if (snapshot) { const byId = new Map(polled.map((item: Approval) => [item.id, item])); snapshot.approvals = snapshot.approvals.map(item => byId.get(item.id) as Approval || item); for (const item of polled) if (!snapshot.approvals.some(existing => existing.id === item.id)) snapshot.approvals.push(item); setApprovals(snapshot.approvals); } else setApprovals(polled); if (!busy && responseRun === 'running') { setMessages(data.messages || []); setResponseRun(runStatus(data.response_runs || [], data.response_run?.status || null)); setResponseRuns(data.response_runs || []); } } } catch { if (!cancelled) setError('Não foi possível atualizar o andamento. Tentaremos novamente.'); } finally { if (!cancelled) timer = setTimeout(poll, 3000); } };
     timer = setTimeout(poll, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [current, hasRunningJob, responseRun, busy]);
-  async function create() {
+  async function create(transferDraft = false) {
     if (creatingRef.current || deletingRef.current) return null;
     creatingRef.current = true; setCreating(true);
     const version = ++selectionVersion.current;
@@ -211,11 +261,16 @@ export function ChatPage() {
       setError('');
       const c = await (await request('/conversations', {method:'POST',signal:controller.signal})).json();
       if (controller.signal.aborted || version !== selectionVersion.current) return null;
-      setConversations(v => [c,...v]); setCurrent(c.id); setSendUncertain(false);
+      if (transferDraft && !drafts.current.has(c.id)) {
+        drafts.current.set(c.id, drafts.current.get(null) || '');
+        drafts.current.delete(null);
+        media.transfer(null, c.id);
+      }
+      setConversations(v => [c,...v]); selectedConversation.current = c.id; setCurrent(c.id); setSendUncertain(false);
       setHistoryOpen(false);
       followLatest.current = true; setAwayFromLatest(false);
       try { sessionStorage.setItem('ady-chat-current', c.id); } catch { /* Sem persistência de aba. */ }
-      setMessages([]); setApprovals([]); setResponseRun(null);
+      setMessages([]); setApprovals([]); setResponseRun(null); setResponseRuns([]);
       return c.id as string;
     } catch { if (!controller.signal.aborted) setError('Não foi possível iniciar a conversa.'); return null; }
     finally { creatingRef.current = false; creatingRequest.current = null; setCreating(false); }
@@ -223,31 +278,36 @@ export function ChatPage() {
   async function open(id: string) {
     if (deletingRef.current) return;
     dictation.cancel();
-    if (id !== current) media.clear();
     const version = ++selectionVersion.current;
     setOpening(true);
     try {
       setError('');
       const c = await (await request(`/conversations/${id}`)).json();
       if (selectionVersion.current !== version) return;
-      if (media.ready.some(file => c.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) { setInput(''); media.clear(); }
-      setSendUncertain(false);
+      const unresolved = reconcilePending(id, c.response_runs || [], c.client_keys || []);
+      setSendUncertain(unresolved);
+      if (unresolved) setError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.');
       if (typeof c.title === 'string') setConversations(items => items.map(item => item.id === id ? {...item, title:c.title} : item));
-      setCurrent(id);
+      selectedConversation.current = id; setCurrent(id);
       try { sessionStorage.setItem('ady-chat-current', id); } catch { /* Sem persistência de aba. */ }
       followLatest.current = true; setAwayFromLatest(false);
-      setMessages(c.messages || []); setApprovals(normalizeApprovals(c.approvals || [])); setResponseRun(c.response_run?.status || null);
+      const storedSnapshot = streamSnapshots.current.get(id);
+      const snapshot = storedSnapshot && !storedSnapshot.active && (storedSnapshot.uncertain || storedSnapshot.recovered) ? undefined : storedSnapshot;
+      if (storedSnapshot && !snapshot) streamSnapshots.current.delete(id);
+      setMessages(snapshot?.messages ?? c.messages ?? []); setApprovals(snapshot?.approvals ?? normalizeApprovals(c.approvals || [])); setResponseRun(snapshot ? runStatus(snapshot.runs, snapshot.responseRun) : runStatus(c.response_runs || [], c.response_run?.status || null)); setResponseRuns(snapshot?.runs ?? c.response_runs ?? []); setBusy(Boolean(snapshot?.active));
+      if (snapshot) { setError(snapshot.error); setSendUncertain(snapshot.uncertain || unresolved); }
+      if (snapshot && !snapshot.active) streamSnapshots.current.delete(id);
     } catch { if (selectionVersion.current === version) setError('Não foi possível abrir a conversa.'); }
     finally { if (selectionVersion.current === version) setOpening(false); }
   }
   async function remove() {
-    if (!current || deletingRef.current || busy || sendUncertain || creatingRef.current || sendingRef.current || responseRun === 'running' || media.isBlocked() || !window.confirm('Excluir esta conversa?')) return;
+    if (!current || deletingRef.current || busy || sendUncertain || creatingRef.current || sendingRef.current.has(current) || responseRun === 'running' || media.isBlocked() || !window.confirm('Excluir esta conversa?')) return;
     deletingRef.current = true; setDeleting(true); dictation.cancel();
     try {
       await request(`/conversations/${current}`, {method:'DELETE'});
-      media.clear(); setConversations(v => v.filter(c => c.id !== current)); setCurrent(null);
+      media.clear(current); drafts.current.delete(current); setConversations(v => v.filter(c => c.id !== current)); selectedConversation.current = null; setCurrent(null);
       try { sessionStorage.removeItem('ady-chat-current'); } catch { /* Sem persistência de aba. */ }
-      setMessages([]); setApprovals([]); setResponseRun(null); setSendUncertain(false);
+      setMessages([]); setApprovals([]); setResponseRun(null); setResponseRuns([]); setSendUncertain(false);
     } catch { setError('Não foi possível excluir a conversa.'); }
     finally { deletingRef.current = false; setDeleting(false); }
   }
@@ -267,74 +327,131 @@ export function ChatPage() {
       setSavingTitle(false);
     }
   }
+  function updateVisibleApprovals(update: (items: Approval[]) => Approval[]) {
+    const snapshot = current ? streamSnapshots.current.get(current) : undefined;
+    if (snapshot) {
+      snapshot.approvals = update(snapshot.approvals);
+      setApprovals(snapshot.approvals);
+    } else setApprovals(update);
+  }
   async function approve(id: string) {
     if (approving) return;
+    approvalVersion.current++;
     setApproving(id);
     try {
       setError('');
       const outcome = await (await request(`/approvals/${id}/confirm`, {method:'POST'})).json();
       if (!['completed', 'processing'].includes(outcome.status)) throw new Error('incomplete');
-      setApprovals(v => v.map(a => a.id === id ? {...a,status:outcome.status,result:outcome.result} : a));
+      updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:outcome.status,result:outcome.result} : a));
     } catch (err) {
       const failure = err instanceof ChatRequestError ? err.approvalFailure : null;
       if (failure) {
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'failed',result:{code:failure.code,error:failure.message}} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'failed',result:{code:failure.code,error:failure.message}} : a));
       } else if ((err as {status?: number}).status === 409) {
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'expired'} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'expired'} : a));
         setError('O recurso mudou. Solicite uma nova proposta antes de confirmar.');
       } else {
         rememberUncertain(id);
-        setApprovals(v => v.map(a => a.id === id ? {...a,status:'unknown'} : a));
+        updateVisibleApprovals(v => v.map(a => a.id === id ? {...a,status:'unknown'} : a));
         setError('Não foi possível confirmar a ação.');
       }
-    } finally { setApproving(null); void plans.refetch(); }
+    } finally { approvalVersion.current++; setApproving(null); void plans.refetch(); }
   }
   async function send(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
     const attachments = media.ready;
-    if ((!text && !attachments.length) || composerDisabled || deletingRef.current || sendingRef.current || media.isBlocked() || dictation.active) return;
-    sendingRef.current = true;
+    const key = current || '';
+    if ((!text && !attachments.length) || composerDisabled || deletingRef.current || sendingRef.current.has(key) || media.isBlocked() || dictation.active) return;
+    sendingRef.current.add(key);
+    let released = false;
     try {
-      const id = current || await create();
+      const id = current || await create(true);
       if (!id) return;
-      await streamResponse(text, id, attachments, () => { setInput(''); media.clear(); });
-    } finally { sendingRef.current = false; }
+      await streamResponse(text, id, attachments, () => {
+        sendingRef.current.delete(key);
+        released = true;
+        if ((drafts.current.get(id) || '').trim() === text) drafts.current.set(id, '');
+        media.clear(id, attachments.map(item => item.id));
+        renderDraft(n => n + 1);
+      });
+    } finally { if (!released) sendingRef.current.delete(key); }
   }
-  async function streamResponse(text?: string, conversationId = current, attachments: Attachment[] = [], onAccepted?: () => void) {
+  async function streamResponse(text?: string, conversationId = current, attachments: Attachment[] = [], onAccepted?: () => void, retryRunId?: string, retryPayload?: PendingPayload) {
     const current = conversationId;
-    if (!current || busy) return; setError(''); setBusy(true); setResponseRun(null); const replyId = crypto.randomUUID();
+    if (!current) return; setError(''); setBusy(true); const replyId = crypto.randomUUID(); const userId = crypto.randomUUID();
     const isMessage = text !== undefined;
+    const clientKey = retryPayload?.key || crypto.randomUUID();
+    const path = retryPayload?.path || `/conversations/${current}/${isMessage ? 'messages' : `retry${retryRunId ? `?run_id=${encodeURIComponent(retryRunId)}` : ''}`}`;
+    const body = retryPayload?.body || JSON.stringify(isMessage ? {clientKey, ...(text ? {content:text} : {}), ...(attachments.length ? {attachmentIds:attachments.map(item => item.id)} : {})} : {clientKey});
+    try { storePayload(current, {key:clientKey, body, path}); markPending(current, clientKey, true);
+      const persisted = JSON.parse(sessionStorage.getItem(pendingSendKey) || '{}');
+      const savedPayload = readPayload(current, clientKey);
+      if (!Array.isArray(persisted[current]) || !persisted[current].includes(clientKey) || savedPayload?.key !== clientKey || savedPayload.body !== body || savedPayload.path !== path) throw new Error('storage');
+    } catch { if (retryPayload) { setSendUncertain(true); } else { markPending(current, clientKey, false); } setBusy(false); setError('Não foi possível salvar o envio com segurança. Verifique o armazenamento do navegador.'); return; }
+    const streamSelectionVersion = selectionVersion.current;
     let accepted = false;
-    setMessages(v => [...v, ...(isMessage ? [{id:crypto.randomUUID(),role:'user',content:text || '',attachments}] : []), {id:replyId,role:'assistant',content:''}]);
+    const snapshot = streamSnapshots.current.get(current) || {messages: [...messages], approvals: [...approvals], responseRun, runs: [...responseRuns], error: '', uncertain: false, active: true, recovered: false, concurrent: false};
+    if (snapshot.active && activeStreams.current.has(current)) snapshot.concurrent = true;
+    snapshot.messages = [...snapshot.messages, ...(isMessage ? [{id:userId,role:'user',content:text || '',attachments}] : []), {id:replyId,role:'assistant',content:''}];
+    snapshot.active = true;
+    activeStreams.current.set(current, (activeStreams.current.get(current) || 0) + 1);
+    streamSnapshots.current.set(current, snapshot);
+    const visible = () => selectedConversation.current === current;
+    const updateMessages = (update: (items: Message[]) => Message[]) => { snapshot.messages = update(snapshot.messages); if (visible()) setMessages(snapshot.messages); };
+    const updateApprovals = (update: (items: Approval[]) => Approval[]) => { snapshot.approvals = update(snapshot.approvals); if (visible()) setApprovals(snapshot.approvals); };
+    const updateRuns = (runs: ResponseRun[]) => { snapshot.runs = runs; snapshot.responseRun = runStatus(runs, snapshot.responseRun); if (visible()) { setResponseRuns(runs); setResponseRun(snapshot.responseRun); } };
+    let runId = retryRunId;
+    const updateError = (value: string) => { snapshot.error = value; if (visible()) setError(value); };
+    if (visible()) setMessages(snapshot.messages);
     try {
-      const response = await request(`/conversations/${current}/${isMessage ? 'messages' : 'retry'}`, {method:'POST',body:JSON.stringify(isMessage ? {...(text ? {content:text} : {}), ...(attachments.length ? {attachmentIds:attachments.map(item => item.id)} : {})} : {})});
+      const response = await request(path, {method:'POST',body});
       accepted = true;
       onAccepted?.();
       if (!response.body) throw new Error('stream ausente');
-      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false;
-      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if (event === 'token') setMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); if (event === 'done') { completed = true; if (typeof data.message?.content === 'string') setMessages(v => v.map(m => m.id === replyId ? {...m, content:data.message.content, created_at:data.message.created_at} : m)); void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') setApprovals(v => [...v,data]); if (event === 'error') setError(data.message || 'Não foi possível concluir a resposta.'); };
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false; let responseText = '';
+      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if ((event === 'run' || event === 'done') && typeof data.run_id === 'string' && typeof data.user_message_id === 'string') { runId = data.run_id; markPending(current, clientKey, false); if (isMessage) updateMessages(items => items.filter(m => m.id !== data.user_message_id || m.id === userId).map(m => m.id === userId ? {...m,id:data.user_message_id} : m)); const existing = snapshot.runs.find(r => r.id === runId); updateRuns([{...existing,id:runId!,user_message_id:data.user_message_id,status:event === 'done' ? 'completed' : 'running'}, ...snapshot.runs.filter(r => r.id !== runId)]); } if (event === 'token' && typeof data.content === 'string') { responseText += data.content; updateMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); } if (event === 'done') { completed = true; if (typeof data.message?.content === 'string') { responseText = data.message.content; updateMessages(v => v.filter(m => !data.message.id || m.id !== data.message.id || m.id === replyId).map(m => m.id === replyId ? {...m, id:data.message.id || m.id, content:data.message.content, created_at:data.message.created_at} : m)); } if (visible()) void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') updateApprovals(v => [...v,data]); if (event === 'error') updateError(data.message || 'Não foi possível concluir a resposta.'); };
       while (true) { const {value,done} = await reader.read(); buffer += decoder.decode(value, {stream:!done}); const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || ''; frames.forEach(process); if (done) { if (buffer.trim()) process(buffer); break; } }
       if (!completed) throw new Error('stream interrompido');
-    } catch {
+      if (!responseText.trim()) {
+        updateMessages(v => v.filter(m => m.id !== replyId));
+        updateError('Não foi possível concluir a resposta. Atualize a conversa para conferir o estado.');
+      }
+    } catch (err) {
+      const compacted = !isMessage && err instanceof ChatRequestError && err.status === 409 && err.code === 'retry_compacted';
+      if (compacted || (!retryPayload && err instanceof ChatRequestError && err.status >= 400 && err.status < 500 && err.status !== 409)) markPending(current, clientKey, false);
+      if (compacted) { snapshot.uncertain = pendingFor(current).size > 0; if (visible()) setSendUncertain(snapshot.uncertain); }
       try {
+        const runsBeforeRecovery = new Map(snapshot.runs.map(run => [run.id, run]));
         const saved = await (await request(`/conversations/${current}`)).json();
-        if (!accepted && attachments.some(file => saved.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) onAccepted?.();
+        const matchingRun = (saved.response_runs || []).find((run: ResponseRun) => run.client_key === clientKey);
+        if ((saved.client_keys || []).includes(clientKey)) { markPending(current, clientKey, false); if (!accepted) { accepted = true; onAccepted?.(); } }
+        if (matchingRun) { runId = matchingRun.id; markPending(current, clientKey, false); if (!accepted) { accepted = true; onAccepted?.(); } }
+        const unresolved = pendingFor(current).has(clientKey);
+        if (unresolved) { snapshot.uncertain = true; if (visible()) setSendUncertain(true); }
         if (typeof saved.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:saved.title} : item));
-        setMessages(saved.messages || []); setApprovals(normalizeApprovals(saved.approvals || [])); setResponseRun(saved.response_run?.status || null);
-        setError('A conexão foi interrompida. A conversa foi atualizada; confira o estado antes de tentar novamente.');
-      } catch { setSendUncertain(true); setError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.'); }
-    } finally { setBusy(false); }
+        if (snapshot.concurrent) {
+          updateMessages(items => [...items.filter(item => item.id !== replyId && (item.id !== userId || !matchingRun)), ...(saved.messages || []).filter((item: Message) => !items.some(existing => existing.id === item.id))]);
+          updateApprovals(items => [...items, ...normalizeApprovals(saved.approvals || []).filter(item => !items.some(existing => existing.id === item.id))]);
+        } else {
+          updateMessages(() => saved.messages || []); updateApprovals(() => normalizeApprovals(saved.approvals || []));
+        }
+        const changedRuns = snapshot.runs.filter(run => run.id !== runId && runsBeforeRecovery.get(run.id) !== run);
+        const recoveredRuns: ResponseRun[] = saved.response_runs || [];
+        updateRuns([...changedRuns, ...recoveredRuns.filter(run => !changedRuns.some(changed => changed.id === run.id))]); snapshot.responseRun = runStatus(snapshot.runs, saved.response_run?.status || null); snapshot.recovered = !snapshot.concurrent; if (visible()) setResponseRun(snapshot.responseRun);
+        updateError(compacted ? 'Não é possível retomar esta resposta após a compactação da conversa. Envie uma nova mensagem.' : 'A conexão foi interrompida. A conversa foi atualizada; confira o estado antes de tentar novamente.');
+      } catch { snapshot.uncertain = true; if (visible()) setSendUncertain(true); updateError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.'); }
+    } finally { const remaining = (activeStreams.current.get(current) || 1) - 1; if (remaining) activeStreams.current.set(current, remaining); else activeStreams.current.delete(current); snapshot.active = remaining > 0; if (visible()) { if (!remaining && selectionVersion.current === streamSelectionVersion && streamSnapshots.current.get(current) === snapshot) streamSnapshots.current.delete(current); setBusy(remaining > 0); } }
   }
   const filteredConversations = conversations.filter(c => (c.title || 'Nova conversa').toLocaleLowerCase('pt-BR').includes(historySearch.trim().toLocaleLowerCase('pt-BR')));
   const currentTitle = current ? conversations.find(c => c.id === current)?.title || 'Sua conversa' : 'Nova conversa';
   const history = (<aside id="chat-history" className="ady-chat-history">
-<button onClick={() => { resetMedia(); void create(); }} disabled={opening || creating || deleting || busy || approving !== null || savingTitle}>
+<button onClick={() => { dictation.cancel(); void create(true); }} disabled={opening || creating || deleting || busy || approving !== null || savingTitle}>
 <Plus size={17} aria-hidden="true"/> Nova conversa</button>
 {historyOpen && error && <p role="alert">{error}</p>}
 <input className="ady-chat-search" aria-label="Buscar conversas" placeholder="Buscar conversas" value={historySearch} onChange={e => setHistorySearch(e.target.value)}/>
 {filteredConversations.length === 0 && <p className="ady-chat-history-empty">{historySearch.trim() ? 'Nenhuma conversa encontrada. Tente outro termo.' : 'Suas conversas ficam salvas aqui. Comece com uma ideia.'}</p>}
-<nav aria-label="Histórico de conversas">{filteredConversations.map(c => <button key={c.id} className="ady-chat-conversation" aria-label={c.title || 'Nova conversa'} title={c.title || 'Nova conversa'} onClick={() => { setHistoryOpen(false); setEditingTitle(false); setTitleError(''); void open(c.id); }} disabled={creating || deleting || busy || approving !== null || savingTitle} aria-current={current === c.id ? 'page' : undefined}>
+<nav aria-label="Histórico de conversas">{filteredConversations.map(c => <button key={c.id} className="ady-chat-conversation" aria-label={c.title || 'Nova conversa'} title={c.title || 'Nova conversa'} onClick={() => { setHistoryOpen(false); setEditingTitle(false); setTitleError(''); void open(c.id); }} disabled={creating || deleting || approving !== null || savingTitle} aria-current={current === c.id ? 'page' : undefined}>
   <span className="ady-chat-avatar" aria-hidden="true"><AdySymbol size={25}/></span>
   <span className="ady-chat-conversation-title">{c.title || 'Nova conversa'}</span>
 </button>)}</nav>
@@ -413,8 +530,8 @@ export function ChatPage() {
 </div>
 </div>}<MessageList messages={messages} approvals={approvals} conversationId={current}>{approvals.map(a => <article className="ady-chat-approval" data-status={a.status} data-approval-id={a.id} key={a.id}>
 <strong>{a.status === 'pending' ? 'Confirme esta ação' : 'Ação'}: {a.action}</strong>
-<ParameterValues value={a.parameters}/>{a.status === 'pending' ? <button onClick={() => approve(a.id)} disabled={opening || deleting || approving !== null}>{approving === a.id ? 'Confirmando…' : 'Confirmar ação'}</button> : approvalFailureFromResult(a.status, a.result) ? <p role="alert">{approvalFailureFromResult(a.status, a.result)?.message}</p> : (['unknown','failed'].includes(a.status) || a.result?.job?.status === 'unknown') ? <p>O resultado não pôde ser confirmado. Verifique o estado da ação antes de tentar novamente.</p> : <p>Status: {a.result?.jobId && !['done','error','failed'].includes(a.result?.job?.status || '') ? 'Em andamento' : ['error','failed'].includes(a.result?.job?.status || '') ? 'Falhou' : a.status === 'completed' ? 'Concluída' : a.status === 'expired' ? 'Expirada' : 'Em andamento'}</p>}{typeof a.result?.imageUrl === 'string' && /^https:\/\//i.test(a.result.imageUrl) && <img src={a.result.imageUrl} alt="Imagem gerada" style={{maxWidth:'100%',borderRadius:12}}/>}{a.result?.jobId && !['done','error','failed','unknown'].includes(a.result?.job?.status || '') && <p>O cancelamento desta geração está indisponível. O vídeo continuará sendo processado.</p>}{['error','failed'].includes(a.result?.job?.status || '') && <p>{a.result?.job?.error === 'Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.' ? a.result.job.error : 'Não foi possível concluir o vídeo.'}</p>}{typeof a.result?.job?.videoUrl === 'string' && /^https:\/\//i.test(a.result.job.videoUrl) && <video src={a.result.job.videoUrl} aria-label="Vídeo gerado" controls style={{maxWidth:'100%'}}/>}{typeof a.result?.videoUrl === 'string' && /^https:\/\//i.test(a.result.videoUrl) && <video src={a.result.videoUrl} aria-label="Vídeo gerado" controls style={{maxWidth:'100%'}}/>}</article>)}{plans.plans.map(plan => <ChatPlanCard key={plan.id} plan={plan} busy={plans.busyPlanIds.includes(plan.id)} error={plans.errors[plan.id]} onAction={plans.onAction} onEdit={plans.onEdit} onCompleteTask={plans.onCompleteTask}/> )}</MessageList>{plans.error && <p role="alert">{plans.error}</p>}{!busy && responseRun === 'running' && <p role="status">Aguardando a resposta em andamento…</p>}{!busy && ['failed','interrupted'].includes(responseRun || '') && <button disabled={opening || creating || deleting} onClick={() => streamResponse()}>Retomar resposta</button>}{opening && <p role="status">Carregando conversa…</p>}{creating && <p role="status">Iniciando conversa…</p>}{busy && <p role="status">Ady está respondendo…</p>}{error && <div role="alert">
-<p>{error}</p>{current && <button onClick={() => open(current)} disabled={busy}>Atualizar conversa</button>}</div>}</div>
+<ParameterValues value={a.parameters}/>{a.status === 'pending' ? <button onClick={() => approve(a.id)} disabled={opening || deleting || approving !== null}>{approving === a.id ? 'Confirmando…' : 'Confirmar ação'}</button> : approvalFailureFromResult(a.status, a.result) ? <p role="alert">{approvalFailureFromResult(a.status, a.result)?.message}</p> : (['unknown','failed'].includes(a.status) || a.result?.job?.status === 'unknown') ? <p>O resultado não pôde ser confirmado. Verifique o estado da ação antes de tentar novamente.</p> : <p>Status: {a.result?.jobId && !['done','error','failed'].includes(a.result?.job?.status || '') ? 'Em andamento' : ['error','failed'].includes(a.result?.job?.status || '') ? 'Falhou' : a.status === 'completed' ? 'Concluída' : a.status === 'expired' ? 'Expirada' : 'Em andamento'}</p>}{typeof a.result?.imageUrl === 'string' && /^https:\/\//i.test(a.result.imageUrl) && <img src={a.result.imageUrl} alt="Imagem gerada" style={{maxWidth:'100%',borderRadius:12}}/>}{a.result?.jobId && !['done','error','failed','unknown'].includes(a.result?.job?.status || '') && <p>O cancelamento desta geração está indisponível. O vídeo continuará sendo processado.</p>}{['error','failed'].includes(a.result?.job?.status || '') && <p>{a.result?.job?.error === 'Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.' ? a.result.job.error : 'Não foi possível concluir o vídeo.'}</p>}{typeof a.result?.job?.videoUrl === 'string' && /^https:\/\//i.test(a.result.job.videoUrl) && <video src={a.result.job.videoUrl} aria-label="Vídeo gerado" controls style={{maxWidth:'100%'}}/>}{typeof a.result?.videoUrl === 'string' && /^https:\/\//i.test(a.result.videoUrl) && <video src={a.result.videoUrl} aria-label="Vídeo gerado" controls style={{maxWidth:'100%'}}/>}</article>)}{plans.plans.map(plan => <ChatPlanCard key={plan.id} plan={plan} busy={plans.busyPlanIds.includes(plan.id)} error={plans.errors[plan.id]} onAction={plans.onAction} onEdit={plans.onEdit} onCompleteTask={plans.onCompleteTask}/> )}</MessageList>{plans.error && <p role="alert">{plans.error}</p>}{!busy && responseRun === 'running' && <p role="status">Aguardando a resposta em andamento…</p>}{latestRuns(responseRuns).filter(run => ['failed','interrupted'].includes(run.status)).map(run => <button key={run.id} disabled={opening || creating || deleting || busy || sendUncertain} onClick={() => streamResponse(undefined, current, [], undefined, run.id)}>Retomar resposta{messages.find(message => message.id === run.user_message_id)?.content ? `: ${messages.find(message => message.id === run.user_message_id)?.content}` : ''}</button>)}{!responseRuns.length && !busy && ['failed','interrupted'].includes(responseRun || '') && <button disabled={opening || creating || deleting} onClick={() => streamResponse()}>Retomar resposta</button>}{opening && <p role="status">Carregando conversa…</p>}{creating && <p role="status">Iniciando conversa…</p>}{busy && <p role="status">Ady está respondendo…</p>}{error && <div role="alert">
+<p>{error}</p>{current && sendUncertain && Array.from(pendingFor(current)).map(key => { const payload = readPayload(current, key); return payload && <button key={key} disabled={busy} onClick={() => { if (retryingPending.current.has(key)) return; retryingPending.current.add(key); const parsed = JSON.parse(payload.body); void streamResponse(payload.path.includes('/messages') ? parsed.content || '' : undefined, current, [], () => { if ((drafts.current.get(current) || '').trim() === (parsed.content || '')) { drafts.current.set(current, ''); renderDraft(n => n + 1); } media.clear(current, parsed.attachmentIds || []); }, undefined, payload).finally(() => { retryingPending.current.delete(key); if (selectedConversation.current === current) setSendUncertain(pendingFor(current).size > 0); }); }}>Reenviar envio pendente</button>; })}{current && <button onClick={() => open(current)} disabled={busy}>Atualizar conversa</button>}</div>}</div>
 <ChatComposer input={input} onInput={setInput} inputRef={inputRef} onSubmit={send} disabled={composerDisabled} media={media} dictation={dictation} onFiles={addFiles} awayFromLatest={awayFromLatest} onLatest={() => { followLatest.current = true; setAwayFromLatest(false); if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; }}/>
 </section>
 </div>

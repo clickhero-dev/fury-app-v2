@@ -76,8 +76,9 @@ class AttachmentContext:
     def __init__(self, repository, client):
         self.repository, self.client = repository, client
 
-    async def load(self, conversation_id, message_id, question):
-        files = await self.repository.associated(conversation_id)
+    async def load(self, conversation_id, message_id, question, *, causal=False):
+        files = (await self.repository.associated(conversation_id, through_message_id=message_id)
+                 if causal else await self.repository.associated(conversation_id))
         if not files:
             return AttachmentEvidence([], [])
         question = question if question.strip() else INTERNAL_DESCRIPTION

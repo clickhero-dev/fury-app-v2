@@ -11,6 +11,13 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 vi.mock('@fury/db', () => ({ db: {} }));
 vi.mock('../lib/analytics.js', () => ({ captureServerException: vi.fn() }));
+import express from 'express';
+import request from 'supertest';
+import { generateAccessToken } from '../lib/jwt.js';
+import { errorHandler } from '../middleware/errorHandler.js';
+import { ChatPlanService } from '../services/chat/chat-plan.service.js';
+import { ChatPlanController } from '../controllers/chat-plan.controller.js';
+import { createChatPlanRouter } from '../routes/chat-plan.routes.js';
 import { ChatApprovalRepository } from '../repository/chat-approval.repository.js';
 import { ChatPlanRepository, ChatPlanRecoveryRepository } from '../repository/chat-plan.repository.js';
 import { newPlan, parsePlanInput } from '../services/chat/chat-plan.domain.js';
@@ -28,7 +35,7 @@ suite('repository real', () => {
         sql = postgres(url!, { max: 6, onnotice: () => {
             }, connection: { search_path: schema } });
         await sql.unsafe(`CREATE SCHEMA ${schema}; CREATE TABLE tenants(id uuid PRIMARY KEY, deleted_at timestamptz); CREATE TABLE users(id uuid PRIMARY KEY,tenant_id uuid,email text,role text,deleted_at timestamptz);`);
-        for (const file of ['0059_chat.sql', '0060_chat_approvals.sql', '0062_chat_approval_result.sql', '0063_chat_approval_display.sql', '0067_chat_approval_unknown.sql', '0071_chat_plans.sql'])
+        for (const file of ['0059_chat.sql', '0060_chat_approvals.sql', '0062_chat_approval_result.sql', '0063_chat_approval_display.sql', '0067_chat_approval_unknown.sql', '0066_chat_response_runs.sql', '0071_chat_plans.sql', '0073_chat_plan_run_fencing.sql'])
             await sql.unsafe(await readFile(new URL(`../../../../packages/db/migrations/${file}`, import.meta.url), 'utf8'));
         await sql `INSERT INTO tenants VALUES (${tenant},null)`;
         await sql `INSERT INTO users VALUES (${user},${tenant},'test@example.test','member',null),(${other},${tenant},'other@example.test','member',null)`;
@@ -41,9 +48,74 @@ suite('repository real', () => {
             await sql.end();
         }
     });
+    it('rejects an expired run before creating a plan', async () => {
+        const message = randomUUID(), run = randomUUID(), lease = randomUUID();
+        await sql`INSERT INTO chat_messages(id,conversation_id,role,content) VALUES (${message},${conversation},'user','test')`;
+        await sql`INSERT INTO chat_response_runs(id,conversation_id,user_message_id,lease_id,status,lease_until) VALUES (${run},${conversation},${message},${lease},'running',clock_timestamp()-interval '1 second')`;
+        const p = draft();
+        await expect(repo.create(p, { runId: run, leaseId: lease, key: 'same', payloadHash: 'same' })).rejects.toMatchObject({ statusCode: 409 });
+        expect(await sql`SELECT id FROM chat_plans WHERE id=${p.id}`).toHaveLength(0);
+        await sql`UPDATE chat_response_runs SET status='interrupted' WHERE id=${run}`;
+    });
+    it('serializes concurrent identical requests and returns one persisted plan', async () => {
+        const message = randomUUID(), run = randomUUID(), lease = randomUUID();
+        await sql`INSERT INTO chat_messages(id,conversation_id,role,content) VALUES (${message},${conversation},'user','test')`;
+        await sql`INSERT INTO chat_response_runs(id,conversation_id,user_message_id,lease_id,status,lease_until) VALUES (${run},${conversation},${message},${lease},'running',clock_timestamp()+interval '1 minute')`;
+        const fence = { runId: run, leaseId: lease, key: 'same', payloadHash: 'same' };
+        const plans = await Promise.all([repo.create(draft(), fence), repo.create(draft(), fence)]);
+        expect(plans[0].id).toBe(plans[1].id);
+        expect((await repo.create(draft(), fence)).id).toBe(plans[0].id);
+        expect(await sql`SELECT plan_id FROM chat_plan_run_requests WHERE run_id=${run}`).toHaveLength(1);
+        await sql`UPDATE chat_response_runs SET status='completed' WHERE id=${run}`;
+    });
+    it('HTTP retains one plan across concurrent delivery and rejects expired credentials', async () => {
+        const message = randomUUID(), run = randomUUID(), lease = randomUUID();
+        await sql`INSERT INTO chat_messages(id,conversation_id,role,content) VALUES (${message},${conversation},'user','test')`;
+        await sql`INSERT INTO chat_response_runs(id,conversation_id,user_message_id,lease_id,status,lease_until) VALUES (${run},${conversation},${message},${lease},'running',clock_timestamp()+interval '1 minute')`;
+        const service = new ChatPlanService((t, u) => new ChatPlanRepository(t, u, drizzle(sql) as never), { enqueue: async () => {} }, { authorize: async () => ({ userId: user, tenantId: tenant, email: 'test@example.test', role: 'member' }) });
+        const app = express();
+        app.use(express.json());
+        app.use('/api/chat', createChatPlanRouter(new ChatPlanController(service), { delegationSecret: 'isolated-plan-delegation-secret-not-production' }));
+        app.use(errorHandler);
+        const token = generateAccessToken({ userId: user, tenantId: tenant, email: 'test@example.test', role: 'member' });
+        const body = { title: 'HTTP plano', goal: 'Consultar marca', tasks: [{ key: 'marca', title: 'Marca', capability: 'read_brand', parameters: {}, dependsOn: [] }] };
+        const post = (operation = 'call-1', payload = body) => request(app).post(`/api/chat/conversations/${conversation}/plans/from-run`).auth(token, { type: 'bearer' }).set('x-chat-run-id', run).set('x-chat-run-lease', lease).set('x-chat-operation-id', operation).send(payload);
+        const [a, b] = await Promise.all([post(), post()]);
+        expect([a.status, b.status]).toEqual([201, 201]);
+        expect(a.body.plan.id).toBe(b.body.plan.id);
+        expect((await post()).body.plan.id).toBe(a.body.plan.id);
+        const second = await post('call-2');
+        expect(second.status).toBe(201);
+        expect(second.body.plan.id).not.toBe(a.body.plan.id);
+        expect((await post('call-1', { ...body, goal: 'Outro objetivo' })).status).toBe(409);
+        expect((await request(app).post(`/api/chat/conversations/${conversation}/plans/from-run`).auth(token, { type: 'bearer' }).send(body)).status).toBe(400);
+        expect((await request(app).post(`/api/chat/conversations/${conversation}/plans/from-run`).auth(token, { type: 'bearer' }).set('x-chat-run-id', run).set('x-chat-run-lease', randomUUID()).set('x-chat-operation-id', 'call-1').send(body)).status).toBe(409);
+        expect(await sql`SELECT id FROM chat_plans WHERE title='HTTP plano'`).toHaveLength(2);
+        await sql`UPDATE chat_response_runs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=${run}`;
+        expect((await post()).status).toBe(409);
+        expect(await sql`SELECT id FROM chat_plans WHERE title='HTTP plano'`).toHaveLength(2);
+        await sql`UPDATE chat_response_runs SET status='interrupted' WHERE id=${run}`;
+    });
+    it('rechecks expiry after waiting for the conversation lock', async () => {
+        const message = randomUUID(), run = randomUUID(), lease = randomUUID();
+        await sql`INSERT INTO chat_messages(id,conversation_id,role,content) VALUES (${message},${conversation},'user','test')`;
+        await sql`INSERT INTO chat_response_runs(id,conversation_id,user_message_id,lease_id,status,lease_until) VALUES (${run},${conversation},${message},${lease},'running',clock_timestamp()+interval '200 milliseconds')`;
+        const p = draft();
+        let pending!: Promise<unknown>;
+        await sql.begin(async tx => {
+            await tx`SELECT id FROM chat_conversations WHERE id=${conversation} FOR UPDATE`;
+            pending = repo.create(p, { runId: run, leaseId: lease, key: 'blocked', payloadHash: 'blocked' });
+            // Attach rejection handler before releasing the lock.
+            void pending.catch(() => {});
+            await new Promise(resolve => setTimeout(resolve, 350));
+        });
+        await expect(pending).rejects.toMatchObject({ statusCode: 409 });
+        expect(await sql`SELECT id FROM chat_plans WHERE id=${p.id}`).toHaveLength(0);
+        await sql`UPDATE chat_response_runs SET status='interrupted' WHERE id=${run}`;
+    });
     it('não revela nem altera dados de outro owner', async () => {
         const p = await repo.create(draft());
-        expect((await repo.list(conversation))[0].id).toBe(p.id);
+        expect((await repo.list(conversation)).some(plan => plan.id === p.id)).toBe(true);
         for (const r of [new ChatPlanRepository(tenant, other, drizzle(sql) as never), new ChatPlanRepository(randomUUID(), user, drizzle(sql) as never)]) {
             await expect(r.get(conversation, p.id)).rejects.toMatchObject({ statusCode: 404 });
             await expect(r.mutate(conversation, p.id, 1, p => {

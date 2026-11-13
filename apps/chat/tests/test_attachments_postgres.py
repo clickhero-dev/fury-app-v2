@@ -34,7 +34,7 @@ async def database():
         for name in ('0059_chat.sql', '0060_chat_approvals.sql', '0061_chat_memory.sql',
                      '0062_chat_approval_result.sql', '0063_chat_approval_display.sql',
                      '0064_chat_approval_failed.sql', '0066_chat_response_runs.sql',
-                     '0067_chat_approval_unknown.sql', '0069_chat_title_source.sql', '0070_chat_attachments.sql'):
+                     '0067_chat_approval_unknown.sql', '0069_chat_title_source.sql', '0070_chat_attachments.sql', '0072_chat_concurrent_runs.sql'):
             await admin.execute((migrations / name).read_text())
         pool = await asyncpg.create_pool(URL, min_size=1, max_size=6, server_settings={'search_path': schema})
         tenant, user = uuid4(), uuid4()

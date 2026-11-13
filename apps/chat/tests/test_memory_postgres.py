@@ -74,12 +74,12 @@ def test_compression_failure_preserves_memory():
         finally: await conn.close()
     asyncio.run(run())
 
-# Cenário: falhas de geração anteriores não bloqueiam consolidação
-# Dado cinco respostas concluídas e mensagens de tentativas anteriores sem resposta
-# Quando o resumo é salvo
-# Então todas as mensagens anteriores à quinta resposta são consolidadas
+# Cenário: mensagens sem resposta não são descartadas pela compactação
+# Dado cinco respostas concluídas e mensagens anteriores sem resposta
+# Quando não há um prefixo completamente pareado
+# Então o histórico permanece intacto e o resumidor não é chamado
 
-def test_consolidation_handles_unanswered_messages():
+def test_consolidation_preserves_unanswered_messages():
     async def run():
         from datetime import datetime, timezone, timedelta
         conn, cid, pool = await setup()
@@ -90,9 +90,10 @@ def test_consolidation_handles_unanswered_messages():
             async def summary(previous, messages):
                 captured.extend(messages)
                 return '{"facts":[{"topic":"marca","text":"café"}]}'
-            assert await consolidate(pool, cid, summary)
-            assert len(captured) == 12
-            assert await conn.fetchval('SELECT count(*) FROM chat_messages') == 0
+            assert not await consolidate(pool, cid, summary)
+            assert captured == []
+            assert await conn.fetchval('SELECT count(*) FROM chat_messages') == 12
+            assert await conn.fetchval('SELECT count(*) FROM chat_memories') == 0
         finally: await conn.close()
     asyncio.run(run())
 

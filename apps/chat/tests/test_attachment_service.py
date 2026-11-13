@@ -183,7 +183,8 @@ def test_message_endpoint_validates_and_scopes_before_read(monkeypatch):
                     assert (await client.post(path, headers=auth, json={'attachmentIds':[str(uuid4())]})).status_code == 404
                     run, _, _ = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Running')
                     assert (await client.delete(f'/conversations/{cid}', headers=auth)).status_code == 409
-                    assert (await client.post(path, headers=auth, json={'attachmentIds':[str(aid)]})).status_code == 409
+                    response = await client.post(path, headers=auth, json={'attachmentIds':[str(aid)]})
+                    assert response.status_code == 200 and 'event: error' in response.text
                     assert captured == []
-                    assert await pool.fetchval('SELECT message_id FROM chat_attachments WHERE id=$1', aid) is None
+                    assert await pool.fetchval('SELECT message_id FROM chat_attachments WHERE id=$1', aid) is not None
     asyncio.run(scenario())

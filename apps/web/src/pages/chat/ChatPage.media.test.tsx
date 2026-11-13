@@ -5,7 +5,7 @@
  * Cenário: falha de upload — Dado rascunho com arquivo, Quando upload falha, Então preservo texto/prévia e ofereço nova tentativa.
  * Cenário: colar/soltar — Dado imagens no clipboard/arquivos no drop, Quando adiciono, Então aplico a validação comum.
  * Cenário: ditado — Dado texto digitado, Quando paro o microfone, Então anexo texto revisável sem envio automático.
- * Cenário: trocar conversa — Dado voz/upload pendente, Quando troco, Então aborto e não contamino a nova conversa.
+ * Cenário: trocar conversa — Dado voz/upload pendente, Quando troco, Então preservo o upload e não contamino a nova conversa.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,6 +51,31 @@ const requests = (path: string) => fetchMock.mock.calls.filter(([url]) => url.en
 async function select() { fireEvent.change(screen.getByLabelText('Selecionar anexos'),{target:{files:[file()]}}); await screen.findByText('Pronto para enviar'); }
 
 describe('ChatPage multimídia', () => {
+  it('preserva rascunho inicial após falha e o transfere ao criar nova conversa', async () => {
+    const original = fetchMock.getMockImplementation()!;
+    let attempts = 0;
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/conversations') && init?.method === 'POST' && ++attempts <= 2) return Promise.resolve(json({}, 500));
+      return original(url, init);
+    });
+    render(<ChatPage/>);
+    await screen.findByRole('button', {name:'Outra conversa'});
+    fireEvent.change(screen.getByLabelText('Mensagem'), {target:{value:'Rascunho inicial'}});
+    fireEvent.change(screen.getByLabelText('Selecionar anexos'), {target:{files:[file()]}});
+    await screen.findByRole('button', {name:'Tentar enviar foto.png novamente'});
+    fireEvent.click(screen.getByRole('button', {name:'Nova conversa'}));
+    await waitFor(() => expect(attempts).toBe(2));
+    await screen.findByText('Não foi possível iniciar a conversa.');
+    expect((screen.getByLabelText('Mensagem') as HTMLTextAreaElement).value).toBe('Rascunho inicial');
+    expect(screen.getByRole('button', {name:'Tentar enviar foto.png novamente'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', {name:'Nova conversa'}));
+    await waitFor(() => expect(sessionStorage.getItem('ady-chat-current')).toBe('conversation'));
+    expect((screen.getByLabelText('Mensagem') as HTMLTextAreaElement).value).toBe('Rascunho inicial');
+    fireEvent.click(screen.getByRole('button', {name:'Tentar enviar foto.png novamente'}));
+    await screen.findByText('Pronto para enviar');
+    expect(requests('/attachments')).toHaveLength(1);
+    expect(requests('/attachments')[0][0]).toContain('/conversations/conversation/');
+  });
   it('aborta criação na saída da página e ignora conversa criada tardiamente', async () => {
     let finish!: (response: Response) => void;
     const original = fetchMock.getMockImplementation()!;
@@ -85,7 +110,7 @@ describe('ChatPage multimídia', () => {
     expect(requests('/conversations').filter(([,init]) => init.method === 'POST')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({attachmentIds:ids});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:ids});
     expect(document.querySelectorAll('.ady-chat-saved-attachment')).toHaveLength(3);
   });
   it('preserva anexo/rascunho se excluir conversa falhar e bloqueia corridas durante exclusão', async () => {
@@ -119,9 +144,10 @@ describe('ChatPage multimídia', () => {
   });
   it('reconcilia IDs já associados após perder resposta HTTP sem reenviar rascunho', async () => {
     const original = fetchMock.getMockImplementation()!;
+    let clientKey = '';
     fetchMock.mockImplementation((url,init) => {
-      if (url.endsWith('/messages')) return Promise.reject(new Error('network lost after commit'));
-      if (url.endsWith('/conversations/conversation')) return Promise.resolve(json({messages:[{id:'saved',role:'user',content:'Pergunta',attachments:[attachment]}],response_run:{status:'interrupted'},approvals:[]}));
+      if (url.endsWith('/messages')) { clientKey = JSON.parse(init.body).clientKey; return Promise.reject(new Error('network lost after commit')); }
+      if (url.endsWith('/conversations/conversation')) return Promise.resolve(json({client_keys:[clientKey],messages:[{id:'saved',role:'user',content:'Pergunta',attachments:[attachment]}],response_run:{status:'interrupted'},approvals:[]}));
       return original(url,init);
     });
     render(<ChatPage/>); await select();
@@ -178,7 +204,7 @@ describe('ChatPage multimídia', () => {
     expect(screen.getByRole('button',{name:'Enviar mensagem'})).toBeEnabled();
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:[attachment.id]});
     const message = document.querySelector('.ady-chat-message[data-role="user"]')!;
     expect(within(message as HTMLElement).getByText('foto.png')).toBeInTheDocument();
     expect(within(message as HTMLElement).queryByText(/descreva|analise/i)).toBeNull();
@@ -201,7 +227,7 @@ describe('ChatPage multimídia', () => {
     await screen.findByText('Pronto para enviar');
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({content:'Minha pergunta',attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),content:'Minha pergunta',attachmentIds:[attachment.id]});
   });
   it.each(['drop','paste'])('aceita imagem via %s sem autoenviar', async method => {
     render(<ChatPage/>);
@@ -245,7 +271,7 @@ describe('ChatPage multimídia', () => {
     expect(stopTrack).toHaveBeenCalled();
     expect(requests('/transcriptions')).toHaveLength(0);
   });
-  it('bloqueia send duplicado durante upload e permite cancelar/trocar conversa', async () => {
+  it('bloqueia send duplicado e preserva upload ao trocar conversa', async () => {
     let finish!: (response: Response) => void;
     const realMock = fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation((url,init) => url.endsWith('/attachments') ? new Promise(resolve => {finish = resolve;}) : realMock(url,init));
@@ -258,9 +284,13 @@ describe('ChatPage multimídia', () => {
     expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
     fireEvent.click(screen.getByRole('button',{name:'Outra conversa'}));
     await waitFor(() => expect(screen.getByLabelText('Mensagem')).toBeEnabled());
-    expect(requests('/attachments')[0][1].signal.aborted).toBe(true);
+    expect(requests('/attachments')[0][1].signal.aborted).toBe(false);
     await act(async () => finish(json({attachments:[attachment]})));
     expect(screen.queryByText('foto.png')).toBeNull();
-    expect(screen.getByLabelText('Mensagem')).toHaveValue('Rascunho');
+    expect(screen.getByLabelText('Mensagem')).toHaveValue('');
+    fetchMock.mockImplementation((url, init) => url.endsWith('/conversations/conversation') ? Promise.resolve(json({messages:[],approvals:[]})) : original(url,init));
+    fireEvent.click(within(screen.getByRole('navigation',{name:'Histórico de conversas'})).getByRole('button',{name:'Nova conversa'}));
+    await waitFor(() => expect(screen.getByLabelText('Mensagem')).toHaveValue('Rascunho'));
+    expect(screen.getByText('Pronto para enviar')).toBeInTheDocument();
   });
 });
