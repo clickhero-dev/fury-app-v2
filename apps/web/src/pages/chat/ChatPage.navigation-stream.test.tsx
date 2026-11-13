@@ -81,13 +81,14 @@ it('preserva progresso de aprovação consultado durante stream ao chegar novo e
 it('recupera o estado do servidor ao reabrir após falha da recuperação em segundo plano', async () => {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
   let loads = 0;
+  let clientKey = '';
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/conversations')) return new Response(JSON.stringify([{id:'a',title:'Conversa A'},{id:'b',title:'Conversa B'}]));
-    if (url.endsWith('/a/messages') && init?.method === 'POST') return new Response(new ReadableStream({start(c) { controller = c; }}));
+    if (url.endsWith('/a/messages') && init?.method === 'POST') { clientKey = JSON.parse(init.body as string).clientKey; return new Response(new ReadableStream({start(c) { controller = c; }})); }
     if (url.endsWith('/conversations/a')) {
       loads++;
       if (loads === 2) throw new Error('offline');
-      return new Response(JSON.stringify({messages:loads === 1 ? [] : [{id:'saved',role:'assistant',content:'Resposta recuperada'}],approvals:[]}));
+      return new Response(JSON.stringify({client_keys:loads === 1 ? [] : [clientKey],messages:loads === 1 ? [] : [{id:'saved',role:'assistant',content:'Resposta recuperada'}],approvals:[]}));
     }
     if (url.endsWith('/conversations/b')) return new Response(JSON.stringify({messages:[{id:'b1',role:'user',content:'Somente B'}],approvals:[]}));
     throw new Error(`unexpected ${url}`);

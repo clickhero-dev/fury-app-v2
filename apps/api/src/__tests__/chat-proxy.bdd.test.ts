@@ -64,6 +64,17 @@ describe('proxy do chat', () => {
     expect((await request(app(fetcher)).get('/chat/admin')).status).toBe(404);
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it('preserva o run_id exato na tentativa de resposta direcionada', async () => {
+    const fetcher = vi.fn(async () => new Response('data: {"text":"ok"}\n\n', { headers: { 'content-type': 'text/event-stream' } })) as unknown as typeof fetch;
+    const res = await request(app(fetcher))
+      .post('/chat/conversations/123/retry?run_id=run-123%2Ftarget%2B1')
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetcher).mock.calls[0][0]).toBe('http://chat:8000/conversations/123/retry?run_id=run-123%2Ftarget%2B1');
+    expect(vi.mocked(fetcher).mock.calls[0][1]?.method).toBe('POST');
+  });
   it('encaminha tentativa de resposta somente por POST', async () => {
     const fetcher = vi.fn(async () => new Response('data: {"text":"ok"}\n\n', {headers:{'content-type':'text/event-stream'}})) as unknown as typeof fetch;
     const server=app(fetcher);

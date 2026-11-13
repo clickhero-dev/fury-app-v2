@@ -18,8 +18,9 @@ export interface PlanApproval {
     expiresAt: string;
     executionStartedAt: string | null;
 }
+export interface PlanRunFence { runId: string; leaseId: string; key: string; payloadHash: string }
 export interface ChatPlanStore {
-    create(plan: StoredPlan): Promise<StoredPlan>;
+    create(plan: StoredPlan, fence?: PlanRunFence): Promise<StoredPlan>;
     get(conversationId: string, id: string): Promise<StoredPlan>;
     list(conversationId: string): Promise<StoredPlan[]>;
     mutate(conversationId: string, id: string, version: number | undefined, fn: (plan: StoredPlan, tx: ChatPlanStore) => Promise<void> | void): Promise<StoredPlan>;
@@ -51,7 +52,25 @@ export class ChatPlanRepository extends TenantScopedRepository implements ChatPl
             throw new AppError(403, 'CHAT_PLAN_ACCESS_REVOKED', 'Seu acesso mudou. Verifique a conta antes de continuar.');
         return rows[0] as unknown as AccessTokenPayload;
     }
-    async create(p: StoredPlan): Promise<StoredPlan> {
+    async create(p: StoredPlan, fence?: PlanRunFence): Promise<StoredPlan> {
+        if (fence) {
+            return this.db.transaction(async tx => {
+                await tx.execute(sql`SELECT id FROM chat_conversations WHERE id=${p.conversationId}::uuid FOR UPDATE`);
+                await tx.execute(sql`SELECT id FROM chat_response_runs WHERE id=${fence.runId}::uuid FOR UPDATE`);
+                const valid = await tx.execute(sql`SELECT r.id FROM chat_response_runs r JOIN chat_conversations c ON c.id=r.conversation_id WHERE r.id=${fence.runId}::uuid AND r.lease_id=${fence.leaseId}::uuid AND r.conversation_id=${p.conversationId}::uuid AND c.tenant_id=${this.tenantId}::uuid AND c.user_id=${this.userId}::uuid AND r.status='running' AND r.lease_until>clock_timestamp()`);
+                if (!valid.length) throw new AppError(409, 'CHAT_RUN_EXPIRED', 'A execução da conversa expirou.');
+                const existing = await tx.execute(sql`SELECT plan_id AS id, payload_hash AS hash FROM chat_plan_run_requests WHERE run_id=${fence.runId}::uuid AND request_key=${fence.key}`);
+                const r = new ChatPlanRepository(this.tenantId, this.userId, tx as unknown as Database);
+                if (existing[0]) {
+                    if (existing[0].hash !== fence.payloadHash) throw new AppError(409, 'CHAT_PLAN_OPERATION_MISMATCH', 'Esta operação já foi usada com outro conteúdo.');
+                    return r.get(p.conversationId, String(existing[0].id));
+                }
+                const inserted = await tx.execute(sql`INSERT INTO chat_plans(id,tenant_id,user_id,conversation_id,title,goal,status,version,tasks) SELECT ${p.id}::uuid,c.tenant_id,c.user_id,c.id,${p.title},${p.goal},'draft',1,${JSON.stringify(p.tasks)}::jsonb FROM chat_conversations c JOIN chat_response_runs run ON run.conversation_id=c.id WHERE c.id=${p.conversationId}::uuid AND c.tenant_id=${this.tenantId}::uuid AND c.user_id=${this.userId}::uuid AND run.id=${fence.runId}::uuid AND run.lease_id=${fence.leaseId}::uuid AND run.status='running' AND run.lease_until>clock_timestamp() RETURNING id`);
+                if (!inserted.length) throw new AppError(409, 'CHAT_RUN_EXPIRED', 'A execução da conversa expirou.');
+                await tx.execute(sql`INSERT INTO chat_plan_run_requests(run_id,request_key,plan_id,payload_hash) VALUES(${fence.runId}::uuid,${fence.key},${p.id}::uuid,${fence.payloadHash})`);
+                return r.get(p.conversationId, p.id);
+            });
+        }
         const rows = await this.db.execute(sql `INSERT INTO chat_plans(id,tenant_id,user_id,conversation_id,title,goal,status,version,tasks) SELECT ${p.id}::uuid,c.tenant_id,c.user_id,c.id,${p.title},${p.goal},'draft',1,${JSON.stringify(p.tasks)}::jsonb FROM chat_conversations c WHERE c.id=${p.conversationId}::uuid AND c.tenant_id=${this.tenantId}::uuid AND c.user_id=${this.userId}::uuid RETURNING id`);
         if (!rows.length)
             throw new AppError(404, 'CHAT_CONVERSATION_NOT_FOUND', 'Conversa não encontrada.');

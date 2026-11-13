@@ -138,7 +138,8 @@ def test_cross_tenant_conversation_denied(monkeypatch):
                 first_run = executor.submit(client.post, '/conversations/'+cid+'/messages', headers=first, json={'content':'Primeira'})
                 assert started.wait(5)
                 concurrent_response = client.post('/conversations/'+cid+'/messages', headers=first, json={'content':'Segunda'})
-                assert concurrent_response.status_code == 409
+                assert concurrent_response.status_code == 200
+                assert 'event: done' in concurrent_response.text
                 assert 'event: done' in first_run.result().text
             async def proposal():
                 conn = await asyncpg.connect(URL)

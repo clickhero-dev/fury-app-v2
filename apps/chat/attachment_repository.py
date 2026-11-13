@@ -18,9 +18,9 @@ def public_attachment(row):
 
 
 class ConversationError(Exception):
-    def __init__(self, status_code, detail):
+    def __init__(self, status_code, detail, code=None):
         super().__init__(detail)
-        self.status_code, self.detail = status_code, detail
+        self.status_code, self.detail, self.code = status_code, detail, code
 
 
 class AttachmentRepository:
@@ -65,14 +65,22 @@ class AttachmentRepository:
             AND a.tenant_id=$2 AND a.user_id=$3''',
             conversation_id, self.tenant_id, self.user_id)
 
-    async def associated(self, conversation_id):
+    async def associated(self, conversation_id, *, through_message_id=None):
         return await self.db.fetch('''SELECT a.id,a.message_id,a.filename,a.mime_type,
             a.size_bytes,a.metadata,a.created_at FROM chat_attachments a
             JOIN chat_conversations c ON c.id=a.conversation_id
             JOIN chat_messages m ON m.id=a.message_id AND m.conversation_id=c.id
             WHERE c.id=$1 AND c.tenant_id=$2 AND c.user_id=$3
-            AND a.tenant_id=$2 AND a.user_id=$3 ORDER BY m.created_at DESC,a.created_at DESC,a.id''',
-            conversation_id, self.tenant_id, self.user_id)
+            AND a.tenant_id=$2 AND a.user_id=$3
+            AND ($4::uuid IS NULL OR (m.created_at,m.id) <= (SELECT created_at,id FROM chat_messages WHERE id=$4 AND conversation_id=c.id))
+            AND ($4::uuid IS NULL OR m.id=$4 OR
+                NOT EXISTS (SELECT 1 FROM chat_response_runs r WHERE r.user_message_id=m.id) OR
+                EXISTS (SELECT 1 FROM chat_response_runs r LEFT JOIN chat_messages reply ON reply.id=r.assistant_message_id
+                    WHERE r.user_message_id=m.id AND r.status='completed' AND
+                    r.assistant_message_id IS NOT NULL AND (reply.created_at,reply.id) <=
+                        (SELECT created_at,id FROM chat_messages WHERE id=$4 AND conversation_id=c.id)))
+            ORDER BY m.created_at DESC,a.created_at DESC,a.id''',
+            conversation_id, self.tenant_id, self.user_id, through_message_id)
 
     async def by_message(self, conversation_id):
         grouped = {}

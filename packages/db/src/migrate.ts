@@ -182,6 +182,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0069_chat_title_source' },
   { tag: '0070_chat_attachments' },
   { tag: '0071_chat_plans' },
+  { tag: '0072_chat_concurrent_runs' },
+  { tag: '0073_chat_plan_run_fencing' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {

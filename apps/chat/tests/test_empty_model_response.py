@@ -38,7 +38,7 @@ def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(mo
             return {'id':str(uuid4()), 'role':'assistant', 'content':content}
     class Context:
         def __init__(self, *args): pass
-        async def load(self, *args): return SimpleNamespace(notice='Arquivo omitido. ', readings=[])
+        async def load(self, *args, **kwargs): return SimpleNamespace(notice='Arquivo omitido. ', readings=[])
     class Agent:
         def __init__(self, **kwargs): self.options = kwargs
         def arun(self, messages, stream=False):

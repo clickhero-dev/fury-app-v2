@@ -80,7 +80,19 @@ remove somente os objetos e **não readquire esse row lock nem remove metadados*
 Upload e remoção de rascunhos do Node usam o mesmo row lock para serializar com a
 exclusão. Cleanup humano permanece sob lock e recusa qualquer anexo associado com
 `409 CHAT_ATTACHMENT_BOUND`, mesmo se o cliente tentar simular delegação via headers.
-Run ativo retorna 409; falha/timeout de cleanup retorna 502 pelo FastAPI preservando
+A exclusão com qualquer run ativo retorna 409; o envio simultâneo de mensagens é permitido.
+O GET da conversa fornece `response_runs` com `id`, `user_message_id`,
+`assistant_message_id` e `status`; `response_run` permanece para clientes antigos.
+O SSE começa com `run` e encerra com `done`, ambos identificando `run_id` e
+`user_message_id`. Para retentar uma resposta específica, use `POST .../retry?run_id=<id>`;
+a retomada continua somente de leitura. **Rollout sem versões mistas:** interrompa novos
+requests e drene todos os workers antigos (inclusive runs em andamento) antes de aplicar
+`0072`; em seguida inicie apenas workers novos e reabra o tráfego. O worker antigo não
+salva `assistant_message_id` e não é compatível com envios concorrentes; não faça
+rolling deploy misturando versões nem rollback para ele após habilitar concorrência.
+A migration associa apenas respostas legadas com vínculo temporal inequívoco; vínculos
+ambíguos ficam ausentes do contexto causal, inclusive anexos. A compactação não altera histórico durante runs ativos e
+só resume turnos intercalados com vínculos completos. Falha/timeout de cleanup retorna 502 pelo FastAPI preservando
 as rows. Conversas sem anexos não chamam storage. Não há liberação antecipada do
 lock Python nem intervalo para nova associação antes da exclusão final.
 

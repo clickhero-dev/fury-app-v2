@@ -110,7 +110,7 @@ describe('ChatPage multimídia', () => {
     expect(requests('/conversations').filter(([,init]) => init.method === 'POST')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({attachmentIds:ids});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:ids});
     expect(document.querySelectorAll('.ady-chat-saved-attachment')).toHaveLength(3);
   });
   it('preserva anexo/rascunho se excluir conversa falhar e bloqueia corridas durante exclusão', async () => {
@@ -144,9 +144,10 @@ describe('ChatPage multimídia', () => {
   });
   it('reconcilia IDs já associados após perder resposta HTTP sem reenviar rascunho', async () => {
     const original = fetchMock.getMockImplementation()!;
+    let clientKey = '';
     fetchMock.mockImplementation((url,init) => {
-      if (url.endsWith('/messages')) return Promise.reject(new Error('network lost after commit'));
-      if (url.endsWith('/conversations/conversation')) return Promise.resolve(json({messages:[{id:'saved',role:'user',content:'Pergunta',attachments:[attachment]}],response_run:{status:'interrupted'},approvals:[]}));
+      if (url.endsWith('/messages')) { clientKey = JSON.parse(init.body).clientKey; return Promise.reject(new Error('network lost after commit')); }
+      if (url.endsWith('/conversations/conversation')) return Promise.resolve(json({client_keys:[clientKey],messages:[{id:'saved',role:'user',content:'Pergunta',attachments:[attachment]}],response_run:{status:'interrupted'},approvals:[]}));
       return original(url,init);
     });
     render(<ChatPage/>); await select();
@@ -203,7 +204,7 @@ describe('ChatPage multimídia', () => {
     expect(screen.getByRole('button',{name:'Enviar mensagem'})).toBeEnabled();
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:[attachment.id]});
     const message = document.querySelector('.ady-chat-message[data-role="user"]')!;
     expect(within(message as HTMLElement).getByText('foto.png')).toBeInTheDocument();
     expect(within(message as HTMLElement).queryByText(/descreva|analise/i)).toBeNull();
@@ -226,7 +227,7 @@ describe('ChatPage multimídia', () => {
     await screen.findByText('Pronto para enviar');
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({content:'Minha pergunta',attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),content:'Minha pergunta',attachmentIds:[attachment.id]});
   });
   it.each(['drop','paste'])('aceita imagem via %s sem autoenviar', async method => {
     render(<ChatPage/>);

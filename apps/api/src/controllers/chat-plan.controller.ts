@@ -35,6 +35,16 @@ export class ChatPlanController {
             next(e);
         }
     };
+    createFromRun = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { scope } = this.context(req);
+            const run = z.object({ runId: z.string().uuid(), leaseId: z.string().uuid(), operationId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) }).parse({ runId: req.get('x-chat-run-id'), leaseId: req.get('x-chat-run-lease'), operationId: req.get('x-chat-operation-id') });
+            res.status(201).json({ plan: await this.service.create(scope, req.body, run) });
+        }
+        catch (e) {
+            next(e);
+        }
+    };
     get = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { scope, planId } = this.context(req);

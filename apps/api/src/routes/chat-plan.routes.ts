@@ -9,6 +9,7 @@ export function createChatPlanRouter(controller: ChatPlanController, options: {
     const base = '/conversations/:conversationId/plans';
     const auth = chatPlanAuthentication(options.delegationSecret);
     router.get(base, auth, controller.list);
+    router.post(`${base}/from-run`, auth, controller.createFromRun);
     router.post(base, auth, controller.create);
     router.get(`${base}/:planId`, auth, controller.get);
     router.patch(`${base}/:planId`, auth, controller.edit);
