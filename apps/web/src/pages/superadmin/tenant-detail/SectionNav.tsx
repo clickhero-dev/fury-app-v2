@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { isValidGeo, regionLabel } from "@/components/campaign-wizard/types";
+import { statusLabel } from "../subscriptionLabels";
 
 export interface SectionItem<K extends string> {
   key: K;
@@ -117,7 +118,7 @@ export function buildSectionSummaries(
       line2: isSuperAdmin ? "Sem limite de vagas" : `Vagas: ${members} de ${maxMembers}`,
     },
     subscription: sub
-      ? { line1: sub.plan?.name ?? "Sem plano", line2: `Status: ${sub.status}` }
+      ? { line1: sub.plan?.name ?? "Sem plano", line2: `Status: ${statusLabel(sub.status)}` }
       : { line1: "Sem assinatura", line2: "Configure um plano" },
     config: cfg && (cfg.targetRoas || cfg.targetCpa)
       ? { line1: `ROAS ${cfg.targetRoas || "—"}x`, line2: `CPA R$ ${cfg.targetCpa ? brl(Number(cfg.targetCpa)) : "—"}` }

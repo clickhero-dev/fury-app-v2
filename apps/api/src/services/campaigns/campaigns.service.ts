@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
@@ -28,6 +28,21 @@ import type {
 import { DefaultMetaCampaignProvider } from '../../lib/providers/default-meta-campaign.provider.js';
 import { DefaultCampaignRepository } from '../../lib/providers/default-campaign.repository.js';
 import { captureServerEvent } from '../../lib/analytics.js';
+import { ChatMetaLockRepository } from '../../repository/chat-meta-lock.repository.js';
+
+// Serialize chatbot writes within this process. Meta does not expose an atomic
+// conditional write here; external clients and other replicas can still race.
+const chatCampaignLocks = new Map<string, Promise<void>>();
+async function withChatCampaignLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = chatCampaignLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const current = previous.then(() => gate);
+  chatCampaignLocks.set(key, current);
+  await previous;
+  try { return await fn(); }
+  finally { release(); if (chatCampaignLocks.get(key) === current) chatCampaignLocks.delete(key); }
+}
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -346,6 +361,7 @@ export class CampaignsService {
       upsertCampaignSnapshot?: (tenantId: string, values: CampaignSnapshotUpsert) => Promise<unknown>;
       updateCampaignSnapshot?: (tenantId: string, metaCampaignId: string, values: Partial<CampaignSnapshotUpsert>) => Promise<void>;
       enqueueMetaSync?: (args: { tenantId: string; reason: string }) => Promise<void>;
+      withChatMetaLock?: <T>(tenantId: string, resourceId: string, operation: () => Promise<T>) => Promise<T>;
     }
   ) {}
 
@@ -430,7 +446,7 @@ export class CampaignsService {
   async createCampaign(args: {
     tenantId: string; name: string;
     objective: 'OUTCOME_SALES' | 'OUTCOME_LEADS' | 'OUTCOME_TRAFFIC' | 'OUTCOME_AWARENESS';
-    dailyBudget: number; adAccountId: string;
+    dailyBudget: number; adAccountId: string; enforceBrl?: boolean;
   }) {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
     if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
@@ -443,9 +459,11 @@ export class CampaignsService {
     const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
 
     try {
+      if (args.enforceBrl) await this.assertBrlAccount(args.adAccountId, accessToken);
       const response = await this.meta.createCampaign(args.adAccountId, accessToken, {
         name: args.name, objective: args.objective, status: 'PAUSED',
         special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+        daily_budget: args.dailyBudget, bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
       });
 
       const campaign = await this.repo.createCampaign({
@@ -464,6 +482,20 @@ export class CampaignsService {
       });
       return campaign;
     } catch (err) { this.handleMetaError(err); }
+  }
+
+  private async assertBrlAccount(adAccountId: string, accessToken: string): Promise<void> {
+    const currency = await this.meta.getAdAccountCurrency(adAccountId, accessToken);
+    if (currency !== 'BRL') throw new AppError(400,'META_ACCOUNT_CURRENCY_UNSUPPORTED','Não foi possível confirmar uma conta Meta em reais (BRL).');
+  }
+
+  async getChatAdAccount(args: {tenantId:string;adAccountId:string}) {
+    const connection=await this.repo.findMetaConnection(args.tenantId);
+    if (!connection) throw new AppError(403,'META_CONNECTION_NOT_FOUND','Conexão Meta não encontrada.');
+    if (!((connection.adAccounts as {id:string}[] | null) ?? []).some(account=>account.id===args.adAccountId))
+      throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Conta de anúncios não pertence a este tenant.');
+    const currency=await this.meta.getAdAccountCurrency(args.adAccountId,this.deps.decryptMetaToken(connection.accessToken));
+    return {id:args.adAccountId,currency};
   }
 
   private async verifyCampaignOwnership(campaign: CampaignRecord, tenantId: string): Promise<void> {
@@ -593,11 +625,21 @@ export class CampaignsService {
     return { campaignId: args.campaignId, status: 'ACTIVE' as const };
   }
 
-  async updateCampaignBudget(args: { tenantId: string; campaignId: string; dailyBudget: number }) {
+  async updateCampaignBudget(args: { tenantId: string; campaignId: string; dailyBudget: number; enforceBrl?: boolean }) {
     const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
     const accessToken = await this.getAccessToken(args.tenantId);
 
-    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget }); }
+    try {
+      if (args.enforceBrl) {
+        const remote = await this.meta.getCampaign(campaign.metaCampaignId, accessToken, 'account_id');
+        if (typeof remote.account_id !== 'string' || !remote.account_id) throw new AppError(400,'META_ACCOUNT_CURRENCY_UNSUPPORTED','Não foi possível confirmar a moeda da conta Meta.');
+        const accountId = remote.account_id.startsWith('act_') ? remote.account_id : `act_${remote.account_id}`;
+        const connection = await this.repo.findMetaConnection(args.tenantId);
+        if (!((connection?.adAccounts as {id:string}[] | null) ?? []).some(account => account.id === accountId)) throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Ad account does not belong to this tenant');
+        await this.assertBrlAccount(accountId, accessToken);
+      }
+      await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget });
+    }
     catch (err) { this.handleMetaError(err); }
 
     const updated = await this.repo.updateCampaign(args.campaignId, {
@@ -609,6 +651,227 @@ export class CampaignsService {
 
   async getCampaign(args: { tenantId: string; campaignId: string }) {
     return this.findCampaignOrThrow(args.tenantId, args.campaignId);
+  }
+
+  async getChatCampaignAds(args: { tenantId: string; campaignId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+    try {
+      const data = await this.meta.getCampaignAds(campaign.metaCampaignId, accessToken);
+      return { data, partial_failures: [] as never[] };
+    } catch (error) {
+      captureServerEvent('chat_meta_ads_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+      console.warn('[chat] consulta de anúncios Meta indisponível');
+      if ((error as { metaCode?: number })?.metaCode === 190) {
+        throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      }
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar os anúncios.');
+    }
+  }
+
+  async getChatAdAssets(args: { tenantId: string; campaignId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const token = await this.getAccessToken(args.tenantId);
+    let ads: Array<{ id: string; name?: string }>;
+    try { ads = await this.meta.getCampaignAds(campaign.metaCampaignId, token); }
+    catch (err) {
+      captureServerEvent('chat_meta_ads_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+      if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar os anúncios.');
+    }
+    const adsets = new Set<string>(), creatives = new Set<string>();
+    let failures = 0;
+    for (let index = 0; index < ads.length; index += 5) {
+      const results = await Promise.allSettled(ads.slice(index, index + 5).map(ad => this.meta.getAd(ad.id, token)));
+      for (const result of results) {
+        if (result.status === 'rejected' && (result.reason as { metaCode?: number })?.metaCode === 190) {
+          throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+        }
+        if (result.status === 'rejected' || result.value.campaign_id !== campaign.metaCampaignId) { failures++; continue; }
+        const ad = result.value;
+        if (typeof ad.adset_id === 'string') adsets.add(ad.adset_id);
+        const creative = ad.creative as { id?: unknown } | undefined;
+        if (typeof creative?.id === 'string') creatives.add(creative.id);
+      }
+    }
+    if (failures) {
+      captureServerEvent('chat_meta_ad_assets_partial_failure', { tenantId: args.tenantId, provider: 'meta', count: failures });
+      console.warn('[chat] consulta parcial de ativos Meta', { count: failures });
+    }
+    return { data: { adsets: [...adsets].map(id => ({ id })), creatives: [...creatives].map(id => ({ id })) },
+      partial_failures: failures ? [{ provider: 'meta', reason: 'Alguns ativos não puderam ser consultados.', count: failures }] : [] };
+  }
+
+  async getChatAvailableAdAssets(args: { tenantId: string; campaignId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const token = await this.getAccessToken(args.tenantId);
+    let remote: Record<string, unknown>;
+    try { remote = await this.meta.getCampaign(campaign.metaCampaignId, token, 'id,account_id'); }
+    catch (err) {
+      if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar a campanha.');
+    }
+    const account = typeof remote.account_id === 'string' ? remote.account_id.replace(/^act_/, '') : '';
+    if (remote.id !== campaign.metaCampaignId || !/^\d+$/.test(account)) throw new AppError(403, 'FORBIDDEN', 'Conta de anúncios indisponível para esta campanha.');
+    const [sets, creatives] = await Promise.allSettled([
+      this.meta.listChatAdSets(campaign.metaCampaignId, token),
+      this.meta.listChatAdCreatives(`act_${account}`, token),
+    ]);
+    const failures = [sets, creatives].filter(result => result.status === 'rejected');
+    if (failures.some(result => result.status === 'rejected' && (result.reason as { metaCode?: number })?.metaCode === 190)) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+    }
+    if (failures.length) {
+      captureServerEvent('chat_meta_available_assets_partial_failure', { tenantId: args.tenantId, provider: 'meta', count: failures.length });
+      console.warn('[chat] consulta parcial de ativos disponíveis Meta', { count: failures.length });
+    }
+    if (failures.length === 2) throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar os ativos.');
+    return { data: { adsets: sets.status === 'fulfilled' ? sets.value : [], creatives: creatives.status === 'fulfilled' ? creatives.value : [] },
+      partial_failures: failures.map(() => ({ provider: 'meta', reason: 'Alguns ativos não puderam ser consultados.' })) };
+  }
+
+  async getChatCampaignSnapshot(args: { tenantId: string; campaignId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const token = await this.getAccessToken(args.tenantId);
+    let remote: Record<string, unknown>;
+    try { remote = await this.meta.getCampaign(campaign.metaCampaignId, token, 'id,name,status,daily_budget,lifetime_budget,updated_time,account_id'); }
+    catch (err) {
+      captureServerEvent('chat_meta_campaign_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+      if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar a campanha.');
+    }
+    let currency: string | null = null;
+    if (typeof remote.account_id === 'string' && remote.account_id) {
+      try { currency = await this.meta.getAdAccountCurrency(remote.account_id.startsWith('act_') ? remote.account_id : `act_${remote.account_id}`, token); }
+      catch { /* Ações sem orçamento continuam disponíveis. */ }
+    }
+    const data = { id: campaign.id, metaId: campaign.metaCampaignId, name: remote.name ?? null, currency,
+      status: remote.status ?? null, dailyBudget: remote.daily_budget ?? null,
+      lifetimeBudget: remote.lifetime_budget ?? null, updatedTime: remote.updated_time ?? null };
+    const version = createHash('sha256').update(JSON.stringify(data)).digest('hex');
+    return { ...data, version };
+  }
+
+  async updateChatCampaign(args: { tenantId: string; campaignId: string; version: string; action: 'pause' | 'rename' | 'budget'; name?: string; dailyBudget?: number }) {
+    const lock = this.deps.withChatMetaLock ?? ((tenantId: string, id: string, operation: () => Promise<any>) => withChatCampaignLock(`${tenantId}:${id}`, operation));
+    return lock(args.tenantId, args.campaignId, async () => {
+      const current = await this.getChatCampaignSnapshot(args);
+      if (current.version !== args.version) throw new AppError(409, 'CAMPAIGN_CHANGED', 'A campanha mudou. Consulte novamente antes de confirmar.');
+      if (args.action === 'pause') return this.pauseCampaign(args);
+      if (args.action === 'rename' && args.name) return this.updateCampaign({ ...args, name: args.name });
+      if (args.action === 'budget' && args.dailyBudget !== undefined) return this.updateCampaignBudget({ ...args, dailyBudget: args.dailyBudget, enforceBrl:true });
+      throw new AppError(400, 'INVALID_ACTION', 'Ação de campanha inválida.');
+    });
+  }
+
+  async getChatAdSnapshot(args: { tenantId: string; campaignId: string; adId: string; creativeId?: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const token = await this.getAccessToken(args.tenantId);
+    let remote: Record<string, unknown>;
+    try { remote = await this.meta.getAd(args.adId, token); }
+    catch (err) {
+      captureServerEvent('chat_meta_ad_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+      if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar o anúncio.');
+    }
+    if (remote.campaign_id !== campaign.metaCampaignId || remote.id !== args.adId) {
+      throw new AppError(403, 'FORBIDDEN', 'Anúncio não pertence à campanha selecionada.');
+    }
+    let targetCreative: Record<string, unknown> | null = null;
+    if (args.creativeId) {
+      try { targetCreative = await this.meta.getAdCreative(args.creativeId, token); }
+      catch (err) {
+        captureServerEvent('chat_meta_creative_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+        if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+        throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar o criativo.');
+      }
+      const account = typeof remote.account_id === 'string' ? remote.account_id.replace(/^act_/, '') : '';
+      const creativeAccount = typeof targetCreative.account_id === 'string' ? targetCreative.account_id.replace(/^act_/, '') : '';
+      if (!account || account !== creativeAccount || targetCreative.id !== args.creativeId) {
+        throw new AppError(403, 'FORBIDDEN', 'Criativo não pertence à conta do anúncio.');
+      }
+    }
+    const creative = remote.creative as { id?: unknown } | null | undefined;
+    const data = { id: args.adId, campaignId: campaign.id, name: remote.name ?? null,
+      status: remote.status ?? null, accountId: remote.account_id ?? null, adsetId: remote.adset_id ?? null,
+      creativeId: creative?.id ?? null, updatedTime: remote.updated_time ?? null,
+      targetCreativeId: targetCreative?.id ?? null, targetCreativeName: targetCreative?.name ?? null };
+    const version = createHash('sha256').update(JSON.stringify(data)).digest('hex');
+    return { ...data, version };
+  }
+
+  async updateChatAd(args: { tenantId: string; campaignId: string; adId: string; version: string; action: 'pause' | 'rename' | 'duplicate' | 'creative'; name?: string; creativeId?: string }) {
+    const lock = this.deps.withChatMetaLock ?? ((tenantId: string, id: string, operation: () => Promise<any>) => withChatCampaignLock(`${tenantId}:${id}`, operation));
+    return lock(args.tenantId, args.campaignId, async () => {
+      const current = await this.getChatAdSnapshot(args);
+      if (current.version !== args.version) throw new AppError(409, 'AD_CHANGED', 'O anúncio mudou. Consulte novamente antes de confirmar.');
+      const token = await this.getAccessToken(args.tenantId);
+      try {
+        if (args.action === 'pause') { await this.meta.updateAd(args.adId, token, { status: 'PAUSED' }); return { id: args.adId, status: 'PAUSED' }; }
+        if (args.action === 'rename' && args.name) { await this.meta.updateAd(args.adId, token, { name: args.name }); return { id: args.adId, name: args.name }; }
+        if (args.action === 'creative' && args.creativeId && current.targetCreativeId === args.creativeId) {
+          await this.meta.updateAd(args.adId, token, { creative: { creative_id: args.creativeId } });
+          return { id: args.adId, creativeId: args.creativeId };
+        }
+        if (args.action === 'duplicate' && args.name && typeof current.accountId === 'string' && typeof current.adsetId === 'string' && typeof current.creativeId === 'string') {
+          const account = `act_${current.accountId.replace(/^act_/, '')}`;
+          const created = await this.meta.createAd(account, token, { name: args.name, adset_id: current.adsetId, creative: { creative_id: current.creativeId }, status: 'PAUSED' });
+          return { id: created.id, status: 'PAUSED' };
+        }
+        throw new AppError(400, 'INVALID_ACTION', 'Dados insuficientes para a ação do anúncio.');
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        captureServerEvent('chat_meta_ad_update_failed', { tenantId: args.tenantId, provider: 'meta' });
+        if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+        throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível confirmar a alteração do anúncio.');
+      }
+    });
+  }
+
+  async getChatAdCreationSnapshot(args: { tenantId: string; campaignId: string; adsetId: string; creativeId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const token = await this.getAccessToken(args.tenantId);
+    let remoteCampaign: Record<string, unknown>, adset: Record<string, unknown>, creative: Record<string, unknown>;
+    try {
+      [remoteCampaign, adset, creative] = await Promise.all([
+        this.meta.getCampaign(campaign.metaCampaignId, token, 'id,account_id,name,status'),
+        this.meta.getAdSet(args.adsetId, token), this.meta.getAdCreative(args.creativeId, token),
+      ]);
+    } catch (err) {
+      captureServerEvent('chat_meta_ad_assets_lookup_failed', { tenantId: args.tenantId, provider: 'meta' });
+      if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+      throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível consultar os ativos do anúncio.');
+    }
+    const normalize = (value: unknown) => typeof value === 'string' ? value.replace(/^act_/, '') : '';
+    const accountId = normalize(remoteCampaign.account_id);
+    if (!accountId || remoteCampaign.id !== campaign.metaCampaignId || adset.id !== args.adsetId ||
+      creative.id !== args.creativeId || adset.campaign_id !== campaign.metaCampaignId ||
+      normalize(adset.account_id) !== accountId || normalize(creative.account_id) !== accountId) {
+      throw new AppError(403, 'FORBIDDEN', 'Os ativos não pertencem à campanha selecionada.');
+    }
+    const data = { campaignId: campaign.id, accountId, campaignName: remoteCampaign.name ?? null,
+      campaignStatus: remoteCampaign.status ?? null, adsetId: args.adsetId, adsetName: adset.name ?? null,
+      adsetStatus: adset.status ?? null, creativeId: args.creativeId, creativeName: creative.name ?? null };
+    return { ...data, version: createHash('sha256').update(JSON.stringify(data)).digest('hex') };
+  }
+
+  async createChatAd(args: { tenantId: string; campaignId: string; adsetId: string; creativeId: string; version: string; name: string }) {
+    const lock = this.deps.withChatMetaLock ?? ((tenantId: string, id: string, operation: () => Promise<any>) => withChatCampaignLock(`${tenantId}:${id}`, operation));
+    return lock(args.tenantId, args.campaignId, async () => {
+      const current = await this.getChatAdCreationSnapshot(args);
+      if (current.version !== args.version) throw new AppError(409, 'AD_ASSETS_CHANGED', 'Os ativos mudaram. Consulte novamente antes de confirmar.');
+      const token = await this.getAccessToken(args.tenantId);
+      try {
+        const created = await this.meta.createAd(`act_${current.accountId}`, token, {
+          name: args.name, adset_id: args.adsetId, creative: { creative_id: args.creativeId }, status: 'PAUSED',
+        });
+        return { id: created.id, status: 'PAUSED' };
+      } catch (err) {
+        captureServerEvent('chat_meta_ad_create_failed', { tenantId: args.tenantId, provider: 'meta' });
+        if ((err as { metaCode?: number })?.metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão Meta expirada. Reconecte sua conta.');
+        throw new AppError(503, 'META_UNAVAILABLE', 'Não foi possível confirmar a criação do anúncio.');
+      }
+    });
   }
 
   async getCampaignPanelDetail(args: { tenantId: string; campaignId: string }): Promise<{
@@ -1706,6 +1969,7 @@ const defaultService = new CampaignsService(
       const { enqueueMetaSyncTenantRun } = await import('../../workers/meta-sync.worker.js');
       return enqueueMetaSyncTenantRun(args);
     },
+    withChatMetaLock: (tenantId, resourceId, operation) => new ChatMetaLockRepository(tenantId).withLock(resourceId, operation),
   }
 );
 

@@ -20,6 +20,39 @@ import {
 import type { IMetaCampaignProvider } from './meta-campaign.provider.js';
 
 export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
+  async getAdAccountCurrency(adAccountId: string, accessToken: string): Promise<string | null> {
+    const account = await metaApiCall<{currency?: unknown}>(`/${encodeURIComponent(adAccountId)}?fields=currency`,accessToken);
+    return typeof account.currency === 'string' ? account.currency : null;
+  }
+  private async listChatAssets(path: string, token: string): Promise<Array<{ id: string; name?: string }>> {
+    const result: Array<{ id: string; name?: string }> = [];
+    const seen = new Set<string>();
+    let after: string | undefined;
+    for (let page = 0; page < 100; page++) {
+      const response: { data?: Array<{ id: string; name?: string }>; paging?: { next?: string; cursors?: { after?: string } } } = await metaApiCall(`${path}?fields=id,name&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`, token);
+      result.push(...(response.data ?? []));
+      if (!response.paging?.next) return result;
+      const cursor = response.paging.cursors?.after;
+      if (!cursor || seen.has(cursor)) throw new Error('Meta pagination failed');
+      seen.add(cursor); after = cursor;
+    }
+    throw new Error('Meta pagination limit exceeded');
+  }
+  async listChatAdSets(id: string, token: string) { return this.listChatAssets(`/${encodeURIComponent(id)}/adsets`, token); }
+  async listChatAdCreatives(id: string, token: string) { return this.listChatAssets(`/${encodeURIComponent(id)}/adcreatives`, token); }
+  async getAdSet(adsetId: string, token: string): Promise<Record<string, unknown>> {
+    return metaApiCall(`/${encodeURIComponent(adsetId)}?fields=id,campaign_id,account_id,name,status`, token);
+  }
+  async getAdCreative(creativeId: string, token: string): Promise<Record<string, unknown>> {
+    return metaApiCall(`/${encodeURIComponent(creativeId)}?fields=id,account_id,name`, token);
+  }
+  async getAd(adId: string, accessToken: string): Promise<Record<string, unknown>> {
+    return metaApiCall(`/${encodeURIComponent(adId)}?fields=id,name,status,campaign_id,account_id,adset_id,creative{id},updated_time`, accessToken);
+  }
+
+  async updateAd(adId: string, accessToken: string, body: Record<string, unknown>): Promise<void> {
+    await metaApiCall(`/${encodeURIComponent(adId)}`, accessToken, { method: 'POST', body });
+  }
   async getPageAccessToken(pageId: string, userAccessToken: string): Promise<MetaPageAccess | null> {
     return metaGetPageAccessToken(userAccessToken, pageId);
   }

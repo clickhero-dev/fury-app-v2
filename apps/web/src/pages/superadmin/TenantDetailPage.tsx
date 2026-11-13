@@ -44,6 +44,7 @@ import { UserCard } from "./tenant-detail/UserCard";
 import { UserPager } from "./tenant-detail/UserPager";
 import { CreateUserModal } from "./tenant-detail/CreateUserModal";
 import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
+import { formatPlanPrice, intervalLabel, statusLabel } from "./subscriptionLabels";
 
 type Tab =
   "users" | "subscription" | "config" | "metas" | "publico" | "brandkit";
@@ -534,7 +535,6 @@ export function TenantDetailPage() {
     try {
       await api.patch(`/admin/users/${editUser.id}`, {
         name: editUser.name,
-        role: editUser.role,
       });
       setMsg("Usuário atualizado");
       setEditUser(null);
@@ -692,7 +692,6 @@ export function TenantDetailPage() {
         onClose={closeCreate}
         saving={saving}
         error={createError}
-        isSuperAdmin={isSuperAdmin}
       />
 
       {/* ── Edit User Modal ────────────────────────────── */}
@@ -738,22 +737,6 @@ export function TenantDetailPage() {
                   className={`${inputCls} opacity-60`}
                 />
               </div>
-              {isSuperAdmin && (
-                <div>
-                  <label className={labelCls}>Cargo</label>
-                  <select
-                    value={editUser.role}
-                    onChange={(e) =>
-                      setEditUser({ ...editUser, role: e.target.value })
-                    }
-                    className={inputCls}
-                  >
-                    <option value="member">Usuário</option>
-                    <option value="admin">Administrador</option>
-                    <option value="owner">Usuário Titular</option>
-                  </select>
-                </div>
-              )}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditUser(null)}
@@ -907,7 +890,7 @@ export function TenantDetailPage() {
                 <option value="">Selecione um plano</option>
                 {plans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} - R$ {(p.priceCents / 100).toFixed(2)}/{p.interval}
+                    {p.name} - R$ {formatPlanPrice(p.priceCents)}/{intervalLabel(p.interval)}
                   </option>
                 ))}
               </select>
@@ -922,13 +905,13 @@ export function TenantDetailPage() {
                 }
                 className={inputCls}
               >
-                <option value="trial">trial</option>
-                <option value="active">active</option>
-                <option value="inactive">inactive</option>
+                {["trial", "active", "inactive"].map((s) => (
+                  <option key={s} value={s}>{statusLabel(s)}</option>
+                ))}
               </select>
             </div>
             <div>
-              <FieldLabel icon={Hourglass} htmlFor="sub-trial">Fim do Trial</FieldLabel>
+              <FieldLabel icon={Hourglass} htmlFor="sub-trial">Fim do período de teste</FieldLabel>
               <input
                 id="sub-trial"
                 type="datetime-local"
@@ -1072,7 +1055,7 @@ export function TenantDetailPage() {
         <FormSection
           icon={Flag}
           title="Objetivo do Cliente"
-          description="Objetivos e orçamento que a IA usa para otimizar campanhas."
+          description="Objetivos e orçamento que a ady usa para otimizar campanhas."
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -1169,7 +1152,7 @@ export function TenantDetailPage() {
                 id="audience-context"
                 value={businessContext}
                 onChange={(e) => setBusinessContext(e.target.value)}
-                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do ady ao gerar criativos."
+                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela ady ao gerar criativos."
                 rows={4}
                 className={`${inputCls} resize-y min-h-[100px]`}
               />

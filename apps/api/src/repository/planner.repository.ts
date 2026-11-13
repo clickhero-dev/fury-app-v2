@@ -26,6 +26,21 @@ export class PlannerRepository extends TenantScopedRepository {
     super(tenantId, db);
   }
 
+  async getChatPostSnapshot(postId: string): Promise<{ id: string; version: string; caption: string | null; scheduledAt: string | null; status: string; platform: string } | null> {
+    const rows = await this.db.execute(sql`SELECT id, xmin::text AS version, caption,
+      scheduled_at AS "scheduledAt", status, platform FROM social_posts
+      WHERE id = ${postId}::uuid AND tenant_id = ${this.tenantId}::uuid`);
+    return (rows[0] as any) ?? null;
+  }
+
+  async cancelScheduledPostIfVersion(postId: string, version: string): Promise<{ id: string } | null> {
+    const rows = await this.db.execute(sql`UPDATE social_posts SET scheduled_at = NULL, status = 'draft', updated_at = now()
+      WHERE id = ${postId}::uuid AND tenant_id = ${this.tenantId}::uuid
+        AND xmin::text = ${version} AND platform = 'instagram' AND status = 'approved' AND scheduled_at IS NOT NULL
+      RETURNING id`);
+    return (rows[0] as { id: string } | undefined) ?? null;
+  }
+
   // ── Conexão Meta (variantes do planner) ─────────────────────────────
 
   /** Conexão Meta ativa (token não expirado) — usada em getPrerequisites. */

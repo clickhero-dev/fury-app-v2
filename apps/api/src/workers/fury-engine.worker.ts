@@ -5,6 +5,7 @@ import { db, campaigns, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, FURY_ENGINE_QUEUE_NAME, type FuryEngineJobPayload } from '../lib/queue.js';
 import { calculateScore, getGrade, evaluateRules, computeAndSaveScore, type CampaignMetrics } from '../services/llms/fury-engine.service.js';
+import { planSkipsTenant } from '../lib/plan-skip.js';
 
 interface FuryJobResult {
   tenantsProcessed: number;
@@ -54,6 +55,8 @@ async function processJob(job: Job<FuryEngineJobPayload>): Promise<FuryJobResult
   // cliente excluído (soft-delete) fica de fora
   const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
   for (const tenant of allTenants) {
+    // plano sem campanhas: não pontua
+    if (await planSkipsTenant(tenant.id, ['campaigns'], 'fury-engine')) continue;
     await processTenant(tenant.id, stats);
   }
 

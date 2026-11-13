@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt.js';
 import { AppError } from './errorHandler.js';
+import { getDelegatedUser } from './chat-delegation.middleware.js';
 
 function tryParseMockQuickstartToken(rawToken: string): AccessTokenPayload | null {
   const token = rawToken.trim();
@@ -56,6 +57,8 @@ function verifyTokenAndSetUser(token: string, req: Request): boolean {
 
 // Usuários de todos os tokens válidos (header e ?token=), sem lançar erro — usado pelo RBAC global
 export function peekUsersFromRequest(req: Request): NonNullable<Request['user']>[] {
+  const delegated = getDelegatedUser(req);
+  if (delegated) return [delegated];
   const authHeader = req.headers.authorization;
   // substring(7) sem checar "Bearer " espelha o authSSEMiddleware (cobre também o authMiddleware)
   const headerToken = authHeader ? authHeader.substring(7).trim() : '';
@@ -76,6 +79,8 @@ export function peekUsersFromRequest(req: Request): NonNullable<Request['user']>
 }
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const delegated = getDelegatedUser(req);
+  if (delegated) { req.user = delegated; return next(); }
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -93,6 +98,8 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
 }
 
 export function authSSEMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const delegated = getDelegatedUser(req);
+  if (delegated) { req.user = delegated; return next(); }
   const token = (req.query.token as string) || req.headers.authorization?.substring(7).trim();
 
   if (!token) {

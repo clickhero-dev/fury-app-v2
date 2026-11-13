@@ -21,6 +21,10 @@ interface Props {
   /** Vídeo: ajuste gera um job novo; a tela de progresso acompanha. */
   onTrackVideo?: (jobId: string) => void;
   showVariationSuggestion?: boolean;
+  /** Plano sem o gerador: some regenerar e variações */
+  canRegenerate?: boolean;
+  /** Plano sem criar campanha: some o publicar */
+  canPublish?: boolean;
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
@@ -46,7 +50,7 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo, showVariationSuggestion = false }: Props) {
+export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo, showVariationSuggestion = false, canRegenerate = true, canPublish = true }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
   const [showVariationPrompt, setShowVariationPrompt] = useState(showVariationSuggestion);
@@ -562,7 +566,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
           )}
 
           <div className="flex flex-col gap-2 pt-1">
-            {!isLegacy && !showRegenerateForm && !isArchived && (!isVideo || videoMeta) && (
+            {canRegenerate && !isLegacy && !showRegenerateForm && !isArchived && (!isVideo || videoMeta) && (
               <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending || modificationsExhausted} className="w-full flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 shrink-0" />
                 {isVideo ? 'Ajustar vídeo' : 'Regenerar com ajuste'}
@@ -585,7 +589,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
               </Button>
             )}
             {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
-            {isVideo && !onPublish ? (
+            {!canPublish ? null : isVideo && !onPublish ? (
               <Button size="sm" variant="outline" disabled className="w-full border-dashed">
                 Publicar no Meta · em breve
               </Button>
@@ -613,7 +617,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
         </div>
       </div>
 
-      {showVariationPrompt && !isLegacy && (
+      {showVariationPrompt && canRegenerate && !isLegacy && (
         <section className="rounded-2xl border border-[#F5C9AF] bg-[#FFF7F2] p-5" aria-live="polite">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

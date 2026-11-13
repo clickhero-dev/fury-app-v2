@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Lock, Mail, User, UserPlus, Shield, X } from "lucide-react";
+import { Lock, Mail, User, UserPlus, X } from "lucide-react";
 import { FieldLabel } from "./FormSection";
 
 export interface NewUser {
@@ -17,14 +17,13 @@ interface CreateUserModalProps {
   onClose: () => void;
   saving: boolean;
   error: string;
-  isSuperAdmin: boolean;
 }
 
 const inputCls =
   "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
 
-// Modal de criação de usuário do cliente
-export function CreateUserModal({ open, value, onChange, onSubmit, onClose, saving, error, isSuperAdmin }: CreateUserModalProps) {
+// Modal de criação de usuário do cliente; sempre cargo Usuário
+export function CreateUserModal({ open, value, onChange, onSubmit, onClose, saving, error }: CreateUserModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -65,17 +64,6 @@ export function CreateUserModal({ open, value, onChange, onSubmit, onClose, savi
             <FieldLabel icon={Lock} htmlFor="new-user-password">Senha</FieldLabel>
             <input id="new-user-password" type="password" value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} placeholder="Senha" autoComplete="new-password" className={inputCls} />
           </div>
-          {/* parceiro só cria usuário comum */}
-          {isSuperAdmin && (
-            <div>
-              <FieldLabel icon={Shield} htmlFor="new-user-role">Cargo</FieldLabel>
-              <select id="new-user-role" value={value.role} onChange={(e) => onChange({ ...value, role: e.target.value })} className={inputCls}>
-                <option value="member">Usuário</option>
-                <option value="admin">Administrador</option>
-                <option value="owner">Usuário Titular</option>
-              </select>
-            </div>
-          )}
           {error && (
             <div role="alert" className="text-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2.5">{error}</div>
           )}
