@@ -1,5 +1,7 @@
 # QA — Foto do estúdio estranha (1dfch0ammb3)
 
+> Atualização de 13/11: este relatório descreve a avaliação da PR #424 naquele momento. Posteriormente, a PR #431 registrou uma execução controlada com a foto e o contexto originais e chamadas reais ao OpenRouter, com repositório e cota simulados: `google/gemini-3.8-flash` no aprimoramento, `black-forest-labs/flux.2-klein-4b` na geração e `google/gemini-3.1-flash-image` no texto. A revisão automática registrou `verified`, frase `Terapeuta de Dianética` e `corrected=false`. Assim, a afirmação abaixo sobre ausência de geração refere-se somente à avaliação de 11/11, não às execuções posteriores. Essa execução não é o request original e não comprova identidade, legibilidade ou isolamento real de tenant e storage. A continuação #434 permanece em rascunho; o plano e as pendências estão em `docs/specs/n1-foto-estudio-continuacao.md`.
+
 PR #424, base hmg. Avaliação em 11/11/2026: **não aprovada**.
 
 O Playwright da Criação Rápida passou localmente (1 teste), com respostas simuladas: confirma o envio dos tipos e IDs das fotos selecionadas, não a geração real. Os seletores das fotos foram limitados ao diálogo, pois o painel e o diálogo podem apresentar botões com o mesmo nome. A execução exibiu erros de consultas não simuladas e de carregamento da imagem simulada; a asserção passou, mas o teste não valida essas integrações. Na validação anterior do mesmo commit, os testes focados do serviço, controller e OpenRouter passaram (58 testes).
