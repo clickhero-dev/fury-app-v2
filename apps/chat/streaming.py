@@ -108,3 +108,20 @@ def safe_video_job(job, now=None):
         except ValueError:
             pass
     return result
+
+
+class ProviderRunError(Exception):
+    def __init__(self, kind):
+        super().__init__('Model provider request failed')
+        self.kind = kind
+
+
+async def checked_agent_events(events, state=None):
+    """Agno reports failures as events; never treat their contents as output."""
+    async for event in events:
+        if getattr(event, 'event', None) == 'RunError':
+            if state and state.get('error_kind') == 'budget':
+                from model_request_budget import ModelRequestBudgetExceeded
+                raise ModelRequestBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
+            raise ProviderRunError(state.get('error_kind', 'error') if state else 'error')
+        yield event

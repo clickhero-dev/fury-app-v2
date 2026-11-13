@@ -18,7 +18,8 @@ from memory import ContextBudgetExceeded, conversation_context, consolidate, com
 from model_request_budget import create_budgeted_http_client as create_model_http_client, is_model_request_budget_error
 from tools import AdyTools, ImageProposal
 from tool_budget import budget_tool_result
-from streaming import start_stream, recoverable_job_id, resume_approved_video, safe_video_job
+from streaming import start_stream, recoverable_job_id, resume_approved_video, safe_video_job, checked_agent_events
+from model_request_budget import provider_retry_scope, mark_provider_output
 from telemetry import classify_provider_error, report_provider_failure
 from runs import FencedDB, RunExpired
 from conversation_repository import ConversationRepository
@@ -343,19 +344,24 @@ def create_app():
                     context, history = await read_context()
                     if requires_compression(await context_size()):
                         raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
-                agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, http_client=app.state.model_http), tools=tool_list, tool_hooks=[budget_tool_result], tool_call_limit=12, instructions=instructions())
+                async def guarded_tool(function, args):
+                    mark_provider_output()
+                    return await budget_tool_result(function, args)
+                agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), tools=tool_list, tool_hooks=[guarded_tool], tool_call_limit=12, instructions=instructions())
                 chunks = []
                 model_chunks = []
                 if evidence.notice:
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
                 provider_active = True
-                async for event in agent.arun(conversation_context(agent_history()), stream=True):
-                    content = getattr(event, 'content', None)
-                    if isinstance(content, str) and content:
-                        model_chunks.append(content)
-                        chunks.append(content)
-                        await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
+                with provider_retry_scope() as provider_state:
+                    async for event in checked_agent_events(agent.arun(conversation_context(agent_history()), stream=True), provider_state):
+                        content = getattr(event, 'content', None)
+                        if isinstance(content, str) and content:
+                            mark_provider_output()
+                            model_chunks.append(content)
+                            chunks.append(content)
+                            await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
                 if not ''.join(model_chunks).strip():
                     raise ValueError('Resposta vazia')
                 provider_active = False
