@@ -1,9 +1,12 @@
-import { db as defaultDb, type Database, users, tenants, adyRbacServicesBlocked, adyRbacViewsBlocked, adyRbacAuditLog } from '@fury/db';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { db as defaultDb, type Database, users, tenants, subscriptions, adyRbacServicesBlocked, adyRbacViewsBlocked, adyRbacPlanViewsBlocked, adyRbacAuditLog } from '@fury/db';
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 
 export interface RbacUserContext {
   platformRole: string;
   partnerId: string | null;
+  // cliente e cargo: base do bloqueio por plano
+  tenantId?: string;
+  role?: string;
 }
 
 export interface SetViewBlockedInput {
@@ -23,6 +26,8 @@ export class RbacRepository {
     const [row] = await this.db
       .select({
         platformRole: users.platformRole,
+        tenantId: users.tenantId,
+        role: users.role,
         userPartnerId: users.partnerId,
         tenantPartnerId: tenants.partnerId,
       })
@@ -31,7 +36,28 @@ export class RbacRepository {
       .where(and(eq(users.id, userId), isNull(users.deletedAt), isNull(tenants.deletedAt)))
       .limit(1);
     if (!row) return null;
-    return { platformRole: row.platformRole, partnerId: row.userPartnerId ?? row.tenantPartnerId ?? null };
+    return {
+      platformRole: row.platformRole,
+      partnerId: row.userPartnerId ?? row.tenantPartnerId ?? null,
+      tenantId: row.tenantId,
+      role: row.role,
+    };
+  }
+
+  // telas que o plano da assinatura mais recente do cliente tira (crua, sem herança)
+  async listPlanBlockedViewKeys(tenantId: string): Promise<string[]> {
+    const [sub] = await this.db
+      .select({ planId: subscriptions.planId })
+      .from(subscriptions)
+      .where(eq(subscriptions.tenantId, tenantId))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    if (!sub?.planId) return [];
+    const rows = await this.db
+      .select({ key: adyRbacPlanViewsBlocked.viewKey })
+      .from(adyRbacPlanViewsBlocked)
+      .where(eq(adyRbacPlanViewsBlocked.planId, sub.planId));
+    return rows.map((r) => r.key);
   }
 
   async listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]> {

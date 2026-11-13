@@ -227,9 +227,9 @@ describe('RBAC de serviços — integração', () => {
   describe('RbacRepository (SQL real)', () => {
     it('findUserContext: partner do tenant e do usuário', async () => {
       await setUser('user_partner', { tenantPartner: partnerA });
-      expect(await repo.findUserContext(userId)).toEqual({ platformRole: 'user_partner', partnerId: partnerA });
+      expect(await repo.findUserContext(userId)).toMatchObject({ platformRole: 'user_partner', partnerId: partnerA });
       await setUser('admin_partner', { userPartner: partnerB });
-      expect(await repo.findUserContext(userId)).toEqual({ platformRole: 'admin_partner', partnerId: partnerB });
+      expect(await repo.findUserContext(userId)).toMatchObject({ platformRole: 'admin_partner', partnerId: partnerB, tenantId: expect.any(String), role: expect.any(String) });
       expect(await repo.findUserContext('00000000-0000-0000-0000-000000000000')).toBeNull();
     });
 

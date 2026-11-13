@@ -1,6 +1,6 @@
 import { getRedis } from '../../lib/redis.js';
 import { RBAC_ALL_KEY } from '../../lib/rbac-services.js';
-import { DISABLED_SERVICE_KEYS, RBAC_VIEWS } from '../../lib/rbac-views.js';
+import { DISABLED_SERVICE_KEYS, expandBlocked, expandPlanViews, planServicesOf } from '../../lib/rbac-views.js';
 import { RbacRepository, type RbacUserContext } from '../../repository/rbac.repository.js';
 
 const CACHE_TTL_SECONDS = 300;
@@ -21,6 +21,12 @@ interface RbacRepoLike {
   findUserContext(userId: string): Promise<RbacUserContext | null>;
   listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
   listBlockedViewKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
+  listPlanBlockedViewKeys?(tenantId: string): Promise<string[]>;
+}
+
+// isentos do plano: equipe ady, super_admin e conta do parceiro
+function exemptFromPlan(ctx: RbacUserContext): boolean {
+  return ctx.role === 'admin' || ctx.platformRole === SUPER_ADMIN_ROLE || ctx.platformRole === PARTNER_ADMIN_ROLE;
 }
 
 export class RbacService {
@@ -76,6 +82,24 @@ export class RbacService {
     return this.cached(v && `rbac:v${v}:ctx:${userId}`, () => this.repo.findUserContext(userId));
   }
 
+  // telas tiradas pelo plano do cliente, já com herança
+  private async planViews(v: string | null, tenantId: string): Promise<string[]> {
+    const load = this.repo.listPlanBlockedViewKeys;
+    if (!load) return [];
+    const raw = await this.cached(v && `rbac:v${v}:plan:${tenantId}`, () => load.call(this.repo, tenantId));
+    return raw.length ? expandPlanViews(raw) : [];
+  }
+
+  private userPlanViews(v: string | null, ctx: RbacUserContext): Promise<string[]> {
+    if (!ctx.tenantId || exemptFromPlan(ctx)) return Promise.resolve([]);
+    return this.planViews(v, ctx.tenantId);
+  }
+
+  // workers: o plano do cliente tira esta funcionalidade?
+  async tenantBlocks(tenantId: string, viewKey: string): Promise<boolean> {
+    return (await this.planViews(await this.version(), tenantId)).includes(viewKey);
+  }
+
   // platform_role do banco (não do JWT); null = usuário inexistente
   async getPlatformRole(userId: string): Promise<string | null> {
     const ctx = await this.context(await this.version(), userId);
@@ -103,7 +127,9 @@ export class RbacService {
       () => this.repo.listBlockedServiceKeys(ctx.platformRole, ctx.partnerId),
     );
     if (blocked.includes(RBAC_ALL_KEY)) return 'blocked';
-    return serviceKeys.some((k) => blocked.includes(k)) ? 'blocked' : 'allowed';
+    if (serviceKeys.some((k) => blocked.includes(k))) return 'blocked';
+    const planServices = planServicesOf(await this.userPlanViews(v, ctx));
+    return serviceKeys.some((k) => planServices.includes(k)) ? 'blocked' : 'allowed';
   }
 
   // Telas bloqueadas já expandidas ('all' e herança pai → filho); null = usuário inexistente
@@ -117,10 +143,8 @@ export class RbacService {
       v && `rbac:v${v}:view:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
       () => this.repo.listBlockedViewKeys(ctx.platformRole, ctx.partnerId),
     );
-    const all = raw.includes(RBAC_ALL_KEY);
-    return RBAC_VIEWS.map((e) => e.key).filter(
-      (key) => all || raw.some((r) => key === r || key.startsWith(r + '.')),
-    );
+    const plan = await this.userPlanViews(v, ctx);
+    return expandBlocked([...raw, ...plan], RBAC_ALL_KEY);
   }
 }
 

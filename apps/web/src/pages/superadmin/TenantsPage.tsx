@@ -6,6 +6,7 @@ import { getStoredPlatformRole } from "@/lib/platform-role";
 import { apiMessage } from "./PartnersPage";
 import { Button } from "@/components/ui/button";
 import { ListPagination, usePagination } from "./ListPagination";
+import { statusLabel } from "./subscriptionLabels";
 
 interface DeletedTenant {
   id: string;
@@ -218,7 +219,7 @@ export function TenantsPage() {
                       ? "bg-warning/15 text-[#B55F02] dark:text-[#CF6F03]"
                       : "bg-surface-secondary text-text-tertiary"
               }`}>
-                {tenant.subscription?.status ?? "inactive"}
+                {statusLabel(tenant.subscription?.status ?? "inactive")}
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); setDeleteTarget(tenant); }}

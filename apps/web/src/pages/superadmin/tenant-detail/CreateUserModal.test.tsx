@@ -6,7 +6,7 @@ import { CreateUserModal, type NewUser } from './CreateUserModal';
 
 const blank: NewUser = { name: '', email: '', password: '', role: 'member' };
 
-function Harness(props: { isSuperAdmin?: boolean; error?: string; onSubmit?: () => void; onClose?: () => void; open?: boolean }) {
+function Harness(props: { error?: string; onSubmit?: () => void; onClose?: () => void; open?: boolean }) {
   const [value, setValue] = useState(blank);
   return (
     <CreateUserModal
@@ -17,7 +17,6 @@ function Harness(props: { isSuperAdmin?: boolean; error?: string; onSubmit?: () 
       onClose={props.onClose ?? vi.fn()}
       saving={false}
       error={props.error ?? ''}
-      isSuperAdmin={props.isSuperAdmin ?? false}
     />
   );
 }
@@ -28,7 +27,7 @@ describe('CreateUserModal', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('tem Nome, Email e Senha com os mesmos placeholders e sem Cargo para parceiro', () => {
+  it('tem Nome, Email e Senha e nunca mostra Cargo', () => {
     render(<Harness />);
     expect(screen.getByLabelText('Nome')).toHaveAttribute('placeholder', 'Nome');
     expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
@@ -36,10 +35,6 @@ describe('CreateUserModal', () => {
     expect(screen.queryByLabelText('Cargo')).not.toBeInTheDocument();
   });
 
-  it('superadmin escolhe o cargo', () => {
-    render(<Harness isSuperAdmin />);
-    expect(screen.getByRole('option', { name: 'Usuário Titular' })).toBeInTheDocument();
-  });
 
   it('Enter envia e Esc fecha', async () => {
     const onSubmit = vi.fn();

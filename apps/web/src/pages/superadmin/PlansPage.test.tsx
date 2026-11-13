@@ -74,6 +74,7 @@ describe('PlansPage', () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/plans', {
       name: 'Agência', priceCents: 29900, interval: 'yearly', isActive: true,
       limits: { creativesPerMonth: 10, modificationsPerCreative: null, videosPerMonth: 0, modificationsPerVideo: 0 },
+      blockedViews: [],
     }));
     expect(await screen.findByText('Plano criado')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -140,5 +141,79 @@ describe('PlansPage', () => {
     await user.selectOptions(screen.getByRole('combobox'), 'pln-pro');
     await user.click(migrate);
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/admin/plans/pln-starter?migrateTo=pln-pro'));
+  });
+});
+
+describe('PlansPage — o que o cliente vê', () => {
+  const views = [
+    { key: 'campaigns', description: 'Campanhas', group: 'ads', parent: null, locked: false },
+    { key: 'leads', description: 'Leads', group: 'ads', parent: null, locked: false },
+    { key: 'studio', description: 'Estúdio', group: 'content', parent: null, locked: false },
+    { key: 'studio.image', description: 'Gerador de imagem', group: 'content', parent: 'studio', locked: false },
+    { key: 'planner', description: 'Planejador', group: 'content', parent: null, locked: true },
+  ];
+  const withViews = (list = plans) =>
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/admin/plans/configurable-views' ? { views } : list } }));
+
+  it('card mostra o resumo do que o plano tira', async () => {
+    withViews([{ ...plans[0]!, blockedViews: ['studio', 'leads'] }, plans[1]!]);
+    render(<PlansPage />);
+    const starter = await screen.findByRole('article', { name: 'Starter' });
+    expect(within(starter).getByText('2 funcionalidades bloqueadas')).toBeInTheDocument();
+    expect(within(screen.getByRole('article', { name: 'Pro' })).getByText('Tudo liberado')).toBeInTheDocument();
+  });
+
+  it('desligar o Estúdio leva as filhas, travada fica desligada e salva só o que mudou', async () => {
+    withViews();
+    mockPatch.mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    render(<PlansPage />);
+    const card = await screen.findByRole('article', { name: 'Starter' });
+    await user.click(within(card).getByRole('button', { name: 'Editar' }));
+    const dialog = screen.getByRole('dialog');
+
+    expect(within(dialog).getByRole('group', { name: 'Anúncios' })).toBeInTheDocument();
+    const planner = within(dialog).getByRole('switch', { name: 'Planejador' });
+    expect(planner).toBeDisabled();
+    expect(planner).toHaveAttribute('aria-checked', 'false');
+    expect(within(dialog).getByText('Não disponível para o seu perfil')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('switch', { name: 'Estúdio' }));
+    const image = within(dialog).getByRole('switch', { name: 'Gerador de imagem' });
+    expect(image).toBeDisabled();
+    expect(image).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/admin/plans/pln-starter', { blockedViews: ['studio'] }));
+  });
+
+  it('sem lista do servidor a seção não aparece', async () => {
+    const user = userEvent.setup();
+    render(<PlansPage />);
+    const card = await screen.findByRole('article', { name: 'Starter' });
+    await user.click(within(card).getByRole('button', { name: 'Editar' }));
+    expect(screen.queryByText('O que o cliente vê')).not.toBeInTheDocument();
+  });
+
+  it('planejador e calendário: só avisa que combinam, sem travar', async () => {
+    const pairViews = [
+      { key: 'planner', description: 'Planejador', group: 'content', parent: null, locked: false },
+      { key: 'calendar', description: 'Calendário', group: 'content', parent: null, locked: false },
+    ];
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/admin/plans/configurable-views' ? { views: pairViews } : plans } }));
+    const user = userEvent.setup();
+    render(<PlansPage />);
+    const card = await screen.findByRole('article', { name: 'Starter' });
+    await user.click(within(card).getByRole('button', { name: 'Editar' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Combina com o Calendário/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('switch', { name: 'Planejador' }));
+    const calendar = within(dialog).getByRole('switch', { name: 'Calendário' });
+    expect(calendar).toBeEnabled();
+    expect(calendar).toHaveAttribute('aria-checked', 'true');
+    expect(within(dialog).getByText('Recomendado manter junto com Planejador.')).toBeInTheDocument();
   });
 });

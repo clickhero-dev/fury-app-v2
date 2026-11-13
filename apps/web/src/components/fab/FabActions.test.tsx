@@ -16,6 +16,8 @@ import userEvent from '@testing-library/user-event';
 import { FabActions } from './FabActions';
 
 vi.mock('@/lib/posthog', () => ({ captureEvent: vi.fn() }));
+const blocked = vi.hoisted(() => ({ keys: [] as string[] }));
+vi.mock('@/hooks/useBlockedViews', () => ({ useBlockedViews: () => ({ isBlocked: (k: string) => blocked.keys.includes(k) }) }));
 
 // Probe para ler a navegação real sob o MemoryRouter (window.location não muda).
 function LocationProbe() {
@@ -40,6 +42,15 @@ function renderFab(entry = '/dashboard') {
 describe('FabActions — ações flutuantes de criação', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blocked.keys = [];
+  });
+
+  it('esconde o atalho de funcionalidade bloqueada pelo plano', () => {
+    blocked.keys = ['campaigns.create', 'calendar'];
+    renderFab();
+    expect(screen.queryByRole('button', { name: /criar campanha/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /postar/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /criar imagem/i })).toBeInTheDocument();
   });
 
   it('não ocupa a área de escrita no chat e suas conversas', () => {

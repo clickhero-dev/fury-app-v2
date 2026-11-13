@@ -1429,6 +1429,20 @@ export const adyRbacViewsBlocked = pgTable(
   }),
 );
 
+// Funcionalidades que o plano tira do cliente (blocklist; vazio = tudo liberado)
+export const adyRbacPlanViewsBlocked = pgTable(
+  'ady_rbac_plan_views_blocked',
+  {
+    planId: uuid('plan_id').notNull().references(() => plans.id, { onDelete: 'cascade' }),
+    viewKey: varchar('view_key', { length: 100 }).notNull().references(() => adyRbacViews.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.planId, table.viewKey] }),
+  }),
+);
+
 // Histórico de alterações de RBAC e parceiros
 export const adyRbacAuditLog = pgTable(
   'ady_rbac_audit_log',
@@ -1498,5 +1512,6 @@ export const allTables = {
   adyRbacViews,
   adyRbacServicesBlocked,
   adyRbacViewsBlocked,
+  adyRbacPlanViewsBlocked,
   adyRbacAuditLog,
 };
