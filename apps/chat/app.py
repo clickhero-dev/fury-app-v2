@@ -331,6 +331,7 @@ def create_app():
                         raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
                 agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, http_client=app.state.model_http), tools=tool_list, tool_hooks=[budget_tool_result], tool_call_limit=12, instructions=instructions())
                 chunks = []
+                model_chunks = []
                 if evidence.notice:
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
@@ -338,8 +339,11 @@ def create_app():
                 async for event in agent.arun(conversation_context(agent_history()), stream=True):
                     content = getattr(event, 'content', None)
                     if isinstance(content, str) and content:
+                        model_chunks.append(content)
                         chunks.append(content)
                         await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
+                if not ''.join(model_chunks).strip():
+                    raise ValueError('Resposta vazia')
                 provider_active = False
                 row = await fenced.complete(conversation_id, ''.join(chunks))
                 title_task = None
