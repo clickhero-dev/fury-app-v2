@@ -186,16 +186,20 @@ export function AuthenticatedShell() {
   }
 
   // ── Gate da política: usuário pendente vai para /politica (antes de qualquer conteúdo) ──
+  /* Temporariamente desabilitado para reduzir atrito no acesso.
   if (policyPending) {
     return <Navigate to="/politica" replace />;
   }
+  */
 
   // Sem token — redireciona para login
   if (!token) return <Navigate to="/login" replace />;
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">
+      {/* Temporariamente desabilitado para reduzir atrito no acesso.
       {showTrialPasswordModal && <TrialPasswordModal onComplete={() => { localStorage.removeItem('fury-trial-password-pending'); setShowTrialPasswordModal(false); }} />}
+      */}
       {/* Overlay escuro ao abrir sidebar no mobile */}
       {mobileOpen && (
         <div
