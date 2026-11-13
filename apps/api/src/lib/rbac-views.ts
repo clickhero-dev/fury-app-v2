@@ -15,7 +15,7 @@ export const RBAC_VIEWS: readonly RbacViewEntry[] = [
   { key: 'campaigns', description: 'Campanhas', services: ['campaigns'] },
   { key: 'campaigns.create', description: 'Criar campanha', services: ['campaigns.create'] },
   { key: 'campaigns.rules', description: 'Regras de campanha', services: ['campaigns.rules'] },
-  { key: 'leads', description: 'Leads', services: ['leads'] },
+  { key: 'leads', description: 'Clientes', services: ['leads'] },
   { key: 'automation', description: 'Automações', services: ['automation'] },
   { key: 'studio', description: 'Estúdio', services: ['studio'] },
   { key: 'studio.image', description: 'Gerador de imagem', services: ['studio.image'] },
@@ -52,13 +52,12 @@ export type PlanViewGroup = 'ads' | 'content';
 export const PLAN_BLOCKABLE_VIEWS: readonly { key: string; group: PlanViewGroup; parent: string | null }[] = [
   { key: 'campaigns', group: 'ads', parent: null },
   { key: 'campaigns.create', group: 'ads', parent: 'campaigns' },
-  { key: 'campaigns.rules', group: 'ads', parent: 'campaigns' },
   // leads vêm das campanhas
   { key: 'leads', group: 'ads', parent: 'campaigns' },
   { key: 'studio', group: 'content', parent: null },
   { key: 'studio.image', group: 'content', parent: 'studio' },
   { key: 'studio.video', group: 'content', parent: 'studio' },
-  // automation e planner fora: telas ocultas (feature futura)
+  // automation, planner e campaigns.rules fora: telas sem link (feature futura)
   { key: 'calendar', group: 'content', parent: null },
 ];
 export const PLAN_BLOCKABLE_VIEW_KEYS: readonly string[] = PLAN_BLOCKABLE_VIEWS.map((v) => v.key);

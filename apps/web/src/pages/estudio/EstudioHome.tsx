@@ -492,8 +492,8 @@ export function EstudioHome() {
         {/* LIBRARY VIEW */}
         {view === 'library' && (
           <>
-            {/* Hero */}
-            <section className={`${SURFACE} relative overflow-hidden px-6 py-10`}>
+            {/* Hero (some sem gerador no plano) */}
+            {canCreate && <section className={`${SURFACE} relative overflow-hidden px-6 py-10`}>
               <div className="relative flex flex-col items-center gap-4 text-center">
                 <ol className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
                   {steps.map(({ icon: Icon, label }, i) => (
@@ -521,7 +521,7 @@ export function EstudioHome() {
                   </button>}
                 </div>
               </div>
-            </section>
+            </section>}
 
             {/* Library */}
             <section className="space-y-4">
@@ -604,10 +604,12 @@ export function EstudioHome() {
                   <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
                     <ImageIcon className="h-5 w-5" />
                   </span>
-                  <p className="text-base font-medium text-text-primary">Crie seu primeiro anúncio com o ady</p>
-                  <p className="max-w-sm text-sm text-text-tertiary">
-                    Conte em uma frase o que você quer anunciar — o resto é com ele.
-                  </p>
+                  <p className="text-base font-medium text-text-primary">{canCreate ? 'Crie seu primeiro anúncio com o ady' : 'Nenhum anúncio na biblioteca'}</p>
+                  {canCreate && (
+                    <p className="max-w-sm text-sm text-text-tertiary">
+                      Conte em uma frase o que você quer anunciar — o resto é com ele.
+                    </p>
+                  )}
                   {canCreate && <button
                     type="button"
                     onClick={handleStartQuickCreate}

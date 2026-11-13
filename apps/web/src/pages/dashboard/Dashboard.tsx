@@ -494,8 +494,10 @@ function ActiveCampaignsTable({
   campaigns,
   partialFailures = [],
   firstSyncPending = false,
+  canCreate = true,
 }: {
   campaigns: ActiveCampaign[];
+  canCreate?: boolean;
   partialFailures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
   firstSyncPending?: boolean;
 }) {
@@ -539,7 +541,7 @@ function ActiveCampaignsTable({
           ) : (
             <>
               <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Nenhuma campanha ativa agora</p>
-              <Link to="/campanhas" className="text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline">Criar campanha</Link>
+              {canCreate && <Link to="/campanhas" className="text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline">Criar campanha</Link>}
             </>
           )}
         </div>
@@ -1008,7 +1010,7 @@ export function Dashboard() {
 
           <WeeklyChart data={demo?.daily ?? dailyData ?? []} hasRealData={hasRealData} idealLine={idealLine} />
 
-          {campaignsEnabled && <ActiveCampaignsTable campaigns={demo?.campaigns.map((campaign) => ({ ...campaign, metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa } })) ?? activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />}
+          {campaignsEnabled && <ActiveCampaignsTable campaigns={demo?.campaigns.map((campaign) => ({ ...campaign, metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa } })) ?? activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} canCreate={!isBlocked('campaigns.create')} />}
           <ActionableInsights demo={demo} />
           </>
         )}

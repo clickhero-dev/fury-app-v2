@@ -721,6 +721,9 @@ describe('EstudioHome — funcionalidades do plano', () => {
     expect(screen.queryByRole('button', { name: /criação rápida/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /criar anúncio/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /criação rápida/i })).toBeNull();
+    // sem convite para criar
+    expect(await screen.findByText('Nenhum anúncio na biblioteca')).toBeInTheDocument();
+    expect(screen.queryByText(/o ady cria a imagem para você/i)).toBeNull();
   });
 
   it('sem criar campanha: some "Usar em campanha"', async () => {

@@ -742,7 +742,7 @@ describe('RbacService — plano do cliente', () => {
 
   it('tenantBlocks (workers) segue a herança e ignora cargo', async () => {
     const svc = new RbacService(fakePlanRepo(null, ['campaigns']), () => fakeRedis(false));
-    expect(await svc.tenantBlocks('t1', 'campaigns.rules')).toBe(true);
+    expect(await svc.tenantBlocks('t1', 'leads')).toBe(true);
     expect(await svc.tenantBlocks('t1', 'planner')).toBe(false);
   });
 
@@ -767,10 +767,10 @@ describe('RbacService — plano do cliente', () => {
     expect(await noCalendar.checkServices('u1', resolveServiceKeys('/planner/posts/x1/move')!)).toBe('allowed');
   });
 
-  it('regras de campanha bloqueiam /automation/rules', async () => {
+  it('regras de campanha não entram no plano', async () => {
     const noRules = new RbacService(fakePlanRepo(owner, ['campaigns.rules']), () => fakeRedis());
-    expect(await noRules.checkServices('u1', resolveServiceKeys('/automation/rules')!)).toBe('blocked');
-    expect(await noRules.checkServices('u1', resolveServiceKeys('/fury/rules')!)).toBe('allowed');
+    expect(await noRules.checkServices('u1', resolveServiceKeys('/automation/rules')!)).toBe('allowed');
+    expect(resolveServiceKeys('/automation/rules')).toEqual(expect.arrayContaining(['campaigns.rules']));
   });
 
   it('buscas da Meta escapam do bloqueio de campanhas só no caminho exato', async () => {

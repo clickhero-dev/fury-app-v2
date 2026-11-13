@@ -158,6 +158,17 @@ describe('BDD: Dashboard usa endpoints v2', () => {
     }
   });
 
+  it('Cenário: plano sem criar campanha tira o link "Criar campanha" do card vazio', async () => {
+    blocked.keys = ['campaigns.create'];
+    try {
+      render(<Dashboard />, { wrapper });
+      expect(await screen.findByText('Nenhuma campanha ativa agora', {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Criar campanha' })).not.toBeInTheDocument();
+    } finally {
+      blocked.keys = [];
+    }
+  });
+
   it('Cenário: conta demo sem insights mostra estados vazios compreensíveis', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/v2/dashboard/demo') {

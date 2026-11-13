@@ -108,13 +108,13 @@ describe('Funcionalidades por plano — integração', () => {
   it('editar o plano vale para quem já assina', async () => {
     const plan = (await createPlan(superToken, [])).body.data.id;
     await assign(client.user.tenantId, plan);
-    expect((await request(app).get('/api/automation/rules').set(auth(client.token))).status).not.toBe(403);
+    expect((await request(app).get('/api/v2/campaigns').set(auth(client.token))).status).not.toBe(403);
 
     expect((await request(app).patch(`/api/admin/plans/${plan}`).set(auth(superToken)).send({ blockedViews: ['campaigns'] })).status).toBe(200);
-    // campanhas leva junto regras, criar campanha e leads
+    // campanhas leva junto criar campanha e leads
     const views = (await request(app).get('/api/rbac/blocked-views').set(auth(client.token))).body.data.blocked;
-    expect(views).toEqual(expect.arrayContaining(['campaigns', 'campaigns.create', 'campaigns.rules']));
-    expect((await request(app).get('/api/automation/rules').set(auth(client.token))).status).toBe(403);
+    expect(views).toEqual(expect.arrayContaining(['campaigns', 'campaigns.create', 'leads']));
+    expect((await request(app).get('/api/v2/campaigns').set(auth(client.token))).status).toBe(403);
     // buscas da Meta seguem liberadas (Configurações › Público)
     expect((await request(app).get('/api/campaigns/meta-interests?q=a').set(auth(client.token))).status).not.toBe(403);
   });
