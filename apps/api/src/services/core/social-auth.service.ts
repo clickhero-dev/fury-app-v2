@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db as dbInstance, tenants, users, subscriptions, type Database } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
-import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
+import { generateAccessToken, generateRefreshToken, SESSION_TTL_SECONDS } from '../../lib/jwt.js';
 import { getGoogleOAuthConfig } from '../../lib/google-oauth.js';
 import {
   getFacebookOAuthConfig,
@@ -22,7 +22,7 @@ const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https
 // acesso liberado nesse app (é a mesma do fluxo "Conectar conta").
 // Num app tipo Consumer bastaria `public_profile,email` — daí o override por env.
 const DEFAULT_FACEBOOK_LOGIN_SCOPE = 'public_profile,email,pages_show_list';
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
+const REFRESH_TOKEN_TTL = SESSION_TTL_SECONDS;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
