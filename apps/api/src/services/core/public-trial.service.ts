@@ -1,12 +1,12 @@
 import crypto from 'node:crypto';
 import { AppError } from '../../middleware/errorHandler.js';
-import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
+import { generateAccessToken, generateRefreshToken, SESSION_TTL_SECONDS } from '../../lib/jwt.js';
 import { getRedis } from '../../lib/redis.js';
 import { emailService } from '../email/email.service.js';
 import { PublicTrialRepository } from '../../repository/public-trial.repository.js';
 import { createMagicLinkToken, hashMagicLinkToken, normalizePublicTrialSignup, type PublicTrialSignup } from './public-trial-signup.js';
 
-const TRIAL_SESSION_TTL = 30 * 24 * 60 * 60;
+const TRIAL_SESSION_TTL = SESSION_TTL_SECONDS;
 
 export class PublicTrialService {
   constructor(
