@@ -4,6 +4,7 @@ import { isAttachment, validateFiles, type Attachment } from './chat-media';
 
 export type DraftAttachment = {
   key: string;
+  owner: string | null;
   file: File;
   previewUrl?: string;
   conversationId?: string;
@@ -12,7 +13,7 @@ export type DraftAttachment = {
   error?: string;
 };
 
-export function useChatAttachments(ensureConversation: () => Promise<string | null>) {
+export function useChatAttachments(ensureConversation: () => Promise<string | null>, owner: string | null) {
   const [items, setItems] = useState<DraftAttachment[]>([]);
   const [error, setError] = useState('');
   const live = useRef<DraftAttachment[]>([]);
@@ -31,7 +32,19 @@ export function useChatAttachments(ensureConversation: () => Promise<string | nu
     live.current = [];
     conversation.current = null;
   }, []);
-  const clear = useCallback(() => { dispose(); setItems([]); setError(''); }, [dispose]);
+  const clear = useCallback((target: string | null = owner, attachmentIds?: string[]) => {
+    const removed = live.current.filter(item => item.owner === target && (!attachmentIds || (item.attachment && attachmentIds.includes(item.attachment.id))));
+    for (const item of removed) {
+      requests.current.get(item.key)?.abort();
+      requests.current.delete(item.key);
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    }
+    update(items => items.filter(item => !removed.includes(item)));
+    setError('');
+  }, [owner, update]);
+  const transfer = useCallback((from: string | null, to: string) => {
+    update(items => items.map(item => item.owner === from ? {...item, owner:to} : item));
+  }, [update]);
   useEffect(() => dispose, [dispose]);
 
   async function upload(key: string) {
@@ -44,7 +57,7 @@ export function useChatAttachments(ensureConversation: () => Promise<string | nu
     update(items => items.map(item => item.key === key ? {...item,status:'uploading',error:undefined} : item));
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (!conversation.current) conversation.current = ensureConversation();
+      if (!item.conversationId && !conversation.current) conversation.current = ensureConversation().finally(() => { conversation.current = null; });
       const id = item.conversationId || await conversation.current;
       if (!current()) return;
       if (!id) { conversation.current = null; throw new Error('conversation unavailable'); }
@@ -60,7 +73,7 @@ export function useChatAttachments(ensureConversation: () => Promise<string | nu
       if (!current()) return;
       if (!Array.isArray(data.attachments) || data.attachments.length !== 1 || !isAttachment(data.attachments[0])) throw new Error('invalid attachment');
       const attachment: Attachment = data.attachments[0];
-      if (live.current.some(other => other.key !== key && other.attachment?.id === attachment.id)) throw new Error('duplicate attachment');
+      if (live.current.some(other => other.key !== key && other.owner === item.owner && other.attachment?.id === attachment.id)) throw new Error('duplicate attachment');
       update(items => items.map(item => item.key === key ? {...item,status:'ready',attachment,error:undefined} : item));
     } catch (err) {
       if (current()) update(items => items.map(item => item.key === key ? {...item,status:'failed',error:mediaError(err,'upload')} : item));
@@ -71,10 +84,10 @@ export function useChatAttachments(ensureConversation: () => Promise<string | nu
   }
   async function add(files: File[]) {
     if (!files.length) return;
-    const validation = validateFiles(files,live.current.map(item => item.file));
+    const validation = validateFiles(files,live.current.filter(item => item.owner === owner).map(item => item.file));
     if (validation) { setError(validation); return; }
     setError('');
-    const additions: DraftAttachment[] = files.map(file => ({key:crypto.randomUUID(), file, status:'uploading',
+    const additions: DraftAttachment[] = files.map(file => ({key:crypto.randomUUID(), owner, conversationId:owner || undefined, file, status:'uploading',
       previewUrl:file.type.startsWith('image/') || file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined,
     }));
     // Reserve every slot synchronously, before the first await/creation.
@@ -112,9 +125,10 @@ export function useChatAttachments(ensureConversation: () => Promise<string | nu
     if (live.current.find(item => item.key === key)?.status !== 'failed') return Promise.resolve();
     return upload(key);
   }
-  return {items, error, add, remove, retry, clear,
-    ready:items.filter(item => item.status === 'ready').map(item => item.attachment!),
-    blocked:items.some(item => item.status !== 'ready'),
-    isBlocked:() => live.current.some(item => item.status !== 'ready'),
+  const visible = items.filter(item => item.owner === owner);
+  return {items:visible, error, add, remove, retry, clear, transfer,
+    ready:visible.filter(item => item.status === 'ready').map(item => item.attachment!),
+    blocked:visible.some(item => item.status !== 'ready'),
+    isBlocked:() => live.current.some(item => item.owner === owner && item.status !== 'ready'),
   };
 }

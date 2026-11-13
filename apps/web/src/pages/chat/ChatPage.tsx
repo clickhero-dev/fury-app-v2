@@ -126,10 +126,11 @@ function MessageList({messages, approvals, conversationId, children}: {messages:
 
 export function ChatPage() {
   const selectionVersion = useRef(0);
+  const drafts = useRef(new Map<string | null, string>());
   const selectedConversation = useRef<string | null>(null);
   const streamSnapshots = useRef(new Map<string, {messages: Message[]; approvals: Approval[]; responseRun: string | null; error: string; uncertain: boolean; active: boolean; recovered: boolean}>());
   const approvalVersion = useRef(0);
-  const sendingRef = useRef(false);
+  const sendingRef = useRef(new Set<string>());
   const creatingRef = useRef(false);
   const creatingRequest = useRef<AbortController | null>(null);
   const deletingRef = useRef(false);
@@ -153,19 +154,26 @@ export function ChatPage() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [responseRun, setResponseRun] = useState<string | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
-  const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [, renderDraft] = useState(0);
+  const input = drafts.current.get(current) || '';
+  function setInput(value: string | ((previous: string) => string)) {
+    const previous = drafts.current.get(current) || '';
+    drafts.current.set(current, typeof value === 'function' ? value(previous) : value);
+    renderDraft(n => n + 1);
+  }
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [sendUncertain, setSendUncertain] = useState(false);
   useEffect(() => () => { selectionVersion.current++; creatingRequest.current?.abort(); }, []);
-  const media = useChatAttachments(async () => current || await create());
+  const media = useChatAttachments(async () => current || await create(true), current);
   const dictation = useChatDictation(text => {
     setInput(draft => draft ? `${draft}${/\s$/.test(draft) ? '' : ' '}${text}` : text);
     inputRef.current?.focus();
   });
   const plans = useChatPlans(current, Boolean(current));
   const composerDisabled = opening || creating || deleting || busy || sendUncertain || approving !== null || responseRun === 'running';
-  function resetMedia() { dictation.cancel(); media.clear(); }
+
   function addFiles(files: File[]) {
-    if (composerDisabled || sendingRef.current || creatingRef.current || dictation.active) return;
+    if (composerDisabled || sendingRef.current.has(current || '') || creatingRef.current || dictation.active) return;
     void media.add(files);
   }
   useLayoutEffect(() => {
@@ -204,7 +212,7 @@ export function ChatPage() {
     timer = setTimeout(poll, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [current, hasRunningJob, responseRun, busy]);
-  async function create() {
+  async function create(transferDraft = false) {
     if (creatingRef.current || deletingRef.current) return null;
     creatingRef.current = true; setCreating(true);
     const version = ++selectionVersion.current;
@@ -214,6 +222,11 @@ export function ChatPage() {
       setError('');
       const c = await (await request('/conversations', {method:'POST',signal:controller.signal})).json();
       if (controller.signal.aborted || version !== selectionVersion.current) return null;
+      if (transferDraft && !drafts.current.has(c.id)) {
+        drafts.current.set(c.id, drafts.current.get(null) || '');
+        drafts.current.delete(null);
+        media.transfer(null, c.id);
+      }
       setConversations(v => [c,...v]); selectedConversation.current = c.id; setCurrent(c.id); setSendUncertain(false);
       setHistoryOpen(false);
       followLatest.current = true; setAwayFromLatest(false);
@@ -226,14 +239,12 @@ export function ChatPage() {
   async function open(id: string) {
     if (deletingRef.current) return;
     dictation.cancel();
-    if (id !== current) media.clear();
     const version = ++selectionVersion.current;
     setOpening(true);
     try {
       setError('');
       const c = await (await request(`/conversations/${id}`)).json();
       if (selectionVersion.current !== version) return;
-      if (media.ready.some(file => c.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) { setInput(''); media.clear(); }
       setSendUncertain(false);
       if (typeof c.title === 'string') setConversations(items => items.map(item => item.id === id ? {...item, title:c.title} : item));
       selectedConversation.current = id; setCurrent(id);
@@ -242,18 +253,18 @@ export function ChatPage() {
       const storedSnapshot = streamSnapshots.current.get(id);
       const snapshot = storedSnapshot && !storedSnapshot.active && (storedSnapshot.uncertain || storedSnapshot.recovered) ? undefined : storedSnapshot;
       if (storedSnapshot && !snapshot) streamSnapshots.current.delete(id);
-      setMessages(snapshot?.messages ?? c.messages ?? []); setApprovals(snapshot?.approvals ?? normalizeApprovals(c.approvals || [])); setResponseRun(snapshot ? snapshot.responseRun : c.response_run?.status || null);
+      setMessages(snapshot?.messages ?? c.messages ?? []); setApprovals(snapshot?.approvals ?? normalizeApprovals(c.approvals || [])); setResponseRun(snapshot ? snapshot.responseRun : c.response_run?.status || null); setBusy(Boolean(snapshot?.active));
       if (snapshot) { setError(snapshot.error); setSendUncertain(snapshot.uncertain); }
       if (snapshot && !snapshot.active) streamSnapshots.current.delete(id);
     } catch { if (selectionVersion.current === version) setError('Não foi possível abrir a conversa.'); }
     finally { if (selectionVersion.current === version) setOpening(false); }
   }
   async function remove() {
-    if (!current || deletingRef.current || busy || sendUncertain || creatingRef.current || sendingRef.current || responseRun === 'running' || media.isBlocked() || !window.confirm('Excluir esta conversa?')) return;
+    if (!current || deletingRef.current || busy || sendUncertain || creatingRef.current || sendingRef.current.has(current) || responseRun === 'running' || media.isBlocked() || !window.confirm('Excluir esta conversa?')) return;
     deletingRef.current = true; setDeleting(true); dictation.cancel();
     try {
       await request(`/conversations/${current}`, {method:'DELETE'});
-      media.clear(); setConversations(v => v.filter(c => c.id !== current)); selectedConversation.current = null; setCurrent(null);
+      media.clear(current); drafts.current.delete(current); setConversations(v => v.filter(c => c.id !== current)); selectedConversation.current = null; setCurrent(null);
       try { sessionStorage.removeItem('ady-chat-current'); } catch { /* Sem persistência de aba. */ }
       setMessages([]); setApprovals([]); setResponseRun(null); setSendUncertain(false);
     } catch { setError('Não foi possível excluir a conversa.'); }
@@ -309,13 +320,18 @@ export function ChatPage() {
     e.preventDefault();
     const text = input.trim();
     const attachments = media.ready;
-    if ((!text && !attachments.length) || composerDisabled || deletingRef.current || sendingRef.current || media.isBlocked() || dictation.active) return;
-    sendingRef.current = true;
+    const key = current || '';
+    if ((!text && !attachments.length) || composerDisabled || deletingRef.current || sendingRef.current.has(key) || media.isBlocked() || dictation.active) return;
+    sendingRef.current.add(key);
     try {
-      const id = current || await create();
+      const id = current || await create(true);
       if (!id) return;
-      await streamResponse(text, id, attachments, () => { setInput(''); media.clear(); });
-    } finally { sendingRef.current = false; }
+      await streamResponse(text, id, attachments, () => {
+        if ((drafts.current.get(id) || '').trim() === text) drafts.current.set(id, '');
+        media.clear(id, attachments.map(item => item.id));
+        renderDraft(n => n + 1);
+      });
+    } finally { sendingRef.current.delete(key); }
   }
   async function streamResponse(text?: string, conversationId = current, attachments: Attachment[] = [], onAccepted?: () => void) {
     const current = conversationId;
@@ -333,7 +349,7 @@ export function ChatPage() {
     try {
       const response = await request(`/conversations/${current}/${isMessage ? 'messages' : 'retry'}`, {method:'POST',body:JSON.stringify(isMessage ? {...(text ? {content:text} : {}), ...(attachments.length ? {attachmentIds:attachments.map(item => item.id)} : {})} : {})});
       accepted = true;
-      if (visible()) onAccepted?.();
+      onAccepted?.();
       if (!response.body) throw new Error('stream ausente');
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false; let responseText = '';
       const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if (event === 'token' && typeof data.content === 'string') { responseText += data.content; updateMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); } if (event === 'done') { completed = true; if (typeof data.message?.content === 'string') { responseText = data.message.content; updateMessages(v => v.map(m => m.id === replyId ? {...m, content:data.message.content, created_at:data.message.created_at} : m)); } if (visible()) void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') updateApprovals(v => [...v,data]); if (event === 'error') updateError(data.message || 'Não foi possível concluir a resposta.'); };
@@ -346,17 +362,17 @@ export function ChatPage() {
     } catch {
       try {
         const saved = await (await request(`/conversations/${current}`)).json();
-        if (visible() && !accepted && attachments.some(file => saved.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) onAccepted?.();
+        if (!accepted && attachments.some(file => saved.messages?.some((message: Message) => message.attachments?.some(item => item.id === file.id)))) onAccepted?.();
         if (typeof saved.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:saved.title} : item));
         updateMessages(() => saved.messages || []); updateApprovals(() => normalizeApprovals(saved.approvals || [])); snapshot.responseRun = saved.response_run?.status || null; snapshot.recovered = true; if (visible()) setResponseRun(snapshot.responseRun);
         updateError('A conexão foi interrompida. A conversa foi atualizada; confira o estado antes de tentar novamente.');
       } catch { snapshot.uncertain = true; if (visible()) setSendUncertain(true); updateError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.'); }
-    } finally { snapshot.active = false; if (visible() && selectionVersion.current === streamSelectionVersion) streamSnapshots.current.delete(current); setBusy(false); }
+    } finally { snapshot.active = false; if (visible()) { if (selectionVersion.current === streamSelectionVersion && streamSnapshots.current.get(current) === snapshot) streamSnapshots.current.delete(current); setBusy(false); } }
   }
   const filteredConversations = conversations.filter(c => (c.title || 'Nova conversa').toLocaleLowerCase('pt-BR').includes(historySearch.trim().toLocaleLowerCase('pt-BR')));
   const currentTitle = current ? conversations.find(c => c.id === current)?.title || 'Sua conversa' : 'Nova conversa';
   const history = (<aside id="chat-history" className="ady-chat-history">
-<button onClick={() => { resetMedia(); void create(); }} disabled={opening || creating || deleting || busy || approving !== null || savingTitle}>
+<button onClick={() => { dictation.cancel(); void create(true); }} disabled={opening || creating || deleting || busy || approving !== null || savingTitle}>
 <Plus size={17} aria-hidden="true"/> Nova conversa</button>
 {historyOpen && error && <p role="alert">{error}</p>}
 <input className="ady-chat-search" aria-label="Buscar conversas" placeholder="Buscar conversas" value={historySearch} onChange={e => setHistorySearch(e.target.value)}/>
