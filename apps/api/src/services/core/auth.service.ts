@@ -9,6 +9,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
+  SESSION_TTL_SECONDS,
 } from '../../lib/jwt.js';
 import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
@@ -16,7 +17,7 @@ import { AuthRepository } from '../../repository/auth.repository.js';
 import { slugify } from '../../lib/slug.js';
 import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+const REFRESH_TOKEN_TTL = SESSION_TTL_SECONDS;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export const DEMO_TENANT_SLUG = 'fashion-demo';
