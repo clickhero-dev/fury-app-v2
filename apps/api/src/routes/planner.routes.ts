@@ -30,6 +30,8 @@ router.get('/prerequisites', tenantMiddleware, planner.handleGetPrerequisites);
 router.post('/plans/confirm', tenantMiddleware, planner.handleConfirm);
 router.post('/plans/revalidate', tenantMiddleware, planner.handleRevalidate);
 router.patch('/posts/:postId', tenantMiddleware, planner.handleEditPost);
+router.get('/posts/:postId/chat-snapshot', tenantMiddleware, planner.handleChatSnapshot);
+router.patch('/posts/:postId/chat-cancel', tenantMiddleware, planner.handleChatCancel);
 router.post('/posts/suggest-caption', tenantMiddleware, planner.handleSuggestCaption);
 
 // Calendário Editorial

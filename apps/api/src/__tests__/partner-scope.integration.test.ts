@@ -165,18 +165,17 @@ describe('Escopo do parceiro no admin — integração', () => {
     expect(row?.platformRole).toBe('user_partner');
   });
 
-  it('cargo Admin: só o super_admin dá ou tira', async () => {
+  it('cargo Admin: ninguém dá dentro do cliente, nem o super_admin', async () => {
     const created = await request(app)
       .post('/api/admin/users')
       .set(asPartner())
       .send({ tenantId: clientA, name: 'Adm', email: `ps-adm-${id}@test.com`, password, role: 'admin' });
     expect(created.status).toBe(403);
     expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ role: 'admin' })).status).toBe(403);
-
-    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asSuper()).send({ role: 'admin' })).status).toBe(200);
-    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ role: 'member' })).status).toBe(403);
-    // editar só o nome (a tela manda o cargo igual) continua liberado
-    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ name: 'Novo', role: 'admin' })).status).toBe(200);
+    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asSuper()).send({ role: 'admin' })).status).toBe(403);
+    // editar só o nome (mesmo cargo junto) continua liberado
+    const [a] = await db.select().from(schema.users).where(eq(schema.users.id, userA));
+    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ name: 'Novo', role: a!.role })).status).toBe(200);
   });
 
   it('parceiro só cria Membro, até 2 por cliente, e não troca cargo', async () => {
@@ -206,6 +205,13 @@ describe('Escopo do parceiro no admin — integração', () => {
     expect((await add('e')).status).toBe(201);
     expect((await add('f')).status).toBe(409);
     expect((await add('g', 'member', asSuper)).status).toBe(201);
+
+    // super também: dentro do cliente nem titular nem administrador, nem troca de cargo
+    expect((await add('h', 'owner', asSuper)).status).toBe(403);
+    expect((await add('i', 'admin', asSuper)).status).toBe(403);
+    const g = await db.select().from(schema.users).where(eq(schema.users.email, `ps-lim-g-${id}@test.com`));
+    expect((await request(app).patch(`/api/admin/users/${g[0]!.id}`).set(asSuper()).send({ role: 'owner' })).status).toBe(403);
+    expect((await request(app).patch(`/api/admin/users/${g[0]!.id}`).set(asSuper()).send({ name: 'G2' })).status).toBe(200);
   });
 
   it('remover o titular: sai o cliente inteiro, libera a vaga e o parceiro não reavê', async () => {
@@ -361,6 +367,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'GET /my-partner',
       'GET /my-partner/ai-key',
       'GET /plans',
+      'GET /plans/configurable-views',
       'GET /tenants',
       'GET /tenants/:id',
       'GET /tenants/:tenantId/assignable-plans',

@@ -10,10 +10,13 @@ import {
   planChanges,
   setLimitQty,
   validateDraft,
+  toggleView,
+  viewVisible,
+  blockedSummary,
   type PlanDraft,
 } from './planForm';
 
-const base: PlanDraft = { name: 'Pro', priceCents: 39700, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS };
+const base: PlanDraft = { name: 'Pro', priceCents: 39700, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS, blockedViews: [] };
 
 describe('preço', () => {
   it('dígitos digitados viram centavos e voltam formatados em reais', () => {
@@ -91,5 +94,37 @@ describe('applyLimitMode no mesmo modo', () => {
   it('não troca o valor quando o modo não muda', () => {
     const l = { ...EMPTY_LIMITS, creativesPerMonth: 0 };
     expect(applyLimitMode(l, 'creativesPerMonth', 'qty')).toBe(l);
+  });
+});
+
+describe('o que o cliente vê', () => {
+  const views = [
+    { key: 'campaigns', description: 'Campanhas', group: 'ads' as const, parent: null, locked: false },
+    { key: 'leads', description: 'Leads', group: 'ads' as const, parent: 'campaigns', locked: false },
+    { key: 'studio', description: 'Estúdio', group: 'content' as const, parent: null, locked: false },
+    { key: 'studio.image', description: 'Imagem', group: 'content' as const, parent: 'studio', locked: false },
+    { key: 'studio.video', description: 'Vídeo', group: 'content' as const, parent: 'studio', locked: false },
+  ];
+
+  it('tirar o pai leva as filhas (pelo pai da lista, não pelo nome); religar devolve', () => {
+    const off = toggleView(['studio.video'], 'studio', views);
+    expect(off).toEqual(['studio']);
+    expect(viewVisible(off, 'studio.image', views)).toBe(false);
+    expect(toggleView(off, 'studio', views)).toEqual([]);
+    // leads é filha de campanhas
+    expect(viewVisible(['campaigns'], 'leads', views)).toBe(false);
+    expect(toggleView(['leads'], 'campaigns', views)).toEqual(['campaigns']);
+  });
+
+  it('planChanges só manda funcionalidades quando o conjunto muda', () => {
+    const orig = { ...base, blockedViews: ['leads', 'studio'] };
+    expect(planChanges(orig, { ...orig, blockedViews: ['studio', 'leads'] })).toEqual({});
+    expect(planChanges(orig, { ...orig, blockedViews: ['leads'] })).toEqual({ blockedViews: ['leads'] });
+  });
+
+  it('resumo do card', () => {
+    expect(blockedSummary(0)).toBe('Tudo liberado');
+    expect(blockedSummary(1)).toBe('1 funcionalidade bloqueada');
+    expect(blockedSummary(3)).toBe('3 funcionalidades bloqueadas');
   });
 });

@@ -58,10 +58,10 @@ export function UserCard({ user, onEdit, onResetPassword, onRemove }: { user: Te
           <button
             type="button"
             onClick={onResetPassword}
-            className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
-            title="Trocar senha"
+            className="ady-btn h-8 px-3 flex items-center gap-1.5 rounded-lg border border-admin-petrol/40 text-xs font-semibold text-[#17708A] dark:text-[#1E88A8] hover:bg-admin-petrol/10 transition-all"
           >
             <KeyRound className="w-4 h-4" />
+            Trocar senha
           </button>
           <button
             type="button"

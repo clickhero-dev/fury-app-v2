@@ -3,7 +3,7 @@ import { Plus, CirclePlus } from 'lucide-react';
 import api from '@/lib/api';
 import { PlanCard } from './plans/PlanCard';
 import { PlanFormModal } from './plans/PlanFormModal';
-import { EMPTY_LIMITS, normalizeLimits, planChanges, type PlanDraft, type PlanLimits } from './plans/planForm';
+import { EMPTY_LIMITS, normalizeLimits, planChanges, type PlanDraft, type PlanLimits, type PlanView } from './plans/planForm';
 
 interface Plan {
   id: string;
@@ -14,14 +14,15 @@ interface Plan {
   limits: PlanLimits;
   isActive: boolean;
   subscriberCount: number;
+  blockedViews?: string[];
 }
 
 type FormState = { mode: 'new' } | { mode: 'edit'; plan: Plan };
 
-const NEW_PLAN: PlanDraft = { name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS };
+const NEW_PLAN: PlanDraft = { name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS, blockedViews: [] };
 
 function toDraft(plan: Plan): PlanDraft {
-  return { name: plan.name, priceCents: plan.priceCents, interval: plan.interval, isActive: plan.isActive, limits: normalizeLimits(plan.limits) };
+  return { name: plan.name, priceCents: plan.priceCents, interval: plan.interval, isActive: plan.isActive, limits: normalizeLimits(plan.limits), blockedViews: plan.blockedViews ?? [] };
 }
 
 export function PlansPage() {
@@ -34,11 +35,14 @@ export function PlansPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
   const [migrateTo, setMigrateTo] = useState('');
+  const [planViews, setPlanViews] = useState<PlanView[]>([]);
 
   useEffect(() => {
     api.get('/admin/plans').then((r) => {
       setPlans(r.data.data);
     }).catch(() => {}).finally(() => setLoading(false));
+    // funcionalidades que o perfil pode tirar do plano
+    api.get('/admin/plans/configurable-views').then((r) => setPlanViews(r.data.data?.views ?? [])).catch(() => {});
   }, []);
 
   const reloadPlans = async () => {
@@ -168,6 +172,7 @@ export function PlansPage() {
           mode={form.mode}
           initial={form.mode === 'edit' ? toDraft(form.plan) : NEW_PLAN}
           subscriberCount={form.mode === 'edit' ? form.plan.subscriberCount : 0}
+          views={planViews}
           saving={saving}
           error={formError}
           onClose={closeForm}

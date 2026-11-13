@@ -47,6 +47,7 @@ partnerRouter.delete("/my-partner/ai-key", controllers.partners.clearAiKey);
 
 // Planos (cada um vê os seus: parceiro os dele, super os da ady) e assinatura dos clientes
 partnerRouter.get("/plans", controllers.superadmin.listPlans);
+partnerRouter.get("/plans/configurable-views", controllers.superadmin.configurablePlanViews);
 partnerRouter.post("/plans", controllers.superadmin.createPlan);
 partnerRouter.patch("/plans/:id", controllers.superadmin.updatePlan);
 partnerRouter.delete("/plans/:id", controllers.superadmin.deletePlan);

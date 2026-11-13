@@ -14,6 +14,8 @@ export interface PlanDraft {
   interval: string;
   isActive: boolean;
   limits: PlanLimits;
+  // funcionalidades que o cliente do plano não vê (forma crua)
+  blockedViews: string[];
 }
 
 export type LimitKey = keyof PlanLimits;
@@ -88,6 +90,7 @@ export function planChanges(orig: PlanDraft, draft: PlanDraft): Partial<PlanDraf
   if (draft.interval !== orig.interval) out.interval = draft.interval;
   if (draft.isActive !== orig.isActive) out.isActive = draft.isActive;
   if (JSON.stringify(draft.limits) !== JSON.stringify(orig.limits)) out.limits = draft.limits;
+  if ([...draft.blockedViews].sort().join() !== [...orig.blockedViews].sort().join()) out.blockedViews = draft.blockedViews;
   return out;
 }
 
@@ -105,4 +108,41 @@ export function tierBadge(name: string): { label: string; cls: string } {
   if (u === "PRO") return { label: "INTERMEDIÁRIO", cls: "bg-brand/15 text-[#17708A] dark:text-[#1E88A8]" };
   if (u === "ENTERPRISE") return { label: "EMPRESARIAL", cls: "bg-spark/15 text-[#B55F02] dark:text-spark" };
   return { label: name.trim() || "Novo plano", cls: "bg-surface-secondary text-text-secondary" };
+}
+
+// ─── O que o cliente vê ───────────────────────────────
+
+export interface PlanView {
+  key: string;
+  description: string;
+  group: "ads" | "content";
+  parent: string | null;
+  // o ator já não tem: fica desligada e travada
+  locked: boolean;
+}
+
+export const VIEW_GROUP_LABEL: Record<PlanView["group"], string> = { ads: "Anúncios", content: "Conteúdo" };
+
+const parentOf = (views: PlanView[], key: string) => views.find((v) => v.key === key)?.parent ?? null;
+
+export function viewVisible(blocked: string[], key: string, views: PlanView[]): boolean {
+  const parent = parentOf(views, key);
+  return !blocked.includes(key) && !(parent && blocked.includes(parent));
+}
+
+// liga/desliga; desligar o pai já leva as filhas
+export function toggleView(blocked: string[], key: string, views: PlanView[]): string[] {
+  if (blocked.includes(key)) return blocked.filter((k) => k !== key);
+  return [...blocked.filter((k) => parentOf(views, k) !== key), key];
+}
+
+// combinam entre si, sem depender: só avisa
+export const VIEW_PAIRS: Record<string, { other: string; text: string }> = {
+  planner: { other: "calendar", text: "Combina com o Calendário: os posts gerados aparecem e são agendados lá." },
+  calendar: { other: "planner", text: "Combina com o Planejador: é ele quem gera os posts do calendário." },
+};
+
+export function blockedSummary(count: number): string {
+  if (count === 0) return "Tudo liberado";
+  return `${count} funcionalidade${count > 1 ? "s" : ""} bloqueada${count > 1 ? "s" : ""}`;
 }

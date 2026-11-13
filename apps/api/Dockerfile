@@ -22,7 +22,7 @@ RUN pnpm --filter @fury/db run build
 RUN pnpm --filter @fury/api run build
 
 FROM node:22-alpine
-RUN apk add --no-cache fontconfig font-opensans font-dejavu
+RUN apk add --no-cache fontconfig font-opensans font-dejavu ffmpeg poppler-utils util-linux
 
 # Install pnpm for prod install (versão pinada)
 RUN npm install -g pnpm@11.21.0

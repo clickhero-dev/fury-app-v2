@@ -1,6 +1,28 @@
 version: '3.8'
 
 services:
+  chat:
+    profiles: ["chat"]
+    build:
+      context: ../apps/chat
+    environment:
+      DATABASE_URL: ${CHAT_DATABASE_URL:-postgresql://fury:fury_local@postgres:5432/fury_dev}
+      ADY_API_URL: ${ADY_API_URL:-http://host.docker.internal:3000}
+      CHAT_DELEGATION_SECRET: ${CHAT_DELEGATION_SECRET:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MODEL_CHATBOT: ${MODEL_CHATBOT:-deepseek/deepseek-v4-pro-0813}
+      POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${CHAT_PORT:-8000}:8000"
+    networks:
+      - fury-network
+
   postgres:
     image: postgres:16-alpine
     container_name: fury-postgres
@@ -43,4 +65,3 @@ volumes:
 networks:
   fury-network:
     driver: bridge
-    

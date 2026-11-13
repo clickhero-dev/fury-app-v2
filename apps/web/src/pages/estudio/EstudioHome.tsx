@@ -93,6 +93,10 @@ export function EstudioHome() {
   const { data: videoOptions } = useStudioVideoOptions();
   const { isBlocked } = useBlockedViews();
   const videoEnabled = videoOptions?.enabled === true && !isBlocked('studio.video');
+  // plano: sem gerador de imagem / sem criar campanha
+  const imageEnabled = !isBlocked('studio.image');
+  const campaignEnabled = !isBlocked('campaigns.create');
+  const canCreate = imageEnabled || videoEnabled;
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
@@ -242,8 +246,8 @@ export function EstudioHome() {
   const [prevCriarParam, setPrevCriarParam] = useState<string | null>(null);
   if (criarParam !== prevCriarParam) {
     setPrevCriarParam(criarParam);
-    if (criarParam === 'rapida') {
-      setCreateMode('image');
+    if (criarParam === 'rapida' && canCreate) {
+      setCreateMode(imageEnabled ? 'image' : 'video');
       handleStartQuickCreate();
     }
   }
@@ -493,8 +497,8 @@ export function EstudioHome() {
         {/* LIBRARY VIEW */}
         {view === 'library' && (
           <>
-            {/* Hero */}
-            <section className={`${SURFACE} relative overflow-hidden px-6 py-10`}>
+            {/* Hero (some sem gerador no plano) */}
+            {canCreate && <section className={`${SURFACE} relative overflow-hidden px-6 py-10`}>
               <div className="relative flex flex-col items-center gap-4 text-center">
                 <ol className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
                   {steps.map(({ icon: Icon, label }, i) => (
@@ -511,7 +515,7 @@ export function EstudioHome() {
                 </ol>
 
                 <div className="flex flex-col items-center gap-2 pt-2">
-                  <button
+                  {canCreate && <button
                     type="button"
                     onClick={handleStartQuickCreate}
                     disabled={quotaReached}
@@ -519,10 +523,10 @@ export function EstudioHome() {
                   >
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
-                  </button>
+                  </button>}
                 </div>
               </div>
-            </section>
+            </section>}
 
             {/* Library */}
             <section className="space-y-4">
@@ -605,18 +609,20 @@ export function EstudioHome() {
                   <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
                     <ImageIcon className="h-5 w-5" />
                   </span>
-                  <p className="text-base font-medium text-text-primary">Crie seu primeiro anúncio com o ady</p>
-                  <p className="max-w-sm text-sm text-text-tertiary">
-                    Conte em uma frase o que você quer anunciar — o resto é com ele.
-                  </p>
-                  <button
+                  <p className="text-base font-medium text-text-primary">{canCreate ? 'Crie seu primeiro anúncio com o ady' : 'Nenhum anúncio na biblioteca'}</p>
+                  {canCreate && (
+                    <p className="max-w-sm text-sm text-text-tertiary">
+                      Conte em uma frase o que você quer anunciar — o resto é com ele.
+                    </p>
+                  )}
+                  {canCreate && <button
                     type="button"
                     onClick={handleStartQuickCreate}
                     disabled={quotaReached}
                     className={`mt-2 rounded-full border border-border px-5 py-2 text-xs font-semibold text-text-primary ${BUTTON_HOVER} hover:bg-surface-hover hover:border-brand/40`}
                   >
                     Criar anúncio
-                  </button>
+                  </button>}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -629,7 +635,7 @@ export function EstudioHome() {
                       asset={asset}
                       onDeleteRequest={() => setConfirmArchiveAsset(asset)}
                       onViewDetails={() => handleViewDetails(asset)}
-                      onUseInCampaign={() => handleUseInCampaign(asset)}
+                      onUseInCampaign={campaignEnabled ? () => handleUseInCampaign(asset) : undefined}
                     />
                   ))}
                 </div>
@@ -639,7 +645,7 @@ export function EstudioHome() {
         )}
 
         {/* QUICK CREATE VIEW */}
-        {view === 'quick-create' && videoEnabled && (
+        {view === 'quick-create' && videoEnabled && imageEnabled && (
           <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface-secondary p-1 w-fit">
             {([['image', 'Imagem', ImageIcon], ['video', 'Vídeo', Video]] as const).map(([mode, label, Icon]) => (
               <button
@@ -656,7 +662,7 @@ export function EstudioHome() {
           </div>
         )}
 
-        {view === 'quick-create' && videoEnabled && createMode === 'video' && (
+        {view === 'quick-create' && videoEnabled && (createMode === 'video' || !imageEnabled) && (
           <>
             <p className="text-sm text-text-tertiary">
               Descreva o vídeo, revise o roteiro e o ady gera o vídeo com IA usando suas fotos
@@ -665,7 +671,7 @@ export function EstudioHome() {
           </>
         )}
 
-        {view === 'quick-create' && (createMode === 'image' || !videoEnabled) && (
+        {view === 'quick-create' && imageEnabled && (createMode === 'image' || !videoEnabled) && (
           <div className="w-full space-y-5">
             <p className="text-sm text-text-tertiary">
               Descreva o anúncio que deseja gerar para criar a imagem ideal
@@ -985,6 +991,8 @@ export function EstudioHome() {
               onNewCreative={handleNewCreative}
               showVariationSuggestion={isNewGeneration}
               onTrackVideo={handleTrackVideo}
+              canRegenerate={generationResult.type === 'video' ? videoEnabled : imageEnabled}
+              canPublish={campaignEnabled}
               onPublish={() => {
                 const isVideo = generationResult.type === 'video';
                 setPreSelectedAsset({
@@ -1013,13 +1021,13 @@ export function EstudioHome() {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
+              {canCreate && <button
                 type="button"
                 onClick={handleStartQuickCreate}
                 className={`ady-btn rounded-full bg-brand-hover px-5 py-2 text-sm font-semibold text-white ${BUTTON_HOVER}`}
               >
                 Tentar novamente
-              </button>
+              </button>}
               <button
                 type="button"
                 onClick={handleBackToLibrary}
@@ -1271,7 +1279,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             >
               {restorePending ? 'Restaurando...' : 'Restaurar anúncio'}
             </button>
-          ) : (
+          ) : onUseInCampaign ? (
             <button
               type="button"
               onClick={onUseInCampaign}
@@ -1279,7 +1287,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             >
               Usar em campanha
             </button>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={onViewDetails}
