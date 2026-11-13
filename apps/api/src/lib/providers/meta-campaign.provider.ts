@@ -7,6 +7,13 @@ import type {
 import type { MetaPageAccess } from '../meta-api.js';
 
 export interface IMetaCampaignProvider {
+  getAdAccountCurrency(adAccountId: string, accessToken: string): Promise<string | null>;
+  getAd(adId: string, accessToken: string): Promise<Record<string, unknown>>;
+  updateAd(adId: string, accessToken: string, body: Record<string, unknown>): Promise<void>;
+  getAdSet(adsetId: string, accessToken: string): Promise<Record<string, unknown>>;
+  getAdCreative(creativeId: string, accessToken: string): Promise<Record<string, unknown>>;
+  listChatAdSets(campaignId: string, accessToken: string): Promise<Array<{ id: string; name?: string }>>;
+  listChatAdCreatives(accountId: string, accessToken: string): Promise<Array<{ id: string; name?: string }>>;
   createCampaign(
     adAccountId: string,
     accessToken: string,

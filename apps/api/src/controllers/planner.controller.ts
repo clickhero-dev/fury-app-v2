@@ -8,6 +8,7 @@ import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
+import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 
 const listPlansSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -19,6 +20,21 @@ export class PlannerController {
     private plannerService: PlannerService,
     private captionSuggestionService?: PlannerCaptionSuggestionService,
   ) {}
+
+  handleChatSnapshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const postId = z.string().uuid().parse(req.params.postId);
+      res.json({ success: true, data: await this.plannerService.getChatPostSnapshot(req.tenant!.tenantId, postId) });
+    } catch (err) { next(err); }
+  };
+
+  handleChatCancel = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const postId = z.string().uuid().parse(req.params.postId);
+      const { version } = z.object({ version: z.string().regex(/^\d{1,10}$/) }).strict().parse(req.body);
+      res.json({ success: true, data: await this.plannerService.cancelChatPost(req.tenant!.tenantId, postId, version) });
+    } catch (err) { next(err); }
+  };
 
   handleSuggestCaption = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -200,6 +216,9 @@ export class PlannerController {
       );
 
       const body = bodySchema.parse(req.body);
+      if (getDelegatedUser(req) && (!body.scheduledAt || Date.parse(body.scheduledAt) <= Date.now() || body.platform !== 'instagram')) {
+        throw new AppError(400, 'INVALID_CHAT_SCHEDULE', 'Informe um horário futuro para uma postagem no Instagram.');
+      }
       const post = await this.plannerService.createManualPost(tenantId, body as any);
       res.json({ success: true, data: post });
     } catch (err) { next(err); }

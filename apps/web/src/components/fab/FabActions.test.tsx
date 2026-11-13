@@ -1,3 +1,14 @@
+/*
+Funcionalidade: manter a área de conversa livre de atalhos globais
+Cenário: abrir o assistente
+Dado que o usuário está no chat ou em uma conversa
+Quando a tela é apresentada
+Então os atalhos flutuantes não cobrem o campo de mensagem
+Cenário: preservar outras telas
+Dado que o usuário acessa uma rota com nome parecido
+Quando a tela é apresentada
+Então os atalhos continuam disponíveis
+*/
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -40,6 +51,21 @@ describe('FabActions — ações flutuantes de criação', () => {
     expect(screen.queryByRole('button', { name: /criar campanha/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /postar/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /criar imagem/i })).toBeInTheDocument();
+  });
+
+  it('não ocupa a área de escrita no chat e suas conversas', () => {
+    for (const entry of ['/chat', '/chat/conversa-1', '/chat?nova=1']) {
+      const { unmount } = renderFab(entry);
+      expect(screen.queryByRole('button', { name: /criar campanha/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /criar imagem/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /postar/i })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('preserva atalhos em caminhos com prefixo parecido', () => {
+    renderFab('/chat-settings');
+    expect(screen.getByRole('button', { name: /criar campanha/i })).toBeInTheDocument();
   });
 
   it('renderiza as 3 ações com nome acessível (ícone-only exige aria-label)', () => {

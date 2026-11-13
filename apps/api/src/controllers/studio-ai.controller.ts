@@ -45,6 +45,20 @@ const regenerateQuickSchema = z.object({ assetId: z.string().uuid(), feedback: z
 export class StudioAiController {
   constructor(private service: StudioAiService) {}
 
+  chatSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const assetId = z.string().uuid().parse(req.params.assetId);
+      res.json({ success: true, data: await this.service.getChatAssetSnapshot(req.tenant!.tenantId, assetId) });
+    } catch (err) { if (!this.validationError(res, err)) next(err); }
+  };
+
+  chatEdit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z.object({ assetId: z.string().uuid(), version: z.string().regex(/^\d{1,10}$/), feedback: z.string().trim().min(3).max(1000) }).strict().parse(req.body);
+      res.json(await this.service.editChatImage(req.tenant!.tenantId, body));
+    } catch (err) { if (!this.validationError(res, err)) next(err); }
+  };
+
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation error', details: error.errors });

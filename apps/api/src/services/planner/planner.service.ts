@@ -125,6 +125,18 @@ export class PlannerService {
     return this.repoFactory(t);
   }
 
+  async getChatPostSnapshot(tenantId: string, postId: string) {
+    const post = await this.repo(tenantId).getChatPostSnapshot(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    return post;
+  }
+
+  async cancelChatPost(tenantId: string, postId: string, version: string) {
+    const post = await this.repo(tenantId).cancelScheduledPostIfVersion(postId, version);
+    if (!post) throw new AppError(409, 'POST_CHANGED', 'O post mudou ou não está mais agendado. Consulte novamente antes de confirmar.');
+    return post;
+  }
+
   /** Remove os dados de planejamento (posts e planos) do tenant — usado no reset de job stale. */
   private async clearTenantPlannerData(tenantId: string): Promise<void> {
     await this.repo(tenantId).clearPlannerData();
