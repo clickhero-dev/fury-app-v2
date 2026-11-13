@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setPolicyAccepted, selectPolicy } from '../../store/slices/authSlice';
@@ -34,6 +34,7 @@ interface PolicyAcceptResponse {
  */
 export function PoliticaDeUsoPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const authed = useAppSelector(selectIsAuthenticated);
@@ -63,7 +64,7 @@ export function PoliticaDeUsoPage() {
       captureEvent('politica_aceita', { version: result.currentVersion });
       dispatch(setPolicyAccepted({ currentVersion: result.currentVersion, accepted: true }));
       void queryClient.invalidateQueries({ queryKey: ['policy-current'] });
-      navigate('/dashboard', { replace: true });
+      navigate(location.state?.initialDestination === '/chat' ? '/chat' : '/dashboard', { replace: true });
     },
     onError: () => {
       setError('Não foi possível registrar o aceite. Tente novamente.');

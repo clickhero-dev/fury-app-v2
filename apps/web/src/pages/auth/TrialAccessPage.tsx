@@ -28,7 +28,7 @@ export function TrialAccessPage() {
       localStorage.setItem('fury-public-trial', 'true');
       if (result.user.mustChangePassword) localStorage.setItem('fury-trial-password-pending', 'true');
       dispatch(login({ token: result.token, refreshToken: result.refreshToken, name: result.user.name, email: result.user.email, role: result.user.role, tenantId: result.user.tenantId }));
-      navigate('/dashboard', { replace: true });
+      navigate('/inicio', { replace: true });
     } catch {
       setState('error');
     }

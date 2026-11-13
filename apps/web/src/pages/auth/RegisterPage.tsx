@@ -34,7 +34,7 @@ export function RegisterPage() {
           tenantId: data.user.tenantId,
           policy: data.policy ?? null,
         }));
-        navigate('/dashboard');
+        navigate('/inicio');
         return;
       } catch {
         setError('Erro ao fazer cadastro com Google');
@@ -52,7 +52,7 @@ export function RegisterPage() {
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate('/dashboard');
+        navigate('/inicio');
       })
       .catch(() => {
         setError('Não foi possível concluir o cadastro com Facebook. Tente novamente.');
