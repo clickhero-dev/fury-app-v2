@@ -58,7 +58,7 @@ export function LoginPage() {
           tenantId: data.user.tenantId,
           policy: data.policy ?? null,
         }));
-        navigate('/dashboard');
+        navigate('/inicio', { replace: true });
         return;
       } catch {
         setError('Erro ao fazer login com Google');
@@ -77,7 +77,7 @@ export function LoginPage() {
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate('/dashboard');
+        navigate('/inicio', { replace: true });
       })
       .catch(() => {
         setError('Não foi possível concluir o login com Facebook. Tente novamente.');
@@ -98,7 +98,7 @@ export function LoginPage() {
     try {
       setError('');
       await loginMutation.mutateAsync({ email: data.email, password: data.password });
-      navigate('/dashboard');
+      navigate('/inicio', { replace: true });
     } catch (err) {
       setError(getFriendlyError(err));
     }

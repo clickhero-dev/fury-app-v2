@@ -187,7 +187,7 @@ export function AuthenticatedShell() {
 
   // ── Gate da política: usuário pendente vai para /politica (antes de qualquer conteúdo) ──
   if (policyPending) {
-    return <Navigate to="/politica" replace />;
+    return <Navigate to="/politica" state={location.state} replace />;
   }
 
   // Sem token — redireciona para login
