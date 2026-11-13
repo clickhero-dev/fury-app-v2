@@ -67,8 +67,17 @@ describe('BDD: renovação proativa da sessão', () => {
     });
   });
 
+  it('preserva a sessão quando a renovação falha por rede', async () => {
+    post.mockRejectedValueOnce(new Error('rede indisponível'));
+    startSessionRefresh();
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(localStorage.getItem('token')).toBe('access-antigo');
+    expect(localStorage.getItem('refreshToken')).toBe('refresh-antigo');
+    expect(clear).not.toHaveBeenCalled();
+  });
+
   it('Cenário: refresh inválido encerra a sessão', async () => {
-    post.mockRejectedValueOnce(new Error('refresh revogado'));
+    post.mockRejectedValueOnce({ response: { status: 401 } });
     startSessionRefresh();
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);

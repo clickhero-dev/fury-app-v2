@@ -19,18 +19,21 @@ export interface AccessTokenPayload {
 
 export interface RefreshTokenPayload {
   userId: string;
+  sessionExpiresAt?: number;
 }
 
 // process.env values are `string`, not ms's branded `StringValue` — cast via unknown
 type JwtExpiry = jwt.SignOptions['expiresIn'];
 
-export function generateAccessToken(payload: AccessTokenPayload): string {
+export function generateAccessToken(payload: AccessTokenPayload, sessionExpiresAt?: number): string {
+  if (sessionExpiresAt !== undefined) return jwt.sign({ ...payload, exp: sessionExpiresAt }, JWT_SECRET);
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: (process.env.JWT_EXPIRES_IN ?? '30d') as unknown as JwtExpiry,
   });
 }
 
-export function generateRefreshToken(userId: string): string {
+export function generateRefreshToken(userId: string, sessionExpiresAt?: number): string {
+  if (sessionExpiresAt !== undefined) return jwt.sign({ userId, sessionExpiresAt, exp: sessionExpiresAt }, JWT_REFRESH_SECRET);
   return jwt.sign({ userId }, JWT_REFRESH_SECRET, {
     expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN ?? '7d') as unknown as JwtExpiry,
   });
