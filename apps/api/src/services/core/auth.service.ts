@@ -67,11 +67,11 @@ function generateSecureOtp(): string {
   return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 }
 
-async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
+async function storeRefreshTokenHash(userId: string, refreshToken: string, ttl = REFRESH_TOKEN_TTL): Promise<void> {
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   const key = `refresh:${userId}`;
-  await redis.setex(key, REFRESH_TOKEN_TTL, hash);
+  await redis.setex(key, ttl, hash);
 }
 
 async function verifyRefreshTokenHash(userId: string, refreshToken: string): Promise<boolean> {
@@ -213,15 +213,17 @@ export class AuthService {
     const t3 = Date.now();
     if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
 
+    const remainingTtl = payload.sessionExpiresAt === undefined ? undefined : payload.sessionExpiresAt - Math.floor(Date.now() / 1000);
+    if (remainingTtl !== undefined && remainingTtl <= 0) throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Refresh token has expired');
     await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
       role: user.role,
-    });
-    const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
-    await storeRefreshTokenHash(user.id, refreshToken);
+    }, payload.sessionExpiresAt);
+    const refreshToken = this.deps.jwt.generateRefreshToken(user.id, payload.sessionExpiresAt);
+    await storeRefreshTokenHash(user.id, refreshToken, remainingTtl);
     const t4 = Date.now();
     console.log(`[refresh] jwt=${t1 - t0}ms redis.get=${t2 - t1}ms pg.user=${t3 - t2}ms redis.setex=${t4 - t3}ms total=${t4 - t0}ms`);
 
