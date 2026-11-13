@@ -251,8 +251,8 @@ describe('AuthController.changePassword', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
-  it('nova senha com 8+ mas sem maiúscula/número/especial → ZodError (política forte)', async () => {
-    const req = mockReq({ user: { userId: 'u1' }, body: { currentPassword: 'ok', newPassword: 'abcdefgh' } });
+  it('nova senha com menos de 8 caracteres → ZodError', async () => {
+    const req = mockReq({ user: { userId: 'u1' }, body: { currentPassword: 'ok', newPassword: 'abcdefg' } });
     const res = mockRes();
     const next = vi.fn();
 
@@ -288,8 +288,8 @@ describe('AuthController.resetPassword', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
-  it('nova senha fraca (8+ sem maiúscula/número/especial) → ZodError', async () => {
-    const req = mockReq({ body: { email: 'a@b.com', otp: '123456', newPassword: 'abcdefgh' } });
+  it('nova senha com menos de 8 caracteres → ZodError', async () => {
+    const req = mockReq({ body: { email: 'a@b.com', otp: '123456', newPassword: 'abcdefg' } });
     const res = mockRes();
     const next = vi.fn();
 
