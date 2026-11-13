@@ -20,7 +20,11 @@ export async function getRedisConnection(): Promise<IORedis> {
     return pendingConnection;
   }
   pendingConnection = (async () => {
-    const conn = getRedis().duplicate();
+    const conn = getRedis().duplicate({
+      // BullMQ keeps this connection for the lifetime of its workers. It must
+      // continue reconnecting after prolonged outages instead of ending.
+      retryStrategy: (times) => Math.min(times * 200, 2000),
+    });
     // ioredis emits errors while reconnecting; never expose driver messages.
     conn.on('error', () => console.error('[redis] REDIS_QUEUE_CONNECTION_ERROR'));
     try {
