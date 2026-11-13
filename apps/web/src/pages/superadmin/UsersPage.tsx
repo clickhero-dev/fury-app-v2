@@ -100,10 +100,6 @@ export function UsersPage() {
   function validatePassword(v: string) {
     if (!v) return "Senha é obrigatória";
     if (v.length < 8) return "Mínimo 8 caracteres";
-    if (!/[A-Z]/.test(v)) return "Precisa de letra maiúscula";
-    if (!/[a-z]/.test(v)) return "Precisa de letra minúscula";
-    if (!/[0-9]/.test(v)) return "Precisa de número";
-    if (!/[^A-Za-z0-9]/.test(v)) return "Precisa de caractere especial";
     return "";
   }
 
@@ -175,10 +171,6 @@ export function UsersPage() {
   const passwordChecks = form.userPassword
     ? [
         form.userPassword.length >= 8,
-        /[A-Z]/.test(form.userPassword),
-        /[a-z]/.test(form.userPassword),
-        /[0-9]/.test(form.userPassword),
-        /[^A-Za-z0-9]/.test(form.userPassword),
       ]
     : null;
 
