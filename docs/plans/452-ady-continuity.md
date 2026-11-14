@@ -21,8 +21,9 @@ Contrato consultado: https://github.com/OpenRouterTeam/docs/blob/main/api_refere
 - [x] Ler transporte, orquestração, streaming, testes e ADR disponível.
 - [x] Escrever regressões e confirmar Red (7 falhas comportamentais).
 - [x] Implementar política mínima, validação de término e deadline.
-- [ ] Confirmar Green e executar suíte chat com provedores mockados.
-- [ ] Revisar diff, atualizar hmg, abrir PR e acompanhar CI.
+- [x] Confirmar Green e executar suíte chat com provedores mockados: 773 passaram, sem skips, PostgreSQL descartável e Node reais.
+- [x] Revisar diff e confirmar hmg como ancestral; PR #453 aberta para hmg.
+- [ ] Acompanhar CI até conclusão verde.
 
 Nenhuma publicação, geração paga, campanha real, merge ou deploy autorizado/executado.
 
