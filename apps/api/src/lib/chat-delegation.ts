@@ -28,6 +28,7 @@ export function isChatToolPath(path: string): boolean {
   if (path.includes('%') || path.includes('\\') || path.split('/').some(segment => segment === '.' || segment === '..')) return false;
   if (/^\/api\/campaigns\/chat-account\/act_\d{1,32}\/?$/.test(path)) return true;
   if (/^\/api\/studio\/video\/options\/?$/.test(path)) return true;
+  if (/^\/api\/(?:studio\/chat-quotas|meta\/chat-ads-diagnostic)\/?$/.test(path)) return true;
   if (/^\/api\/brand-kit\/chat-library\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ads\/\d{1,32}\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ads-create(?:\/snapshot)?\/?$/.test(path)) return true;

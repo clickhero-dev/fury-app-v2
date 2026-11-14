@@ -173,7 +173,7 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 .ady-chat-draft-attachments { display: flex; flex-direction: column; gap: .4rem; list-style: none; margin: 0 0 .6rem; padding: .15rem; max-height: min(240px, 30dvh); overflow-y: auto; overscroll-behavior: contain; }
 .ady-chat-draft-file { display: flex; align-items: center; flex: 0 0 auto; gap: .65rem; min-width: 0; padding: .45rem; border: 1px solid var(--border-main); border-radius: 12px; background: var(--bg-surface); }
 .ady-chat-file-thumbnail { display: flex; align-items: center; justify-content: center; flex: 0 0 52px; height: 52px; border-radius: 8px; overflow: hidden; background: var(--bg-surface-secondary); color: var(--text-secondary); }
-.ady-chat-file-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.ady-chat-file-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
 .ady-chat-file-thumbnail:has(video) { flex-basis: 96px; height: 64px; }
 .ady-chat-file-thumbnail video { width: 100%; height: 100%; object-fit: contain; }
 .ady-chat-file-copy { flex: 1; min-width: 0; }
@@ -198,7 +198,7 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 .ady-chat-saved-attachment > a { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; color: var(--text-primary); font-size: .8125rem; text-decoration: underline; text-underline-offset: 3px; }
 .ady-chat .ady-chat-saved-attachment > button { min-height: 44px; font-size: .8125rem; }
 .ady-chat-composer-hint { margin: .4rem 0 0; text-align: center; font-size: .6875rem; color: var(--text-secondary); }
-.ady-chat .ady-chat-latest { position: absolute; bottom: calc(100% + .5rem); left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--bg-surface); border-radius: 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .12); font-size: .8rem; }
+.ady-chat .ady-chat-latest { display: flex; width: fit-content; margin: 0 auto .5rem; white-space: nowrap; background: var(--bg-surface); border-radius: 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .12); font-size: .8rem; }
 .ady-chat-overlay { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .5); }
 .ady-chat-drawer { position: fixed; z-index: 61; inset: 0 auto 0 0; width: min(92vw, 360px); display: flex; flex-direction: column; min-height: 0; padding: 1rem .75rem max(.75rem, env(safe-area-inset-bottom)); background: var(--bg-surface); border-right: 1px solid var(--border-main); box-shadow: 12px 0 40px rgb(0 0 0 / .15); }
 .ady-chat-drawer-heading { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; padding-left: .5rem; }
@@ -232,11 +232,17 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   .ady-chat-message { max-width: 94%; padding: .6rem .75rem; }
   .ady-chat-intro { padding: .85rem; }
   .ady-chat-quick button { padding: .6rem .7rem; font-size: .8rem; }
+  .ady-chat-approval :is(img, video),
+  .ady-chat-markdown :is(img, video),
+  .ady-chat-saved-attachment :is(img, video) { max-width: min(100%, 240px); max-height: 220px; object-fit: contain; }
   .ady-chat-composer-area { padding: .65rem .65rem max(.5rem, env(safe-area-inset-bottom)); }
   .ady-chat-composer { gap: .5rem; }
   .ady-chat-composer-hint { font-size: .625rem; }
 }
 @media (max-height: 450px) {
+  .ady-chat-approval :is(img, video),
+  .ady-chat-markdown :is(img, video),
+  .ady-chat-saved-attachment :is(img, video) { max-width: min(100%, 240px); max-height: 150px; object-fit: contain; }
   .ady-chat-draft-attachments { max-height: 86px; }
   .ady-chat-composer-hint { display: none; }
   .ady-chat-header { min-height: 64px; padding-top: .35rem; padding-bottom: .35rem; }

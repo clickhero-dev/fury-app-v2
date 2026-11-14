@@ -44,6 +44,45 @@ function props(overrides: Partial<ChatPlanCardProps> = {}): ChatPlanCardProps {
 afterEach(cleanup);
 
 describe('Plano dentro da conversa', () => {
+  it('mostra parâmetros das tarefas como texto para revisão, sem prometer edição pelo chat', async () => {
+    const user = userEvent.setup();
+    const campaign = task({ id: 'task-2', key: 'campaign', title: 'Campanha', capability: 'propose_campaign', parameters: { name: 'Café', objective: 'OUTCOME_TRAFFIC', daily_budget_cents: 1500, ad_account_id: 'act_123' }, dependsOn: ['marca'] });
+    render(<ChatPlanCard {...props({ plan: plan({ tasks: [task(), campaign] }) })} />);
+    expect(screen.getByText('1500')).toBeInTheDocument();
+    expect(screen.getByText('act_123')).toBeInTheDocument();
+    expect(screen.getByText('Depende de: Consultar a marca.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar plano' }));
+    expect(screen.queryByText(/peça uma revisão nesta conversa/i)).toBeNull();
+    expect(screen.getByText(/não é possível alterar instruções, datas ou valores/i)).toBeInTheDocument();
+  });
+
+  it('não expõe parâmetros desconhecidos ou objetos aninhados', () => {
+    const item = task({ capability: 'draft_text', parameters: { prompt: { private: 'segredo interno' }, token: 'token secreto' } });
+    render(<ChatPlanCard {...props({ plan: plan({ tasks: [item] }) })} />);
+    expect(screen.queryByText('token secreto')).toBeNull();
+    expect(screen.queryByText('segredo interno')).toBeNull();
+    expect(screen.getAllByText('Detalhe indisponível para visualização.')).toHaveLength(2);
+  });
+
+  it('acompanha plano complexo sem contar falhas nem aprovações como concluídas', () => {
+    const tasks = [
+      task({ status: 'completed', result: { summary: 'Marca consultada.' } }),
+      task({ id: 'task-2', key: 'texto', title: 'Preparar texto', capability: 'draft_text', parameters: { prompt: 'Criar legenda' }, dependsOn: ['marca'], status: 'completed' }),
+      task({ id: 'task-3', key: 'imagem', title: 'Criar imagem', capability: 'propose_image', parameters: { prompt: 'Criar imagem', reference_image_urls: ['https://example.test/a.png', 'https://example.test/b.png'] }, dependsOn: ['texto'], status: 'waiting_approval', approvalId: 'approval-1' }),
+      task({ id: 'task-4', key: 'revisao', title: 'Revisar', capability: 'manual', parameters: { instructions: 'Conferir a campanha' }, dependsOn: ['imagem'], status: 'pending' }),
+    ] as ChatPlanTask[];
+    const input = props({ plan: plan({ status: 'waiting_approval', tasks }) });
+    const view = render(<ChatPlanCard {...input} />);
+    expect(screen.getByText('2 de 4 tarefas concluídas')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveValue(2);
+    expect(screen.queryByRole('button', { name: 'Concluir tarefa Revisar' })).toBeNull();
+    expect(screen.getByText('https://example.test/a.png, https://example.test/b.png')).toBeInTheDocument();
+    view.rerender(<ChatPlanCard {...input} plan={plan({ status: 'failed', version: 4, tasks: tasks.map(item => item.key === 'imagem' ? { ...item, status: 'failed', error: 'A imagem falhou.' } : item) })} />);
+    expect(screen.getByText('2 de 4 tarefas concluídas')).toBeInTheDocument();
+    expect(screen.getByText('A imagem falhou.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continuar plano' })).toBeEnabled();
+  });
+
   it('exibe títulos e resultados curtos completos sem exigir outro clique', () => {
     render(<ChatPlanCard {...props({ plan: plan({ status: 'completed', tasks: [task({ status: 'completed', result: { summary: 'Texto preparado.', text: 'Conheça uma marca feita para você.' } })] }) })} />);
     expect(screen.getByText('Consultar a marca', { exact: true })).toBeVisible();

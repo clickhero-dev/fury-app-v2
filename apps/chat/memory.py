@@ -92,12 +92,12 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
     """Resume lotes limitados; só grava se o resumo e o snapshot forem válidos."""
     import json
     import asyncio
-    query = """SELECT id,role,content FROM chat_messages WHERE conversation_id=$1 AND (created_at,id) <= (SELECT created_at,id FROM chat_messages WHERE conversation_id=$1 AND role='assistant' ORDER BY created_at,id OFFSET $2 LIMIT 1) ORDER BY created_at,id"""
+    query = """SELECT m.id,m.role,m.content || COALESCE((SELECT E'\nPergunta de esclarecimento: ' || q.question || E'\nOpções: ' || q.choices::text FROM chat_clarifications q WHERE q.message_id=m.id AND q.conversation_id=m.conversation_id), '') AS content FROM chat_messages m LEFT JOIN chat_response_messages rm_outer ON rm_outer.message_id=m.id LEFT JOIN chat_response_runs run_outer ON run_outer.id=rm_outer.run_id AND run_outer.conversation_id=m.conversation_id LEFT JOIN chat_messages owner ON owner.id=run_outer.user_message_id AND owner.conversation_id=m.conversation_id WHERE m.conversation_id=$1 AND (m.created_at,m.id) <= (SELECT created_at,id FROM chat_messages WHERE conversation_id=$1 AND role='assistant' AND NOT EXISTS (SELECT 1 FROM chat_response_messages rm JOIN chat_response_runs r ON r.id=rm.run_id WHERE rm.message_id=chat_messages.id AND r.assistant_message_id IS DISTINCT FROM chat_messages.id) ORDER BY created_at,id OFFSET $2 LIMIT 1) ORDER BY COALESCE(owner.created_at,m.created_at),COALESCE(owner.id,m.id),CASE WHEN owner.id IS NULL THEN 0 ELSE 1 END,rm_outer.position,m.created_at,m.id"""
 
     async def snapshot(conn, response_count, lock=False):
         if message_repository:
             return await message_repository.summary_rows(conn, conversation_id, response_count, lock=lock)
-        return await conn.fetch(query + (' FOR UPDATE' if lock else ''), conversation_id, response_count - 1)
+        return await conn.fetch(query + (' FOR UPDATE OF m' if lock else ''), conversation_id, response_count - 1)
 
     async with pool.acquire() as conn:
         previous_raw = await conn.fetchval('SELECT facts FROM chat_memories WHERE conversation_id=$1', conversation_id)
@@ -121,15 +121,25 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
                     continue
             users = [row['id'] for row in candidate if row['role'] == 'user']
             assistants = [row['id'] for row in candidate if row['role'] == 'assistant']
-            if len(users) != response_count or len(assistants) != response_count:
+            if assistants and await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM chat_clarifications
+                WHERE conversation_id=$1 AND message_id=ANY($2::uuid[])
+                AND dismissed_at IS NULL AND (selected_index IS NULL OR answer_message_id IS NULL OR NOT (answer_message_id=ANY($2::uuid[]))))''',
+                conversation_id, [row['id'] for row in candidate]):
+                continue
+            if len(users) != response_count or len(assistants) < response_count:
                 continue
             if [row['role'] for row in candidate] != ['user', 'assistant'] * response_count:
-                # Interleaved turns are safe only when every selected message is
-                # paired to a completed run inside the same snapshot.
-                paired = await conn.fetchval('''SELECT count(DISTINCT user_message_id)=$4
-                    AND count(DISTINCT assistant_message_id)=$4 FROM chat_response_runs
-                    WHERE conversation_id=$1 AND status='completed'
-                    AND user_message_id=ANY($2::uuid[]) AND assistant_message_id=ANY($3::uuid[])''',
+                # Every response and every user must belong to completed runs,
+                # and no selected run may have a reply outside this snapshot.
+                paired = await conn.fetchval('''SELECT count(DISTINCT r.user_message_id)=$4
+                    AND count(DISTINCT r.assistant_message_id)=$4
+                    AND NOT EXISTS (SELECT 1 FROM chat_response_messages rm
+                        WHERE rm.run_id=ANY(array_agg(r.id)) AND NOT (rm.message_id=ANY($3::uuid[])))
+                    AND (SELECT count(*) FROM chat_response_messages rm
+                        WHERE rm.run_id=ANY(array_agg(r.id)) AND rm.message_id=ANY($3::uuid[]))=cardinality($3::uuid[])
+                    FROM chat_response_runs r
+                    WHERE r.conversation_id=$1 AND r.status='completed'
+                    AND r.user_message_id=ANY($2::uuid[]) AND r.assistant_message_id=ANY($3::uuid[])''',
                     conversation_id, users, assistants, response_count)
                 if not paired:
                     continue

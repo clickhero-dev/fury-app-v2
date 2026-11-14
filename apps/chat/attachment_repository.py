@@ -28,15 +28,24 @@ class AttachmentRepository:
         self.db, self.tenant_id, self.user_id = db, tenant_id, user_id
 
     async def summary_rows(self, conn, conversation_id, min_responses, *, lock=False):
-        query = '''SELECT m.id,m.role,m.content FROM chat_messages m
+        query = '''SELECT m.id,m.role,m.content || COALESCE(
+            (SELECT E'\nPergunta de esclarecimento: ' || q.question || E'\nOpções: ' || q.choices::text
+             FROM chat_clarifications q WHERE q.message_id=m.id AND q.conversation_id=c.id), '') AS content FROM chat_messages m
             JOIN chat_conversations c ON c.id=m.conversation_id
+            LEFT JOIN chat_response_messages rm_outer ON rm_outer.message_id=m.id
+            LEFT JOIN chat_response_runs run_outer ON run_outer.id=rm_outer.run_id AND run_outer.conversation_id=c.id
+            LEFT JOIN chat_messages owner ON owner.id=run_outer.user_message_id AND owner.conversation_id=c.id
             WHERE c.id=$1 AND c.tenant_id=$2 AND c.user_id=$3
             AND (m.created_at,m.id) <= (SELECT created_at,id FROM chat_messages
-                WHERE conversation_id=$1 AND role='assistant' ORDER BY created_at,id OFFSET $4 LIMIT 1)
+                WHERE conversation_id=$1 AND role='assistant'
+                  AND NOT EXISTS (SELECT 1 FROM chat_response_messages rm JOIN chat_response_runs r ON r.id=rm.run_id
+                    WHERE rm.message_id=chat_messages.id AND r.assistant_message_id IS DISTINCT FROM chat_messages.id)
+                ORDER BY created_at,id OFFSET $4 LIMIT 1)
             AND NOT EXISTS (SELECT 1 FROM chat_attachments a WHERE a.message_id=m.id
                 AND a.conversation_id=c.id AND a.tenant_id=c.tenant_id AND a.user_id=c.user_id
                 AND a.metadata->>'chatMessageCompacted'='true')
-            ORDER BY m.created_at,m.id'''
+            ORDER BY COALESCE(owner.created_at,m.created_at),COALESCE(owner.id,m.id),
+                CASE WHEN owner.id IS NULL THEN 0 ELSE 1 END,rm_outer.position,m.created_at,m.id'''
         return await conn.fetch(query + (' FOR UPDATE OF m' if lock else ''),
                                 conversation_id, self.tenant_id, self.user_id, min_responses - 1)
 
