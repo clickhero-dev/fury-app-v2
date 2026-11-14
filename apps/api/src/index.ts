@@ -41,6 +41,8 @@ import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
 import { initializeBullBoardRoutes, shutdownBullBoardMetrics } from './routes/bull-board.routes.js';
+import { startupGate } from './middleware/startup-gate.js';
+import { handleCriticalFailure, isCritical, setStatus } from './lib/api-state.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -70,6 +72,7 @@ app.use(express.json({ limit: '10mb', verify: (req, _res, buffer) => {
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);
 app.use(requestLogger);
+app.use(startupGate);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
@@ -244,11 +247,10 @@ app.use((req, res) => {
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
   if (NODE_ENV !== 'test') {
-    // 🚀 Run API startup workflow: db check → migrations → redis → env validation
-    await runApiStartupWorkflow();
-
-    // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
-    await seedStartup();
+    let markStartupReady: (() => void) | undefined;
+    const startupReady = new Promise<void>((resolve) => {
+      markStartupReady = resolve;
+    });
 
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
@@ -276,7 +278,11 @@ app.use((req, res) => {
       };
       console.log('📋 Registered routes:');
       printRoutes((app as any)._router.stack);
-      
+
+      // Workers só podem começar depois do probe, migrations e seed. O
+      // listener já está disponível para GET /api/health; o startupGate mantém
+      // todas as demais rotas fechadas enquanto esta promise não resolve.
+      void startupReady.then(() => {
       void ensureStudioAssetsDir().catch((error) => {
         console.error('Failed to prepare studio assets dir:', error);
       });
@@ -334,7 +340,22 @@ app.use((req, res) => {
       void startChatPlanWorker(chatPlanRuntime.executor).catch(() => {
         console.error('[chat-plan] worker não iniciou; a fila permanece persistida para recuperação');
       });
+      });
     });
+
+    try {
+      // 🚀 Run API startup workflow: db check → migrations → redis → env validation
+      await runApiStartupWorkflow();
+
+      // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
+      await seedStartup();
+      setStatus('healthy');
+      markStartupReady?.();
+    } catch (error) {
+      // Mantém o health acessível durante a janela de diagnóstico antes do exit.
+      if (!isCritical()) handleCriticalFailure('API startup failed');
+      return;
+    }
 
     // Tratamento de encerramento (único handler)
     process.on('SIGTERM', () => {
