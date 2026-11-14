@@ -68,7 +68,7 @@ import { FaqPublicPage } from './pages/help/FaqPublicPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/dashboard" replace />,
   },
   {
     path: '/login',
