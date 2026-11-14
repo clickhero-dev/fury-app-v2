@@ -7,11 +7,11 @@ Funcionalidade: acesso automático ao trial público
     Dado um link de acesso válido recebido após o webhook de trial
     Quando o usuário entra no Ady
     Então a sessão é persistida, o chat é aberto sem onboarding Meta
-    E a troca obrigatória de senha é concluída antes de continuar
+    E o acesso não é bloqueado pela criação de senha
 */
 import { expect, test } from '@playwright/test';
 
-test('Trial público: o link cria sessão, abre o chat e exige nova senha', async ({ page }) => {
+test('Trial público: o link cria sessão, abre o chat sem exigir nova senha', async ({ page }) => {
   const apiCalls: Array<{ method: string; path: string; body?: unknown }> = [];
 
   await page.route('http://127.0.0.1:3100/api/**', async (route) => {
@@ -28,10 +28,6 @@ test('Trial público: o link cria sessão, abre o chat e exige nova senha', asyn
           user: { id: 'trial-user', name: 'Ana Trial', email: 'ana@example.test', role: 'owner', tenantId: 'trial-tenant', mustChangePassword: true },
         },
       } });
-      return;
-    }
-    if (path === '/api/chat/conversations') {
-      await route.fulfill({ json: [] });
       return;
     }
     if (path === '/api/auth/set-password' && request.method() === 'POST') {
@@ -57,21 +53,13 @@ test('Trial público: o link cria sessão, abre o chat e exige nova senha', asyn
   await page.goto(`/trial/acesso#token=${magicToken}`);
 
   await expect(page).toHaveURL(/\/chat$/);
-  await expect(page.getByRole('dialog', { name: 'Crie sua senha' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Crie sua senha' })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => ({
     token: localStorage.getItem('token'),
     trial: localStorage.getItem('fury-public-trial'),
     passwordPending: localStorage.getItem('fury-trial-password-pending'),
   }))).toEqual({ token: 'trial-access-token', trial: 'true', passwordPending: 'true' });
 
-  await page.getByLabel('Nova senha').fill('NovaSenha1!');
-  await page.getByLabel('Confirmar senha').fill('NovaSenha1!');
-  await page.getByRole('button', { name: 'Salvar senha' }).click();
-
-  await expect(page.getByRole('dialog', { name: 'Crie sua senha' })).toBeHidden();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('fury-trial-password-pending'))).toBeNull();
-  await page.goto('/dashboard');
-  await expect(page).toHaveURL(/\/dashboard$/);
   expect(apiCalls).toContainEqual({ method: 'POST', path: '/api/public/trial/access', body: { token: magicToken } });
-  expect(apiCalls).toContainEqual({ method: 'POST', path: '/api/auth/set-password', body: { newPassword: 'NovaSenha1!' } });
+  expect(apiCalls.some(({ path }) => path === '/api/auth/set-password')).toBe(false);
 });
