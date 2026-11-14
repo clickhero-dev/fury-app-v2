@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const app = 'http://127.0.0.1:5175';
+const app = process.env.E2E_SESSION_URL ?? 'http://127.0.0.1:5175';
 
 test('trial preserva sessão ao navegar, abrir outra aba e reiniciar o navegador', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'fury-session-e2e-'));
@@ -38,14 +38,14 @@ test('trial preserva sessão ao navegar, abrir outra aba e reiniciar o navegador
     await page.goto(`${app}/configuracoes`);
     await expect(page).toHaveURL(/\/configuracoes/);
     const anotherTab = await context.newPage();
-    await anotherTab.goto(`${app}/dashboard`);
+    await anotherTab.goto(`${app}/`);
     await expect(anotherTab).toHaveURL(/\/dashboard$/);
     expect(await anotherTab.evaluate(() => localStorage.getItem('token'))).toBe('trial-token');
     await context.close();
     context = await startBrowser();
     const reopened = context.pages()[0] ?? await context.newPage();
-    await reopened.goto(`${app}/configuracoes`);
-    await expect(reopened).toHaveURL(/\/configuracoes/);
+    await reopened.goto(`${app}/`);
+    await expect(reopened).toHaveURL(/\/dashboard$/);
     expect(await reopened.evaluate(() => [localStorage.getItem('token'), localStorage.getItem('refreshToken')])).toEqual(['trial-token', 'trial-refresh']);
     expect(calls).toEqual(['/api/public/trial/access']);
   } finally {
@@ -86,12 +86,18 @@ test('login por senha recupera a sessão após reiniciar o navegador', async () 
     await context.close();
     context = await startBrowser();
     const reopened = context.pages()[0] ?? await context.newPage();
-    await reopened.goto(`${app}/configuracoes`);
-    await expect(reopened).toHaveURL(/\/configuracoes/);
+    await reopened.goto(`${app}/`);
+    await expect(reopened).toHaveURL(/\/dashboard$/);
     expect(await reopened.evaluate(() => [localStorage.getItem('token'), localStorage.getItem('refreshToken')])).toEqual(['login-token', 'login-refresh']);
     expect(loginCount).toBe(1);
   } finally {
     await context?.close();
     await rm(profile, { recursive: true, force: true });
   }
+});
+
+
+test('raiz sem sessão direciona para login', async ({ page }) => {
+  await page.goto(`${app}/`);
+  await expect(page).toHaveURL(/\/login$/);
 });
