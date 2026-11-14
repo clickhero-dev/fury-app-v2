@@ -387,7 +387,7 @@ def create_app():
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
                 provider_active = True
-                with provider_retry_scope() as provider_state:
+                with provider_retry_scope(run_id) as provider_state:
                     async for event in checked_agent_events(agent.arun(conversation_context(agent_history()), stream=True), provider_state):
                         content = getattr(event, 'content', None)
                         if isinstance(content, str) and content:

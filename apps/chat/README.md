@@ -136,3 +136,26 @@ simulados no transporte. Esses testes não comprovam capacidade multimodal do pr
 o smoke externo e o build Docker pertencem ao gate de integração. Para a suíte legada,
 `CHAT_TEST_DATABASE_URL` deve apontar a um banco descartável com migrations aplicadas;
 `CHAT_TITLE_TEST_DATABASE_URL` habilita também o teste real dos títulos.
+
+### Continuidade e falhas do provedor (#452)
+
+O transporte OpenRouter repete somente a requisição atual, no máximo três tentativas,
+antes de qualquer saída ou ferramenta observada no turno. Timeout/conexão, 429 e 5xx
+usam backoff exponencial com jitter; `Retry-After` aceita segundos ou data HTTP. O
+orçamento acumulado de espera é 20 segundos e o de retry da requisição é 200 segundos.
+Uma espera indicada maior que o orçamento encerra sem antecipar o retry. Erros de
+requisição, autenticação, cobrança e contexto não são repetidos automaticamente.
+
+O agente e suas ferramentas têm prazo total de 240 segundos. EOF sem término SSE,
+`finish_reason: error`, saída truncada por limite ou filtro geram erro recuperável pelo
+tratamento de run existente. Não se reinicia automaticamente o agente depois de
+conteúdo parcial ou ferramenta: o usuário usa **Retomar resposta**, somente leitura,
+com o `user_message_id` original e propostas preservadas. O deadline cobre a execução
+do agente; preparação/compressão de contexto mantém seus limites HTTP existentes.
+
+Logs `provider_attempt` correlacionam request UUID local, run UUID, modelo validado,
+tentativa, status e fases `initial_failure`, `retry`, `recovered`, `final_failure`.
+Não incluem corpo, credencial nem conteúdo de conversa. `recovered` indica aceitação
+do transporte após retry; falha posterior do stream segue a telemetria de falha de run.
+A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
+operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.

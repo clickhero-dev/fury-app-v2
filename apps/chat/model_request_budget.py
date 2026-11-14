@@ -2,6 +2,13 @@
 import json
 import asyncio
 import re
+import random
+import time
+import math
+import logging
+from uuid import uuid4
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Callable
@@ -14,6 +21,9 @@ from memory import count_tokens
 MAX_MODEL_REQUEST_TOKENS = 50_000
 MODEL_RESPONSE_RESERVE_TOKENS = 4_096
 DEEPSEEK_V4_MODEL = 'deepseek/deepseek-v4-pro-0813'
+MAX_PROVIDER_ATTEMPTS = 3
+MAX_RETRY_WAIT_SECONDS = 20
+MAX_REQUEST_RETRY_SECONDS = 200
 
 
 class ModelRequestBudgetExceeded(OpenAIError):
@@ -54,8 +64,8 @@ _retry_state = ContextVar('provider_retry_state', default=None)
 
 
 @contextmanager
-def provider_retry_scope():
-    state = {'unsafe': False, 'error_kind': 'error'}
+def provider_retry_scope(run_id=None):
+    state = {'unsafe': False, 'error_kind': 'error', 'run_id': str(run_id) if run_id else None}
     token = _retry_state.set(state)
     try:
         yield state
@@ -75,6 +85,7 @@ class SanitizedEventStream(httpx.AsyncByteStream):
         self.events = self.parse_events()
         self.first = None
         self.error_code = None
+        self.terminal = False
 
     async def parse_events(self):
         pending = b''
@@ -95,6 +106,8 @@ class SanitizedEventStream(httpx.AsyncByteStream):
                 cleaned = self.clean_event(pending)
                 if cleaned is not None:
                     yield cleaned
+            if not self.terminal:
+                raise httpx.ReadError("Model provider stream incomplete")
         except httpx.TimeoutException:
             if self.state is not None:
                 self.state['error_kind'] = 'timeout'
@@ -111,18 +124,25 @@ class SanitizedEventStream(httpx.AsyncByteStream):
         if not event_error and not any(line.startswith(b'data:') or line == b'data' for line in lines):
             return None
         if data == b'[DONE]' and not event_error:
+            self.terminal = True
             return b'data: [DONE]\n\n'
         try:
             payload = json.loads(data)
         except (ValueError, UnicodeDecodeError):
             payload = None
         if event_error or not isinstance(payload, dict) or 'error' in payload or not isinstance(payload.get('choices'), list):
+            self.terminal = True
             error = payload.get('error') if isinstance(payload, dict) else None
             code = error.get('code') if isinstance(error, dict) else None
             self.error_code = code if type(code) is int else None
             if self.state is not None:
                 self.state['error_kind'] = 'auth' if code in (401, 403) else 'error'
             return b'data: ' + json.dumps({'error': {'message': 'Model provider request failed', 'code': self.error_code}}).encode() + b'\n\n'
+        reasons = [choice.get('finish_reason') for choice in payload['choices'] if isinstance(choice, dict)]
+        if any(reason in ('error', 'length', 'content_filter') for reason in reasons):
+            raise httpx.ReadError('Model provider stream failed')
+        if any(reason in ('stop', 'tool_calls', 'function_call') for reason in reasons):
+            self.terminal = True
         return b'data: ' + json.dumps(payload).encode() + b'\n\n'
 
     async def prime(self):
@@ -170,7 +190,48 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
         if not is_chat:
             return await self.inner.handle_async_request(request)
         state = _retry_state.get()
-        for attempt in range(3):
+        correlation = uuid4().hex
+        started = time.monotonic()
+        waited = 0.0
+        run_id = state.get('run_id') if state else None
+        try:
+            model = json.loads(request.content).get('model', '')
+        except (ValueError, AttributeError):
+            model = ''
+        model = model if isinstance(model, str) and re.fullmatch(r'[a-zA-Z0-9/._:-]{1,128}', model) else 'unknown'
+
+        async def retry(attempt, status=None, headers=None, *, retryable=True):
+            nonlocal waited
+            log = logging.getLogger('ady.chat')
+            log.warning('provider_attempt request=%s run=%s model=%s phase=%s attempt=%s status=%s', correlation, run_id, model, 'initial_failure' if attempt == 0 else 'failure', attempt + 1, status)
+            delay = 0.1 * (2 ** attempt) + random.uniform(0, 0.1)
+            hint = (headers or {}).get('retry-after')
+            if hint:
+                try:
+                    seconds = float(hint)
+                except ValueError:
+                    try:
+                        seconds = (parsedate_to_datetime(hint) - datetime.now(timezone.utc)).total_seconds()
+                    except (ValueError, TypeError, OverflowError):
+                        seconds = 0
+                if math.isfinite(seconds):
+                    delay = max(delay, seconds)
+            if (not retryable or state is None or state['unsafe']
+                    or attempt >= MAX_PROVIDER_ATTEMPTS - 1
+                    or waited + delay > MAX_RETRY_WAIT_SECONDS
+                    or time.monotonic() - started + delay > MAX_REQUEST_RETRY_SECONDS):
+                log.warning('provider_attempt request=%s run=%s model=%s phase=final_failure attempt=%s status=%s', correlation, run_id, model, attempt + 1, status)
+                return False
+            log.info('provider_attempt request=%s run=%s model=%s phase=retry attempt=%s status=%s', correlation, run_id, model, attempt + 2, status)
+            waited += delay
+            await asyncio.sleep(delay)
+            return True
+
+        def recovered(attempt):
+            if attempt:
+                logging.getLogger('ady.chat').info('provider_attempt request=%s run=%s model=%s phase=recovered attempt=%s', correlation, run_id, model, attempt + 1)
+
+        for attempt in range(MAX_PROVIDER_ATTEMPTS):
             if state is not None:
                 state['error_kind'] = 'error'
             try:
@@ -178,10 +239,13 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
             except httpx.TimeoutException:
                 if state is not None:
                     state['error_kind'] = 'timeout'
-                if state is not None and not state['unsafe'] and attempt < 2:
-                    await asyncio.sleep(0.1 * (2 ** attempt))
+                if await retry(attempt):
                     continue
                 raise httpx.ReadTimeout('Model provider timeout', request=request) from None
+            except (httpx.NetworkError, httpx.RemoteProtocolError):
+                if await retry(attempt):
+                    continue
+                raise httpx.ConnectError('Model provider connection failed', request=request) from None
             if response.status_code < 400:
                 if 'text/event-stream' in response.headers.get('content-type', '').lower():
                     stream = SanitizedEventStream(response.stream, state)
@@ -189,17 +253,19 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                         await stream.prime()
                     except httpx.TimeoutException:
                         await response.aclose()
-                        if state is not None and not state['unsafe'] and attempt < 2:
-                            await asyncio.sleep(0.1 * (2 ** attempt))
+                        if await retry(attempt):
                             continue
                         raise httpx.ReadTimeout('Model provider timeout', request=request) from None
                     except BaseException:
                         await response.aclose()
                         raise
-                    if stream.error_code in (429, 500, 502, 503, 504) and state is not None and not state['unsafe'] and attempt < 2:
+                    if stream.error_code is not None:
                         await response.aclose()
-                        await asyncio.sleep(0.1 * (2 ** attempt))
-                        continue
+                        code = stream.error_code
+                        if await retry(attempt, code, response.headers, retryable=code == 429 or 500 <= code <= 599):
+                            continue
+                        return httpx.Response(code if 400 <= code <= 599 else 502, json={'error': {'message': 'Model provider request failed'}}, request=request)
+                    recovered(attempt)
                     return httpx.Response(response.status_code, headers=response.headers, stream=stream, extensions=response.extensions, request=request)
                 try:
                     streaming = json.loads(request.content).get('stream') is True
@@ -216,13 +282,13 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                 await response.aclose()
                 if not isinstance(payload, dict) or 'error' in payload or not isinstance(payload.get('choices'), list):
                     return httpx.Response(200, json={'error': {'message': 'Model provider request failed'}}, request=request)
+                recovered(attempt)
                 return httpx.Response(200, json=payload, request=request)
             status = response.status_code
             if state is not None:
                 state['error_kind'] = 'auth' if status in (401, 403) else 'error'
             await response.aclose()
-            if (status == 429 or 500 <= status <= 599) and state is not None and not state['unsafe'] and attempt < 2:
-                await asyncio.sleep(0.1 * (2 ** attempt))
+            if await retry(attempt, status, response.headers, retryable=status == 429 or 500 <= status <= 599):
                 continue
             return httpx.Response(status, json={'error': {'message': 'Model provider request failed'}}, request=request)
 
