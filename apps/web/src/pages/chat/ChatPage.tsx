@@ -17,6 +17,7 @@ import { ChatComposer } from './ChatComposer';
 import { MessageAttachments } from './MessageAttachments';
 import type { Attachment } from './chat-media';
 import { AdySymbol } from '../../components/AdySymbol';
+import { useChatViewport } from './useChatViewport';
 import './chat.css';
 import './chat-clarifications.css';
 
@@ -197,6 +198,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const optionsRef = useRef<HTMLButtonElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
+  useChatViewport(chatRef);
   const followLatest = useRef(true);
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -254,6 +257,16 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     const container = messagesRef.current;
     if (container && followLatest.current) container.scrollTop = container.scrollHeight;
   }, [messages, approvals, plans.plans, plans.errors, plans.error, responseRun, busy, error]);
+  useLayoutEffect(() => {
+    const container = messagesRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    // Composer/keyboard changes resize the scrollport without changing messages.
+    const observer = new ResizeObserver(() => {
+      if (followLatest.current) container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const version = selectionVersion.current;
     request('/conversations').then(r => r.json()).then((items: Conversation[]) => {
@@ -509,7 +522,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
 </button>)}</nav>
 </aside>);
   return <DialogPrimitive.Root open={historyOpen} onOpenChange={setHistoryOpen}>
-    <div className="ady-chat">
+    <div ref={chatRef} className="ady-chat">
       {!historyOpen && <div className="ady-chat-desktop-history">
 <h2>Conversas</h2>{history}</div>}
       <DialogPrimitive.Portal>
@@ -569,7 +582,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
 </DialogPrimitive.Root>
-<div ref={messagesRef} onScroll={e => { const el = e.currentTarget; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80; followLatest.current = nearBottom; setAwayFromLatest(!nearBottom); }} className="ady-chat-messages" aria-live="polite">{messages.length === 0 && approvals.length === 0 && plans.plans.length === 0 && <div className="ady-chat-welcome">
+<div ref={messagesRef} onLoadCapture={() => { if (messagesRef.current && followLatest.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; }} onScroll={e => { const el = e.currentTarget; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80; followLatest.current = nearBottom; setAwayFromLatest(!nearBottom); }} className="ady-chat-messages" aria-live="polite">{messages.length === 0 && approvals.length === 0 && plans.plans.length === 0 && <div className="ady-chat-welcome">
 <div className="ady-chat-intro">
 <h1>Como posso ajudar?</h1>
 <p>Conte sua ideia ou escolha uma sugestão para começar.</p>

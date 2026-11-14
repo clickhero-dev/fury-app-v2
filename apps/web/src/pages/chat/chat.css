@@ -222,8 +222,8 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   .ady-chat .ady-chat-history-toggle { display: inline-flex; font-size: 0; width: 44px; height: 44px; padding: 0; justify-content: center; flex-shrink: 0; border-color: transparent; border-radius: 50%; }
 }
 @media (max-width: 700px) {
-  .ady-chat { height: calc(100dvh - 1rem); margin: .5rem; border-radius: 14px; }
-  .ady-chat-header { padding: .65rem 3.5rem .65rem .5rem; gap: .4rem; min-height: 76px; }
+  .ady-chat { position: fixed; top: var(--chat-viewport-top, 0px); left: 0; width: calc(100% - 1rem); height: calc(var(--chat-viewport-height, 100dvh) - 1rem); margin: .5rem; border-radius: 14px; }
+  .ady-chat-header { padding: .65rem 3.5rem .65rem .5rem; gap: .4rem; min-height: 112px; }
   .ady-chat-header > .ady-chat-avatar { flex-basis: 36px; width: 36px; height: 36px; }
   .ady-chat-identity { gap: 0 .35rem; }
   .ady-chat-identity > span { font-size: .6875rem; }
@@ -253,3 +253,11 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 @media (forced-colors: active) {
   .ady-chat-input-shell:focus-within { outline: 2px solid Highlight; outline-offset: 2px; }
 }
+
+/* The shell controls belong above the message scrollport on small chat screens. */
+@media (max-width: 700px) {
+  body:has(.ady-chat) .ady-notification-controls { flex-direction: column; }
+  body:has(.ady-chat) .ady-notification-controls > button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  body:has(.ady-chat) .ady-notification-controls > [role=dialog] { top: 100%; }
+}
+@media (max-width: 700px) and (max-height: 450px) { .ady-chat-header { min-height: 112px; } }
