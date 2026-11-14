@@ -1,89 +1,69 @@
 import Redis from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 let redisClient: Redis | null = null;
 let readyPromise: Promise<void> | null = null;
 
-/**
- * Retorna a instância singleton do Redis.
- * A conexão é iniciada na primeira chamada.
- */
+function redisUrl(): string {
+  const value = process.env.REDIS_URL;
+  if (!value && (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test')) {
+    return 'redis://localhost:6379';
+  }
+  try {
+    if (!value) throw new Error();
+    const url = new URL(value);
+    if (!['redis:', 'rediss:'].includes(url.protocol) || !url.hostname) throw new Error();
+    return value;
+  } catch {
+    throw new Error('REDIS_CONFIG_INVALID');
+  }
+}
+
 export function getRedis(): Redis {
-  if (!redisClient) {
-    redisClient = new Redis(redisUrl, {
+  if (!redisClient || redisClient.status === 'end') {
+    redisClient = new Redis(redisUrl(), {
       maxRetriesPerRequest: null,
-      enableReadyCheck: true,   // AGORA HABILITADO
+      enableReadyCheck: true,
       retryStrategy: (times) => {
-        // Tenta reconectar a cada 2 segundos, até 10 vezes
         if (times > 10) {
-          console.error('Redis connection failed after 10 retries');
-          return null; // desiste
+          console.error('[redis] REDIS_RETRIES_EXHAUSTED');
+          return null;
         }
         return Math.min(times * 200, 2000);
       },
     });
-
-    redisClient.on('error', (err) => {
-      console.error('Redis error:', err);
-    });
-
-    redisClient.on('connect', () => {
-      console.log('Redis TCP connection established');
-    });
-
-    redisClient.on('ready', () => {
-      console.log('✅ Redis ready to accept commands');
-    });
+    redisClient.on('error', () => console.error('[redis] REDIS_CONNECTION_ERROR'));
+    redisClient.on('connect', () => console.log('[redis] TCP conectado'));
+    redisClient.on('ready', () => console.log('[redis] pronto'));
   }
   return redisClient;
 }
 
-/**
- * Aguarda até que a conexão Redis esteja pronta para receber comandos.
- * Deve ser chamada antes de qualquer operação crítica (ex.: blpop, rpush, duplicate).
- */
-export async function waitForRedisReady(): Promise<void> {
-  const client = getRedis();
-  if (client.status === 'ready') {
-    return;
-  }
-  if (readyPromise) {
-    return readyPromise;
-  }
-  readyPromise = new Promise<void>((resolve, reject) => {
-    if (client.status === 'ready') {
-      resolve();
-      return;
-    }
-    const onReady = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = (err: Error) => {
-      cleanup();
-      reject(err);
-    };
-    const cleanup = () => {
-      client.off('ready', onReady);
-      client.off('error', onError);
-      readyPromise = null;
-    };
+/** Aguarda a prontidão, tolerando erros transitórios até o fim dos retries ou timeout. */
+export function awaitRedisReady(client: Redis): Promise<void> {
+  if (client.status === 'ready') return Promise.resolve();
+  if (client.status === 'end') return Promise.reject(new Error('REDIS_CONNECTION_ENDED'));
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => { clearTimeout(timer); client.off('ready', onReady); client.off('end', onEnd); };
+    const onReady = () => { cleanup(); resolve(); };
+    const onEnd = () => { cleanup(); reject(new Error('REDIS_CONNECTION_ENDED')); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('REDIS_CONNECTION_TIMEOUT')); }, 25_000);
     client.once('ready', onReady);
-    client.once('error', onError);
+    client.once('end', onEnd);
   });
+}
+
+export function waitForRedisReady(): Promise<void> {
+  if (!readyPromise) {
+    const client = getRedis();
+    readyPromise = awaitRedisReady(client).finally(() => { readyPromise = null; });
+  }
   return readyPromise;
 }
 
-/**
- * Fecha a conexão Redis de forma graciosa.
- */
 export async function closeRedis(): Promise<void> {
-  if (readyPromise) {
-    await readyPromise.catch(() => {});
-  }
   if (redisClient) {
-    await redisClient.quit();
+    redisClient.disconnect();
     redisClient = null;
-    readyPromise = null;
   }
+  if (readyPromise) await readyPromise.catch(() => {});
 }
