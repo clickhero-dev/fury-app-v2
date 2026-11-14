@@ -18,7 +18,7 @@ const swaggerJson = JSON.parse(readFileSync(join(__dirname, '..', 'swagger.json'
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
 import { startNotificationRetentionWorker, stopNotificationRetentionWorker } from './workers/notification-retention.worker.js';
 import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue, closeMetaSyncQueue } from './lib/queue.js';
-import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
+import { stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
 import { startSubscriptionRenewalManager, stopSubscriptionRenewalManager } from './lib/subscription-renewal-manager.js';
@@ -29,7 +29,8 @@ import { startComplianceSweeper, stopComplianceSweeper } from './workers/complia
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
-import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
+import { stopMetaSyncManager } from './lib/meta-sync-manager.js';
+import { startObservedInitialSyncWorker, startObservedMetaSyncManager, stopObservedMetaSyncWorkers } from './lib/meta-sync-startup.js';
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
@@ -283,9 +284,7 @@ app.use((req, res) => {
       void initializeBullBoardRoutes().catch((error) => {
         console.error('Failed to start Bull Board metrics recorder:', error);
       });
-      void startSyncJobsWorker().catch((error) => {
-        console.error('Failed to start Meta sync worker:', error);
-      });
+      void startObservedInitialSyncWorker();
       void startRuleEngine().catch((error) => {
         console.error('Failed to start rule engine:', error);
       });
@@ -317,9 +316,7 @@ app.use((req, res) => {
       void startGoogleSyncManager().catch((error) => {
         console.error('Failed to start google-sync manager:', error);
       });
-      void startMetaSyncManager().catch((error) => {
-        console.error('Failed to start meta-sync manager:', error);
-      });
+      void startObservedMetaSyncManager();
       void startLeadStatusManager().catch((error) => {
         console.error('Failed to start lead-status manager:', error);
       });
@@ -342,6 +339,7 @@ app.use((req, res) => {
       server.close(async () => {
         await stopPublishDueManager();
         await stopGoogleSyncManager();
+        await stopObservedMetaSyncWorkers();
         await stopMetaSyncManager();
         await stopLeadStatusManager();
         await stopNotificationRetentionWorker();

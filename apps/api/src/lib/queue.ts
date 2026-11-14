@@ -1,6 +1,6 @@
 import { Queue, QueueEvents } from 'bullmq';
 import type IORedis from 'ioredis';
-import { getRedis, waitForRedisReady } from './redis.js';
+import { awaitRedisReady, getRedis, waitForRedisReady } from './redis.js';
 
 // ==================== Singleton da conexão Redis ====================
 let redisConnection: IORedis | null = null;
@@ -20,30 +20,22 @@ export async function getRedisConnection(): Promise<IORedis> {
     return pendingConnection;
   }
   pendingConnection = (async () => {
-    const conn = getRedis().duplicate();
-    // Aguarda a conexão duplicada ficar pronta (sem chamar .connect())
-    if (conn.status !== 'ready') {
-      await new Promise<void>((resolve, reject) => {
-        const onReady = () => {
-          cleanup();
-          resolve();
-        };
-        const onError = (err: Error) => {
-          cleanup();
-          reject(err);
-        };
-        const cleanup = () => {
-          conn.off('ready', onReady);
-          conn.off('error', onError);
-        };
-        conn.once('ready', onReady);
-        conn.once('error', onError);
-      });
+    const conn = getRedis().duplicate({
+      // BullMQ keeps this connection for the lifetime of its workers. It must
+      // continue reconnecting after prolonged outages instead of ending.
+      retryStrategy: (times) => Math.min(times * 200, 2000),
+    });
+    // ioredis emits errors while reconnecting; never expose driver messages.
+    conn.on('error', () => console.error('[redis] REDIS_QUEUE_CONNECTION_ERROR'));
+    try {
+      await awaitRedisReady(conn);
+      redisConnection = conn;
+      return conn;
+    } catch (err) {
+      conn.disconnect();
+      throw err;
     }
-    redisConnection = conn;
-    pendingConnection = null;
-    return conn;
-  })();
+  })().finally(() => { pendingConnection = null; });
   return pendingConnection;
 }
 
@@ -52,7 +44,7 @@ export async function getRedisConnection(): Promise<IORedis> {
  */
 export async function closeRedisConnection(): Promise<void> {
   if (pendingConnection) {
-    await pendingConnection;
+    await pendingConnection.catch(() => {});
   }
   if (redisConnection) {
     await redisConnection.quit();

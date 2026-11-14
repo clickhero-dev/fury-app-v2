@@ -218,6 +218,18 @@ import {
   META_SYNC_QUEUE_NAME,
 } from '../workers/meta-sync.worker.js';
 
+describe('BDD: conexão do worker Meta', () => {
+  it('aguarda o adapter e não cria worker se a conexão falhar', async () => {
+    const { getRedisConnection } = await import('../lib/queue.js');
+    workerInstances.length = 0;
+    vi.mocked(getRedisConnection).mockRejectedValueOnce(new Error('REDIS_CONNECTION_TIMEOUT'));
+    await expect(startMetaSyncWorker()).rejects.toThrow('REDIS_CONNECTION_TIMEOUT');
+    expect(workerInstances).toHaveLength(0);
+    await startMetaSyncWorker();
+    expect(workerInstances).toHaveLength(1);
+  });
+});
+
 describe('BDD: MetaSyncManager (agendamento)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -237,6 +249,15 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     expect(bootstrapCall).toBeTruthy();
     expect(bootstrapCall![2].jobId).toBe('meta-sync-bootstrap');
 
+    await stopMetaSyncManager();
+  });
+
+  it('Dado erro ao agendar, quando tenta novamente, não deixa consumidor duplicado', async () => {
+    queueUpsertJobSchedulerSpy.mockImplementationOnce(() => { throw new Error('indisponível'); });
+    await expect(startMetaSyncManager()).rejects.toThrow('indisponível');
+    expect(workerInstances).toHaveLength(0);
+    await startMetaSyncManager();
+    expect(workerInstances).toHaveLength(1);
     await stopMetaSyncManager();
   });
 
