@@ -162,8 +162,8 @@ describe('Assistente', () => {
     expect(header.querySelector('.ady-chat-avatar svg[aria-label="ady"]')).not.toBeNull();
     expect(screen.getByText('Como posso ajudar?')).toBeInTheDocument();
     expect(screen.queryByText(/Ideias melhores|DA IDEIA À CRIAÇÃO/)).toBeNull();
-    expect(screen.getByRole('button', {name:'Criar imagem'})).toBeEnabled();
-    expect(screen.getByRole('button', {name:'Criar vídeo'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Criar imagens'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Criar vídeos'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Anexar arquivos'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Gravar mensagem'})).toBeEnabled();
   });
@@ -357,7 +357,7 @@ describe('Assistente', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response('[]'));
     vi.stubGlobal('fetch', fetchMock); render(<ChatPage/>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', {name:'Criar imagem'}));
+    fireEvent.click(screen.getByRole('button', {name:'Criar imagens'}));
     expect(screen.getByLabelText('Mensagem')).toHaveValue('Quero criar uma imagem');
     expect(screen.getByLabelText('Mensagem')).toHaveFocus();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -563,13 +563,13 @@ describe('Assistente', () => {
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
     expect(await screen.findByText('Minha ideia')).toBeTruthy();
     expect(screen.queryByText('Como posso ajudar?')).toBeNull();
-    expect(screen.queryByRole('button', {name:/Criar imagem/})).toBeNull();
+    expect(screen.queryByRole('button', {name:/Criar imagens/})).toBeNull();
   });
   it('mostra sugestões em uma conversa vazia', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[],approvals:[]}))));
     render(<ChatPage />);
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
-    expect(await screen.findByRole('button', {name:/Criar imagem/})).toBeTruthy();
+    expect(await screen.findByRole('button', {name:/Criar imagens/})).toBeTruthy();
     expect(screen.getByText('Como posso ajudar?')).toBeTruthy();
   });
   it('identifica remetentes e rola até a mensagem mais recente', async () => {

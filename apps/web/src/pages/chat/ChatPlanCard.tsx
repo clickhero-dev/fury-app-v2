@@ -72,12 +72,35 @@ function PlanDraftEditor({ plan, busy, readOnly, onSave, onCancel }: {
         {...invalidProps(`task-${index}`)} onChange={event => setTitles(previous => previous.map((value, position) => position === index ? event.target.value : value))} />
       {fieldError(`task-${index}`)}
     </div>)}
-    <p className="ady-chat-plan-note">Os títulos organizam o plano; não mudam o que cada tarefa faz. Para mudar instruções, datas ou valores, peça uma revisão nesta conversa antes de aprovar.</p>
+    <p className="ady-chat-plan-note">Os títulos organizam o plano; não mudam o que cada tarefa faz. Não é possível alterar instruções, datas ou valores neste editor. Se precisar mudá-los, não aprove este plano.</p>
     <div className="ady-chat-plan-actions">
       {!readOnly && <button type="submit" className="ady-chat-plan-button ady-chat-plan-button--primary" disabled={busy}>Salvar alterações</button>}
       <button type="button" className="ady-chat-plan-button" disabled={busy} onClick={onCancel}>Descartar alterações</button>
     </div>
   </form>;
+}
+
+const parameterLabels: Record<string, string> = {
+  startDate: 'Data inicial', endDate: 'Data final', limit: 'Limite', offset: 'Deslocamento',
+  prompt: 'Instrução', model: 'Modelo', aspect_ratio: 'Proporção', resolution: 'Resolução',
+  photo_ids: 'IDs das fotos', reference_image_urls: 'URLs de referência', visual: 'Visual',
+  narration: 'Narração', caption: 'Legenda', post_type: 'Tipo de publicação', scheduled_at: 'Data agendada',
+  image_url: 'URL da mídia', image_urls: 'URLs das mídias', name: 'Nome', objective: 'Objetivo',
+  daily_budget_cents: 'Orçamento diário em centavos', ad_account_id: 'Conta de anúncios',
+};
+
+function TaskParameters({ task }: { task: ChatPlanTask }) {
+  const entries = Object.entries(task.parameters).filter(([key]) => key !== 'instructions');
+  if (!entries.length) return null;
+  return <details className="ady-chat-plan-note" open>
+    <summary>Detalhes da tarefa (somente leitura)</summary>
+    <dl>{entries.map(([key, value]) => <div key={key}>
+      <dt>{Object.hasOwn(parameterLabels, key) ? parameterLabels[key] : 'Parâmetro desconhecido'}</dt>
+      <dd>{Object.hasOwn(parameterLabels, key) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+        ? String(value) : Object.hasOwn(parameterLabels, key) && Array.isArray(value) && value.every(item => typeof item === 'string' || typeof item === 'number')
+          ? value.join(', ') : 'Detalhe indisponível para visualização.'}</dd>
+    </div>)}</dl>
+  </details>;
 }
 
 function TaskEvidence({ task, index }: { task: ChatPlanTask; index: number }) {
@@ -171,6 +194,7 @@ export function ChatPlanCard({ plan, busy = false, error, onAction, onEdit, onCo
             <h4><span aria-hidden="true">{index + 1}. </span><span>{task.title}</span></h4>
             <p className="ady-chat-plan-task-meta">{chatPlanTaskStatusLabels[task.status]}<span aria-hidden="true"> · </span>{task.capability === 'manual' ? 'Você confirma' : 'Ady executa'}</p>
             {task.capability === 'manual' && typeof task.parameters.instructions === 'string' && <p className="ady-chat-plan-note">{task.parameters.instructions}</p>}
+            <TaskParameters task={task} />
             {task.dependsOn.length > 0 && <p className="ady-chat-plan-note">Depende de: {task.dependsOn.map(key => plan.tasks.find(dependency => dependency.key === key)?.title || 'tarefa anterior').join(', ')}.</p>}
             <TaskEvidence task={task} index={index} />
             {task.error && <p className="ady-chat-plan-task-error"><AlertCircle size={16} aria-hidden="true" />{task.error}</p>}
@@ -191,7 +215,7 @@ export function ChatPlanCard({ plan, busy = false, error, onAction, onEdit, onCo
     {plan.status === 'failed' && <p className="ady-chat-plan-note">Confira a tarefa com erro antes de continuar. Resultados já confirmados serão mantidos.</p>}
     {shownError && <div className="ady-chat-plan-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error || shownError}</span></div>}
     {editing ? <>
-      {!editable && <p className="ady-chat-plan-notice">O plano já começou. Suas alterações não foram salvas. Peça uma revisão nesta conversa; o progresso será preservado.</p>}
+      {!editable && <p className="ady-chat-plan-notice">O plano já começou. Suas alterações não foram salvas e não podem ser aplicadas à execução.</p>}
       {editable && editing.version !== plan.version && <div className="ady-chat-plan-notice">
         <p>Há uma versão mais recente. Sua edição foi mantida; recarregue para revisar as mudanças.</p>
         <button type="button" className="ady-chat-plan-button" disabled={locked} onClick={() => { setEditing(plan); setLocalError(null); }}>Recarregar edição</button>

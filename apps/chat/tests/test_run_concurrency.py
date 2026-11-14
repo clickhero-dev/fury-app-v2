@@ -141,6 +141,7 @@ def test_http_concurrent_streams_keep_own_message_and_links(monkeypatch):
                     assert ['first'] in captured and ['second'] in captured
                     data = (await client.get(f'/conversations/{cid}')).json()
                     assert len(data['response_runs']) == 2
+                    assert [message['content'] for message in data['messages']] == ['first', 'answer first', 'second', 'answer second']
                     assert sum(run['client_key'] == first_key for run in data['response_runs']) == 1
                     messages = {m['id']: m['content'] for m in data['messages']}
                     for run in data['response_runs']:
@@ -276,7 +277,7 @@ def test_completed_interleaved_turns_can_be_safely_compacted():
                 seen.extend(row['content'] for row in messages)
                 return '{"facts":[{"topic":"test","text":"safe"}]}'
             assert await consolidate(pool, cid, summary, min_responses=2, message_repository=AttachmentRepository(pool, tenant, user))
-            assert seen == ['first', 'second', 'answer second', 'answer first']
+            assert seen == ['first', 'answer first', 'second', 'answer second']
     asyncio.run(scenario())
 
 

@@ -110,7 +110,7 @@ describe('ChatPage multimídia', () => {
     expect(requests('/conversations').filter(([,init]) => init.method === 'POST')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:ids});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),responseCapabilities:['multi_message_v1'],attachmentIds:ids});
     expect(document.querySelectorAll('.ady-chat-saved-attachment')).toHaveLength(3);
   });
   it('preserva anexo/rascunho se excluir conversa falhar e bloqueia corridas durante exclusão', async () => {
@@ -204,7 +204,7 @@ describe('ChatPage multimídia', () => {
     expect(screen.getByRole('button',{name:'Enviar mensagem'})).toBeEnabled();
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),responseCapabilities:['multi_message_v1'],attachmentIds:[attachment.id]});
     const message = document.querySelector('.ady-chat-message[data-role="user"]')!;
     expect(within(message as HTMLElement).getByText('foto.png')).toBeInTheDocument();
     expect(within(message as HTMLElement).queryByText(/descreva|analise/i)).toBeNull();
@@ -227,7 +227,7 @@ describe('ChatPage multimídia', () => {
     await screen.findByText('Pronto para enviar');
     fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
     await screen.findByText('Recebi seu arquivo');
-    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),content:'Minha pergunta',attachmentIds:[attachment.id]});
+    expect(JSON.parse(requests('/messages')[0][1].body)).toEqual({clientKey:expect.any(String),responseCapabilities:['multi_message_v1'],content:'Minha pergunta',attachmentIds:[attachment.id]});
   });
   it.each(['drop','paste'])('aceita imagem via %s sem autoenviar', async method => {
     render(<ChatPage/>);

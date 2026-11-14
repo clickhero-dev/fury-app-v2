@@ -12,7 +12,8 @@ export function createChatProxy(options: ChatProxyOptions): Router {
     if (!req.user || !req.user.tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Autenticação necessária'));
     // A fixed allowlist prevents this proxy from becoming an arbitrary internal HTTP client.
     const retry = /^\/conversations\/[a-zA-Z0-9-]+\/retry\/?$/.test(req.path) && req.method === 'POST';
-    if (!retry && !/^\/(?:conversations(?:\/[a-zA-Z0-9-]+(?:\/messages)?)?|approvals\/[a-zA-Z0-9-]+\/confirm)\/?$/.test(req.path)) {
+    const clarify = /^\/conversations\/[a-zA-Z0-9-]+\/clarifications\/[a-zA-Z0-9-]+\/answer\/?$/.test(req.path) && req.method === 'POST';
+    if (!retry && !clarify && !/^\/(?:conversations(?:\/[a-zA-Z0-9-]+(?:\/messages)?)?|approvals\/[a-zA-Z0-9-]+\/confirm)\/?$/.test(req.path)) {
       return next(new AppError(404, 'NOT_FOUND', 'Recurso não encontrado'));
     }
     try {
