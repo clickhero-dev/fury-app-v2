@@ -116,12 +116,13 @@ class ProviderRunError(Exception):
         self.kind = kind
 
 
-async def checked_agent_events(events, state=None):
+async def checked_agent_events(events, state=None, *, timeout=240):
     """Agno reports failures as events; never treat their contents as output."""
-    async for event in events:
-        if getattr(event, 'event', None) == 'RunError':
-            if state and state.get('error_kind') == 'budget':
-                from model_request_budget import ModelRequestBudgetExceeded
-                raise ModelRequestBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
-            raise ProviderRunError(state.get('error_kind', 'error') if state else 'error')
-        yield event
+    async with asyncio.timeout(timeout):
+        async for event in events:
+            if getattr(event, 'event', None) == 'RunError':
+                if state and state.get('error_kind') == 'budget':
+                    from model_request_budget import ModelRequestBudgetExceeded
+                    raise ModelRequestBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
+                raise ProviderRunError(state.get('error_kind', 'error') if state else 'error')
+            yield event
