@@ -65,7 +65,7 @@ Se o título aparecer mais de uma vez, apague as repetições preenchendo com o 
 
 type PhotoKind = 'produto' | 'equipe';
 const PHOTO_ROLE: Record<PhotoKind | 'foto', string> = {
-  equipe: 'pessoa — coloque esta MESMA pessoa na cena (mesmo rosto, traços, cabelo, barba, óculos e tom de pele)',
+  equipe: 'pessoa — esta imagem é a fonte de verdade da identidade; coloque esta MESMA pessoa na cena, preservando rosto, traços, cabelo, barba, óculos e tom de pele, sem recriar ou substituir a pessoa',
   produto: 'produto — use EXATAMENTE este produto em destaque (mesma forma, cores e detalhes)',
   foto: 'foto do cliente — use o que aparece nela na cena, sem trocar por outro',
 };
@@ -241,7 +241,7 @@ export class StudioAiService {
       'Responda APENAS um JSON: {"scene": "...", "headline": "..." ou null}',
       '- "scene": cena do anúncio em português, 150 a 400 caracteres, como fotografia publicitária profissional: ambiente coerente com o pedido, iluminação de estúdio/comercial, pessoa e produto nítidos e bem enquadrados, onde cada um fica. A pessoa e o produto das fotos são os protagonistas. Reserve o terço superior da imagem livre (fundo limpo) para um título.',
       '- NÃO descreva a aparência da pessoa nem do produto (vêm das fotos). NÃO invente marca, ramo de negócio, logotipo, slogan, preço ou outro produto.',
-      '- "headline": a frase do pedido para escrever na arte, só com ortografia e acentos corrigidos, sem acrescentar palavras; null se o pedido não tiver frase de chamada.',
+      '- "headline": se o pedido contiver uma frase para aparecer na arte, use essa frase somente com ortografia e acentos corrigidos, sem acrescentar palavras. Se houver apenas contexto descritivo, derive uma headline curta usando somente fatos explícitos do pedido (sem promessas, slogans ou informações novas). Retorne null apenas quando não houver nenhum fato útil para uma headline.',
     ].join('\n');
 
     try {
@@ -276,6 +276,8 @@ export class StudioAiService {
     },
   ): Promise<Record<string, any>> {
     let referenceImageUrls = payload.reference_image_urls?.length ? payload.reference_image_urls : undefined;
+    let referencePhotoIds: string[] | undefined;
+    let referencePhotoKinds: PhotoKind[] | undefined;
     let templatePhotos: TemplatePhoto[] = (referenceImageUrls ?? []).map((url) => ({ url, kind: 'foto' as const }));
 
     // Biblioteca nova: tipo e posse vêm do banco (filtro por tenant), nunca do cliente
@@ -287,6 +289,8 @@ export class StudioAiService {
         throw new AppError(400, 'INVALID_REFERENCE_IMAGE', 'Uma ou mais fotos não pertencem à sua biblioteca de produtos/equipe.');
       }
       referenceImageUrls = photos.map((p) => p!.url);
+      referencePhotoIds = payload.photo_ids;
+      referencePhotoKinds = photos.map((p) => p!.kind as PhotoKind);
       templatePhotos = photos.map((p) => ({ url: p!.url, kind: p!.kind as 'produto' | 'equipe' }));
     }
 
@@ -361,7 +365,8 @@ export class StudioAiService {
           brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
           aspectRatio: payload.aspect_ratio,
           referenceImageUrls: referenceImageUrls ?? [],
-          ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected } } : {}),
+          ...(referencePhotoIds ? { referencePhotoIds, referencePhotoKinds } : {}),
+          ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected, status: review.status } } : {}),
         }),
       });
       return {
@@ -390,12 +395,13 @@ export class StudioAiService {
     headline: string | undefined,
     dataUrl: string,
     aspectRatio: string,
-  ): Promise<{ dataUrl: string; costUsd: number | null; checked: boolean; corrected: boolean; headline?: string }> {
+  ): Promise<{ dataUrl: string; costUsd: number | null; checked: boolean; corrected: boolean; headline?: string; status?: 'verified' | 'failed' }> {
     if (!headline) return { dataUrl, costUsd: null, checked: false, corrected: false };
     const costs: (number | null)[] = [];
     const total = () => (costs.every((c) => c === null) ? null : costs.reduce<number>((a, c) => a + (c ?? 0), 0));
     let current = dataUrl;
     let corrected = false;
+    let status: 'verified' | 'failed' = 'failed';
     try {
       const written = await this.llm.generateImageFromImages({
         model: TEMPLATE_IMAGE_MODEL,
@@ -424,12 +430,23 @@ export class StudioAiService {
         costs.push(fix.costUsd);
         current = fix.dataUrl;
         corrected = true;
+        const recheck = await this.llm.chatWithImages({
+          model: TEMPLATE_ANALYSIS_MODEL,
+          text: buildTemplateVerificationPrompt(),
+          imageUrls: [current],
+          temperature: 0,
+          jsonMode: true,
+        });
+        costs.push(recheck.costUsd);
+        status = headlineIssues(headline, parseTranscript(recheck.content).texts) ? 'failed' : 'verified';
+      } else {
+        status = 'verified';
       }
     } catch (err) {
       // texto é melhoria: se falhar, fica a melhor imagem que já temos
       console.warn('[quick-create] frase da arte falhou:', (err as Error).message);
     }
-    return { dataUrl: current, costUsd: total(), checked: true, corrected, headline };
+    return { dataUrl: current, costUsd: total(), checked: true, corrected, headline, status };
   }
 
   /** Modelo de anúncio: analisa (visão) → plano validado → prompt montado em código → Gemini. */
