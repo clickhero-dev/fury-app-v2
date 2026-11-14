@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PASSWORD_RULES, passwordSchema } from '../../../../../packages/shared/src/password-policy';
+import { PASSWORD_RULES, passwordSchema } from './trial-password-policy';
 import api from '../../lib/api';
 
 export function TrialPasswordModal({ onComplete }: { onComplete: () => void }) {
