@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
@@ -449,7 +450,7 @@ export function UsersPage() {
                 <label htmlFor="setup-user-password" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Senha
                 </label>
-                <input
+                <PasswordInput
                   id="setup-user-password"
                   value={form.userPassword}
                   onChange={(e) => {
@@ -458,7 +459,6 @@ export function UsersPage() {
                   }}
                   onBlur={() => handleBlur("userPassword")}
                   placeholder="Mínimo 8 caracteres"
-                  type="password"
                   className={
                     touched.userPassword && errors.userPassword
                       ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"

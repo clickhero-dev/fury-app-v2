@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect } from "react";
 import { Lock, Mail, User, UserPlus, X } from "lucide-react";
 import { FieldLabel } from "./FormSection";
@@ -62,7 +63,7 @@ export function CreateUserModal({ open, value, onChange, onSubmit, onClose, savi
           </div>
           <div>
             <FieldLabel icon={Lock} htmlFor="new-user-password">Senha</FieldLabel>
-            <input id="new-user-password" type="password" value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} placeholder="Senha" autoComplete="new-password" className={inputCls} />
+            <PasswordInput id="new-user-password" value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} placeholder="Senha" autoComplete="new-password" className={inputCls} />
           </div>
           {error && (
             <div role="alert" className="text-sm text-error bg-error/10 border border-error/30 rounded-xl px-3 py-2.5">{error}</div>

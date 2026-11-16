@@ -36,6 +36,10 @@ describe('IntegrationsPanel', () => {
     const input = await screen.findByLabelText('Nova chave');
     expect(input).toHaveAttribute('type', 'password');
     await userEvent.type(input, 'sk-or-v1-abcdwxyz');
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar chave' }));
+    expect(input).toHaveAttribute('type', 'text');
+    expect(input).toHaveValue('sk-or-v1-abcdwxyz');
+    expect(mockPut).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
     expect(mockPut).toHaveBeenCalledWith(URL, { key: 'sk-or-v1-abcdwxyz' });
