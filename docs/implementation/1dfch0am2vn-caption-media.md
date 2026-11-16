@@ -36,3 +36,5 @@ Reverter somente esta PR. Nenhuma tabela/migration/quota/job novo. Assets enviad
 - Diff revisado, sem migrations; WIP original preservado. CI remoto e estado final da PR registrados na descrição da PR após execução.
 
 - Revisão de carrossel: teste RED confirmou upload indevido de duas imagens para uma sugestão; GREEN envia apenas a primeira, reutilizando-a no envio final. 86 testes de frontend aprovados após ajuste.
+
+- CI remoto inicial: builds e Chatbot aprovados; cobertura com 1977 testes aprovados e duas falhas por `ffmpeg ENOENT`. O workflow geral recebeu instalação explícita de ffmpeg/util-linux, igual às dependências nativas já presentes na imagem da API. QA real bloqueado pela cota esgotada da conta (20/20); não foi alterada a quota nem enfraquecido o gate.
