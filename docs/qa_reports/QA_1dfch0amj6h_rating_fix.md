@@ -32,3 +32,11 @@ O arquivo `0059_creative_asset_ratings.sql` existe, porém não constava em `STE
 - Build shared/db e API verificados; resultados finais e CI registrados na PR.
 
 Não houve deploy, merge ou intervenção no banco de homologação. A tabela será criada pelo executor normal da API quando a correção for implantada. Não se afirma reteste do ambiente de homologação nem E2E de navegador nesta correção de boot; a persistência foi validada por HTTP com banco real.
+
+## Reteste independente — 16/11/2026
+
+No SHA `97f2a1346e662bdbda0b7263c7a05d582f56e9c6`, a base `origin/hmg` estava contida na branch e o GitHub indicava MERGEABLE, mas UNSTABLE: `jornada-real` falhou antes da geração porque a conta de QA consumiu 20/20 imagens. Os demais checks estavam aprovados. Não foi alterada a cota nem executada uma nova jornada que criaria recursos externos.
+
+- PostgreSQL 16 isolado: executor aplicou `0059_creative_asset_ratings`; quatro testes HTTP reais passaram (imagem, vídeo, atualização, concorrência e rejeições). Três arquivos adicionais de testes de migration, controller e service passaram (18 testes). A primeira tentativa de integração apontou para a porta padrão por falta de `TEST_DATABASE_URL`; a repetição com a URL isolada passou.
+- Playwright Chromium: cenário de imagem, convite, seleção, falha de envio e nova tentativa passou (1/1). Geração e endpoint de avaliação foram simulados; não demonstra persistência pelo navegador nem geração real de vídeo. A primeira inicialização exigiu segredos locais de teste; com pnpm 12 o comando do webServer não encaminhou a porta esperada, resolvido iniciando Vite manualmente na porta configurada. Avisos de Redis, fontes e requisições não simuladas com token inválido não impediram o cenário.
+- A integração HTTP e o teste de navegador são evidências complementares, não um E2E integral de navegador até PostgreSQL. Reteste em homologação depende do deploy da correção e de conta com cota. Portanto não é possível afirmar que todos os fluxos estão validados ou que o CI está verde.
