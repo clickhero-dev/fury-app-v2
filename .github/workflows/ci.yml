@@ -118,6 +118,10 @@ jobs:
       - name: Build db (workspace)
         run: pnpm --filter @fury/db run build
 
+      # O Planejador extrai áudio com o mesmo sandbox nativo da imagem de produção.
+      - name: Install media tools for Planner tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg util-linux
+
       # Gate unitário rápido: lista de testes sem banco (mesmo comando de sempre)
       - name: Run unit tests (API)
         run: npm run test:unit

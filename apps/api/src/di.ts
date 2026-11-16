@@ -1,3 +1,5 @@
+import { PlannerVideoTranscription } from './services/planner/planner-video-transcription.js';
+import { readPlannerVideoAsset } from './services/storage/storage.service.js';
 import { DatabaseMetricsProvider } from './lib/providers/db-metrics.provider.js';
 import { MockMetricsProvider } from './lib/providers/mock-metrics.provider.js';
 import type { IMetricsProvider } from './lib/providers/metrics.provider.js';
@@ -189,6 +191,7 @@ export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
+  new PlannerVideoTranscription(readPlannerVideoAsset, new ChatMediaValidator(), new OpenRouterChatMediaClient({ timeoutMs: 20_000 })),
 );
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
