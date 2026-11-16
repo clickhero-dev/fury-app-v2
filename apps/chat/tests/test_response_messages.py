@@ -30,3 +30,22 @@ def test_plain_paragraphs_remain_one_message():
 def test_invalid_structured_response_is_rejected(body):
     with pytest.raises(ValueError):
         split_response(body)
+
+
+@pytest.mark.parametrize('question,messages', [
+    ('Qual período? Qual objetivo?', ['Vamos planejar.']),
+    ('Qual período?', ['Qual objetivo?', 'Qual formato e frequência?']),
+])
+def test_coleta_rejeita_perguntas_acumuladas(question, messages):
+    # Dado um envelope que antecipa outras perguntas, quando validado, então rejeita sem truncar.
+    import json
+    with pytest.raises(ValueError, match='uma pergunta'):
+        parse_response('ADY_MESSAGES:' + json.dumps({'messages': messages, 'clarify': {
+            'question': question, 'choices': ['Este mês', 'Outro período']}}))
+
+
+def test_coleta_aceita_contexto_declarativo_e_alternativa_livre():
+    # Dado apenas o período pendente, quando validado, então preserva o contexto e as opções.
+    import json
+    clarification = {'question': 'Qual período?', 'choices': ['Este mês', 'Próximos 30 dias', 'Outro período']}
+    assert parse_response('ADY_MESSAGES:' + json.dumps({'messages': ['Vamos planejar.'], 'clarify': clarification})) == (['Vamos planejar.'], clarification)

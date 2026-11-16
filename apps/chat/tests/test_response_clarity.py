@@ -63,3 +63,11 @@ def test_instrucoes_do_agente_pedem_concisao_sem_ocultar_alertas(monkeypatch, mo
     assert 'clara' in instructions and 'concisa' in instructions
     assert 'alertas' in instructions and 'detalhes essenciais' in instructions
     assert 'não afirme que uma ação foi executada' in instructions
+
+    # Cenário: política de coleta chega ao agente real, em toda resposta.
+    assert 'um dado por vez' in instructions
+    assert 'não antecipe' in instructions
+    assert 'outro período' in instructions
+    assert 'resposta digitada' in instructions
+    assert 'pode decidir por mim' in instructions
+    assert 'confirmação' in instructions

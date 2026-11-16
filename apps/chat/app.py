@@ -37,7 +37,38 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-STRUCTURED_RESPONSE_INSTRUCTIONS = 'Para esclarecer antes de agir, use ADY_MESSAGES:{"messages":["Texto breve"],"clarify":{"question":"Pergunta?","choices":["Opção 1","Opção 2"]}} com 2 a 5 opções distintas. Para dividir uma resposta sem pergunta use ADY_MESSAGES:{"messages":["primeira","segunda"]} com 1 a 5 textos. Devolva o formato inteiro sem markdown nem texto adicional. Para respostas normais escreva texto comum; não divida parágrafos arbitrariamente.'
+STRUCTURED_RESPONSE_INSTRUCTIONS = """
+Coleta de informações: solicite um dado por vez, somente o próximo dado necessário.
+Não antecipe perguntas futuras, não liste vários campos ou perguntas no mesmo balão,
+nem distribua perguntas diferentes entre messages e clarify. Consulte o histórico e o
+contexto confiável antes de perguntar; preserve respostas digitadas e escolhas anteriores,
+não repita perguntas já respondidas e dispense dados desnecessários.
+Para planejamento de postagens sem dados, comece pelo período; só após a resposta
+pergunte objetivo, depois formato e frequência, pulando o que já foi informado.
+
+Quando houver alternativas comuns previsíveis, use exclusivamente:
+ADY_MESSAGES:{"messages":["Vamos planejar."],"clarify":{"question":"Qual período você quer planejar?","choices":["Este mês","Próximos 30 dias","Outro período"]}}
+Este é só um exemplo: adapte pergunta e opções ao contexto. Faça uma única pergunta
+em clarify.question; messages contém apenas contexto declarativo breve, sem outras
+perguntas ou lista de dados faltantes. Use 2 a 5 opções distintas, claras e curtas;
+inclua Outro/Outra opção/Outro período quando fizer sentido aceitar uma resposta livre.
+Botões enviam imediatamente a escolha como resposta, sem preencher a caixa de texto.
+Se a escolha for Outro ou equivalente, peça o valor livre do MESMO dado, em texto comum,
+sem repetir os botões nem avançar para o próximo campo antes da resposta digitada.
+Respostas digitadas também valem: incorpore todos os dados que o usuário fornecer,
+mesmo se ele antecipar vários, e pergunte só o próximo que ainda faltar.
+Para respostas imprevisíveis, use uma pergunta aberta em texto comum, sem opções artificiais.
+
+Se o usuário disser "pode decidir por mim", use somente dados confiáveis e autorizados
+já disponíveis; explicite sugestões e suposições, não invente dados pessoais ou comerciais.
+Pergunte apenas por lacunas indispensáveis, apresente resumo das decisões e peça
+confirmação antes de qualquer geração com custo ou efeito externo. Delegar escolhas
+não autoriza executar ações nem dispensa os gates de confirmação existentes.
+
+Para dividir uma resposta sem pergunta use ADY_MESSAGES:{"messages":["primeira","segunda"]}
+com 1 a 5 textos. Devolva o formato inteiro sem markdown nem texto adicional.
+Para respostas normais escreva texto comum; não divida parágrafos arbitrariamente.
+"""
 
 
 def identity(authorization: str | None = Header(default=None)):
