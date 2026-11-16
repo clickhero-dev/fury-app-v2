@@ -134,3 +134,15 @@ def test_persistence_failure_is_sanitized_and_has_no_done(monkeypatch):
     assert events[-1][0] == 'error'
     assert 'sensitive database failure' not in json.dumps(events)
     assert not any(kind == 'done' for kind, _ in events)
+
+
+def test_coleta_invalida_nao_publica_perguntas_nem_conclui_execucao(monkeypatch):
+    # Dado um modelo que acumula perguntas, quando encerra o stream,
+    # então o envelope fica oculto e há erro recuperável, sem persistência parcial.
+    events, persisted = run_response(monkeypatch, [
+        'ADY_MESSAGES:{"messages":["Qual objetivo?"],"clarify":{"question":"Qual período?","choices":["Este mês","Outro período"]}}'
+    ])
+    assert persisted == []
+    assert any(kind == 'error' for kind, _ in events)
+    assert not any(kind in ('done', 'token') for kind, _ in events)
+    assert all('Qual objetivo' not in json.dumps(data) for _, data in events)

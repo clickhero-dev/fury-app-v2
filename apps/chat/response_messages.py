@@ -40,4 +40,11 @@ def parse_response(text):
             or not isinstance(messages, list) or not 1 <= len(messages) <= MAX_MESSAGES
             or any(not isinstance(item, str) or not item.strip() or len(item) > MAX_MESSAGE_LENGTH for item in messages)):
         raise ValueError('Resposta estruturada inválida')
-    return messages, validate_clarification(payload['clarify']) if 'clarify' in payload else None
+    clarification = validate_clarification(payload['clarify']) if 'clarify' in payload else None
+    if clarification:
+        question = clarification['question']
+        # Guard structural mistakes without truncating a model response or guessing fields.
+        # Exact repetition remains compatible with older providers/clients.
+        if question.count('?') > 1 or any('?' in item and item.strip() != question for item in messages):
+            raise ValueError('Solicite apenas uma pergunta por etapa')
+    return messages, clarification

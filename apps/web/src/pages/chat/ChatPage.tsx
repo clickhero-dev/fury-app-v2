@@ -149,7 +149,7 @@ function MessageList({messages, approvals, conversationId, clarifications, onCho
         {message.role === 'user' ? <p>{message.content}</p> : <div className="ady-chat-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{img: () => null, a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>}}>{message.content}</ReactMarkdown>
         </div>}
-        {clarifications.filter(item => item.message_id === message.id).map(item => <div key={item.id} className="ady-chat-clarification" role="group" aria-label={item.question}><p>{item.question}</p>{item.choices.map((choice, index) => <button key={index} type="button" disabled={disabled || item.selected_index !== null || !!item.dismissed_at} aria-pressed={item.selected_index === index} onClick={() => onChoose(item, index)}>{choice}</button>)}</div>)}
+        {clarifications.filter(item => item.message_id === message.id).map(item => <div key={item.id} className="ady-chat-clarification" role="group" aria-label={item.question}>{message.content.trim() !== item.question.trim() && <p>{item.question}</p>}{item.choices.map((choice, index) => <button key={index} type="button" disabled={disabled || item.selected_index !== null || !!item.dismissed_at} aria-pressed={item.selected_index === index} onClick={() => onChoose(item, index)}>{choice}</button>)}</div>)}
         {conversationId && !!message.attachments?.length && <MessageAttachments conversationId={conversationId} attachments={message.attachments}/>}
         {date && <time className="ady-chat-time" dateTime={message.created_at!} title={date.full} aria-label={date.full}>{date.time}</time>}
       </article>
