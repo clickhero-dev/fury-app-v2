@@ -99,3 +99,20 @@ describe('BDD: upload e preservação do formulário', () => {
     expect((screen.getByRole('button', { name: 'Gerar legenda automática' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+it('Cenário: carrossel → geração envia apenas primeira mídia; envio final reutiliza upload', async () => {
+  post.mockReset(); URL.createObjectURL = vi.fn(() => 'blob:preview');
+  let uploads = 0;
+  post.mockImplementation(async (url: string) => ({ data: { data: url.endsWith('/upload') ? { url: `https://media.example.com/${++uploads}.png` } : url.endsWith('/suggest-caption') ? { caption: 'Carrossel', imageUsed: true } : { status: 'published' } } }));
+  const qc = new QueryClient(); qc.setQueryData(['studio/assets'], { assets: [] });
+  const onCreated = vi.fn();
+  const { container } = render(<QueryClientProvider client={qc}><CreatePostDialog mode="now" onClose={vi.fn()} onCreated={onCreated} /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'Carrossel' }));
+  fireEvent.change(container.querySelector('input[multiple]')!, { target: { files: [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.png', { type: 'image/png' })] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Gerar legenda automática' })); await screen.findByDisplayValue('Carrossel');
+  expect(uploads).toBe(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Postar agora' }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+  expect(uploads).toBe(2);
+  expect(post.mock.calls.find(c => c[0].endsWith('/publish-now'))?.[1].imageUrls).toEqual(['https://media.example.com/1.png', 'https://media.example.com/2.png']);
+});

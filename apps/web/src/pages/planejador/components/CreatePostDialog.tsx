@@ -251,7 +251,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const submitLabel = isEdit ? 'Salvar' : isNow ? (failedPostId ? 'Tentar novamente' : 'Postar agora') : 'Criar post';
   const loadingLabel = isEdit ? 'Salvando...' : isNow ? 'Publicando...' : 'Criando...';
 
-  const uploadMedia = async (): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
+  const uploadMedia = async (firstOnly = false): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
     if (existingUrls.length > 0) {
       return postType === 'carousel' ? { imageUrls: existingUrls } : { imageUrl: existingUrls[0] };
     }
@@ -277,7 +277,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       return url;
     };
     const imageUrl = postType !== 'carousel' && mediaFile ? await uploadFile(mediaFile) : undefined;
-    const imageUrls = postType === 'carousel' && carouselFiles.length ? await Promise.all(carouselFiles.map(uploadFile)) : undefined;
+    const imageUrls: string[] | undefined = postType === 'carousel' && carouselFiles.length ? [] : undefined;
+    if (imageUrls) {
+      for (const file of firstOnly ? carouselFiles.slice(0, 1) : carouselFiles) imageUrls.push(await uploadFile(file));
+    }
     return { imageUrl, imageUrls };
   };
 
@@ -294,7 +297,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       const id = generation.current;
       const context = caption.trim();
       try {
-        const media = await uploadMedia();
+        const media = await uploadMedia(true);
         if (!currentRequest(id)) return null;
         const url = media.imageUrl ?? media.imageUrls?.[0];
         const kind = existingUrls.length ? urlKind(existingUrls[0])
