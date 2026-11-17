@@ -64,7 +64,7 @@ for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844
       expect(sends.at(-1)).toContain('confirmação explícita');
       expect(requests).toEqual(['/api/chat/conversations','/api/chat/conversations/c1/messages']);
       await fit();
-      await page.reload(); // independent empty conversation, no persisted selection
+      // Start each action from an independent empty conversation.
       await page.evaluate(() => sessionStorage.clear());
       await page.reload();
       requests.length=0;
