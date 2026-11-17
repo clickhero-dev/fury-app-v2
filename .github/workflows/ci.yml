@@ -151,6 +151,14 @@ jobs:
         working-directory: apps/web
         run: npx vitest run
 
+      - name: Install Chromium for isolated rating E2E
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run isolated rating E2E (mock API, no real accounts)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.rating.config.ts
+
       - name: Generate coverage badge
         if: github.event_name == 'push'
         run: npm run coverage:badge
