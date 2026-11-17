@@ -158,12 +158,12 @@ describe('Assistente', () => {
     render(<ChatPage/>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const header = document.querySelector('.ady-chat-header')!;
-    expect(within(header as HTMLElement).getByText('Assistente de IA')).toBeInTheDocument();
+    expect(within(header as HTMLElement).getByText('Assistente do Ady')).toBeInTheDocument();
     expect(header.querySelector('.ady-chat-avatar svg[aria-label="ady"]')).not.toBeNull();
     expect(screen.getByText('Como posso ajudar?')).toBeInTheDocument();
     expect(screen.queryByText(/Ideias melhores|DA IDEIA À CRIAÇÃO/)).toBeNull();
-    expect(screen.getByRole('button', {name:'Criar imagens'})).toBeEnabled();
-    expect(screen.getByRole('button', {name:'Criar vídeos'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Criar post para o Instagram'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Criar vídeo para o negócio'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Anexar arquivos'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Gravar mensagem'})).toBeEnabled();
   });
@@ -351,15 +351,15 @@ describe('Assistente', () => {
   });
   /* Cenário: sugestão inicial
    * Dado que acabei de abrir o chat, quando escolho Criar imagem,
-   * então o campo recebe a sugestão e o foco sem enviar nada.
+   * então a etapa específica abre sem enviar nada.
    */
-  it('preenche e foca a sugestão antes de iniciar conversa', async () => {
+  it('abre etapa específica antes de iniciar conversa', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response('[]'));
     vi.stubGlobal('fetch', fetchMock); render(<ChatPage/>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', {name:'Criar imagens'}));
-    expect(screen.getByLabelText('Mensagem')).toHaveValue('Quero criar uma imagem');
-    expect(screen.getByLabelText('Mensagem')).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', {name:'Criar post para o Instagram'}));
+    expect(screen.getByLabelText('Mensagem')).toHaveValue('');
+    expect(screen.getByLabelText('Qual é o tema do post e para qual público?')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   /* Cenário: histórico modal acessível
@@ -411,7 +411,7 @@ describe('Assistente', () => {
     fireEvent.change(screen.getByLabelText('Buscar conversas'), {target:{value:'inexistente'}});
     expect(screen.getByText('Nenhuma conversa encontrada. Tente outro termo.')).toBeInTheDocument();
     expect(screen.getByLabelText('Mensagem')).toHaveAccessibleDescription('Enter para enviar · Shift + Enter para nova linha');
-    expect(screen.getByRole('heading', {name:'Ady'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name:'Assistente do Ady'})).toBeInTheDocument();
   });
   /* Cenário: troca de conversa ainda carregando
    * Dado que escolhi outra conversa, quando o carregamento está pendente,
@@ -563,13 +563,13 @@ describe('Assistente', () => {
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
     expect(await screen.findByText('Minha ideia')).toBeTruthy();
     expect(screen.queryByText('Como posso ajudar?')).toBeNull();
-    expect(screen.queryByRole('button', {name:/Criar imagens/})).toBeNull();
+    expect(screen.queryByRole('button', {name:/Criar post para o Instagram/})).toBeNull();
   });
   it('mostra sugestões em uma conversa vazia', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[],approvals:[]}))));
     render(<ChatPage />);
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
-    expect(await screen.findByRole('button', {name:/Criar imagens/})).toBeTruthy();
+    expect(await screen.findByRole('button', {name:/Criar post para o Instagram/})).toBeTruthy();
     expect(screen.getByText('Como posso ajudar?')).toBeTruthy();
   });
   it('identifica remetentes e rola até a mensagem mais recente', async () => {
