@@ -56,6 +56,22 @@ ADR-0002 ausente na base; aplicar externalFetch, timeout e erros sanitizados.
 - [x] RED: adicionar cenários BDD pt-BR com mocks de sucesso/falha e rodar Vitest.
 - [x] GREEN: implementar retry de leitura, validação e diagnóstico seguro.
 - [x] RED/GREEN: cobrir recuperação do diálogo e acrescentar ação acessível.
-- [ ] Verificar testes focados, lint, build e fluxo no navegador mockado.
-- [ ] Revisar diff, abrir PR hmg e acompanhar CI, atualizando a base se necessário.
+- [x] Verificar testes focados, lint, build e fluxo no navegador mockado.
+- [x] Revisar diff e abrir PR #463 para hmg. Acompanhar CI até concluir.
 - [ ] Correlacionar as oito exceções históricas (bloqueio: fontes não disponíveis).
+
+## Evidências de validação
+
+- RED: 13 cenários do cliente falharam antes da correção; 5 cenários de telemetria
+  falharam por ausência de correlação; regressão da UI falhou por ausência do alerta.
+- GREEN: suíte focada API, suíte da página (30/30), lint API/web (sem erros; warning
+  preexistente do React Hook Form) e build web.
+- Build API passou após instalação isolada com lockfile e rebuild shared/db. A
+  primeira execução usava artefatos compartilhados incompatíveis de outro checkout.
+- Playwright Chromium: recuperação 502 → nova consulta → seletor habilitado passou,
+  sem pageerror nem mutação real. Vite serviu este worktree na porta isolada 5188;
+  porta padrão estava ocupada. Screenshot local /tmp/tickets-status-recovery.png.
+- Testes adicionais: Retry-After data HTTP, inválido/passado, JSON malformado,
+  limite real de timeout persistente e correlação controller → serviço → exceção.
+- PR: https://github.com/clickhero-dev/fury-app-v2/pull/463. Base origin/hmg ecd4206c
+  incorporada. Sem merge nem deploy. Correlação histórica continua pendente.

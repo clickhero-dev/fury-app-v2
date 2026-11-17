@@ -78,6 +78,16 @@ describe('consulta resiliente de status', () => {
     await expect(client().listStatuses()).rejects.toMatchObject({ code: 'CLICKUP_INVALID_RESPONSE' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it('encerra timeouts persistentes em duas tentativas e menos de sete segundos', async () => {
+    const fetch = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetch);
+    const started = Date.now();
+    await expect(client().listStatuses()).rejects.toMatchObject({ code: 'CLICKUP_TIMEOUT' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(Date.now() - started).toBeLessThan(7000);
+  });
   it('limita falhas persistentes a duas tentativas', async () => {
     vi.useFakeTimers();
     const fetch = vi.fn().mockImplementation(async () => new Response('', { status: 503 }));
