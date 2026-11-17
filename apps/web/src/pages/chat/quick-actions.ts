@@ -13,7 +13,7 @@ const safeguards = 'Continue este fluxo guiado com uma pergunta por vez. Solicit
 export type QuickAction = (typeof quickActions)[number];
 export type QuickActionContext = { tenantName?: string; city?: string; businessContext?: string };
 function text(value: unknown, limit: number): string | undefined {
-  return typeof value === 'string' ? value.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, limit) || undefined : undefined;
+  return typeof value === 'string' ? value.replace(/[\s\p{Cc}]+/gu, ' ').trim().slice(0, limit) || undefined : undefined;
 }
 export function normalizeQuickActionContext(value: unknown): QuickActionContext {
   if (!value || typeof value !== 'object') return {};

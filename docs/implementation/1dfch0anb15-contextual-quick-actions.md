@@ -17,11 +17,18 @@ Base: hmg (d61e282e). Nenhuma PR aberta específica encontrada; #459 (atalhos mo
 
 ## Implementação e critérios verificáveis
 
-- [ ] Red: testes de componente para seis ações sem campo extra, personalização/fallback, cancelamento, teclado, bloqueio e submissão única; testes integrados para compositor, mesma conversa e erro.
-- [ ] Extrair catálogo e montagem de prompt em módulo puro; manter HTTP num hook e apresentação no componente.
-- [ ] Integrar seleção no ChatPage e reutilizar submitMessage/streamResponse, preservando texto livre e confirmações.
+- [x] Red: testes de componente para seis ações sem campo extra, personalização/fallback, cancelamento, teclado, bloqueio e submissão única; testes integrados para compositor, mesma conversa e erro.
+- [x] Extrair catálogo e montagem de prompt em módulo puro; manter HTTP num hook e apresentação no componente.
+- [x] Integrar seleção no ChatPage e reutilizar submitMessage/streamResponse, preservando texto livre e confirmações.
 - [ ] Green: executar Vitest focado e suíte web; build TypeScript/Vite.
 - [ ] Atualizar E2E existentes e adicionar mobile para contexto, toque/teclado, resposta livre, falha e ausência de overflow. APIs simuladas, nenhuma geração paga. Validar 320x568, 390x844, 844x390 e desktop.
 - [ ] Revisar diff, atualizar branch com hmg, abrir PR com título exato do ticket e acompanhar checks. Não merge/deploy.
 
 Aceite: um único textbox (Mensagem), opções claras e contextualizadas, envio único para a mesma conversa, resposta da Ady visível, rascunho/contexto preservados ao falhar, zero chamadas de execução externa e CI aprovado, PR atualizada/sem conflitos.
+
+## Evidências de validação
+
+- Red confirmado no componente original (9 falhas), na integração do compositor (2 falhas), no reenvio de briefing e na apresentação compacta; Green posterior: 54 testes focados passaram, incluindo os 29 de concorrência.
+- Build TypeScript/Vite passou. Verificação visual em Chromium com APIs simuladas nas larguras 320, 390 e 844; compositor permanece acessível e opções têm alvos de 44px.
+- Primeira execução Playwright: 39 de 40 passaram; um seletor do novo teste de navegação usava um nome incorreto para o diálogo. Corrigido para o diálogo existente, sem mudar produção; suíte de sugestões reexecutada no checkout final.
+- PR #465 direcionada a hmg. Resultado final das suítes/CI registrado na descrição da PR.
