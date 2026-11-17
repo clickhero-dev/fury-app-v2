@@ -43,6 +43,7 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
+      environment: process.env.APP_ENV || process.env.NODE_ENV || 'unknown',
       method: context.method,
       path: context.path,
       statusCode: context.statusCode,

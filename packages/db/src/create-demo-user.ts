@@ -30,6 +30,7 @@ async function createDemoUser() {
       .values({
         name: 'Fashion Demo',
         slug: 'fashion-demo',
+        isDemo: true,
       })
       .returning();
 
@@ -81,9 +82,7 @@ async function createDemoUser() {
     });
 
     console.log('✅ Config FURY criada');
-    console.log('\n🔐 Credenciais demo:');
-    console.log(`   Email: ${email}`);
-    console.log(`   Senha: ${password}`);
+    console.log('✅ Provisionamento demo concluído');
 
     process.exit(0);
   } catch (error) {

@@ -46,9 +46,16 @@ export function useDemoLogin() {
   const dispatch = useAppDispatch();
 
   return useMutation({
+    retry: false,
     mutationFn: async (): Promise<LoginResponse> => {
-      const response = await api.post<{ success: boolean; data: LoginResponse; timestamp: string }>('/auth/demo-login');
+      const response = await api.post<{ success: boolean; data: LoginResponse; timestamp: string }>('/auth/demo-login', undefined, { timeout: 15000 });
       const result = response.data.data;
+      if (!result || typeof result.token !== 'string' || !result.token ||
+          typeof result.refreshToken !== 'string' || !result.refreshToken ||
+          !result.user || typeof result.user.email !== 'string' ||
+          typeof result.user.tenantId !== 'string' || !result.user.tenantId) {
+        throw new Error('Resposta de sessão demo inválida');
+      }
       localStorage.setItem('token', result.token);
       localStorage.setItem('refreshToken', result.refreshToken);
       localStorage.setItem('user', JSON.stringify(result.user));
