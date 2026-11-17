@@ -4,6 +4,8 @@ import api from '@/lib/api';
 import { errorMessage } from '@/lib/error-message';
 import type { AdminDashboardStats, DashboardPeriod } from '../../types/admin';
 import { formatBRL, planColor } from './adminDashboard.utils';
+import { getStoredPlatformRole } from '@/lib/platform-role';
+import { PartnersDashboardTab } from './PartnersDashboardTab';
 
 const ATIVIDADE_CORES: Record<string, { bg: string; color: string; icon: React.ReactNode }> = {
   novo: {
@@ -38,6 +40,9 @@ const cardStyle: React.CSSProperties = { background: 'var(--admin-surface)', bor
 
 export function DashboardAdminPage() {
   const [periodo, setPeriodo] = useState<DashboardPeriod>('30d');
+  // abas só para o super; parceiro vê o dashboard dos clientes dele
+  const isSuper = getStoredPlatformRole() === 'super_admin';
+  const [tab, setTab] = useState<'ady' | 'parceiros'>('ady');
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +172,31 @@ export function DashboardAdminPage() {
       </div>
     </div>
 
+    {isSuper && (
+      <div role="tablist" aria-label="Visão do dashboard" className="flex gap-1 border-b border-border">
+        {([['ady', 'Clientes ady'], ['parceiros', 'Parceiros']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`ady-btn px-4 py-3 text-sm -mb-px border-b-2 ${tab === id ? 'border-brand text-[#17708A] dark:text-[#1E88A8] font-semibold' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    )}
+
+    {isSuper && (
+      <div className="text-xs text-text-secondary bg-brand/10 rounded-xl px-4 py-3">
+        {tab === 'ady'
+          ? 'Só clientes que compram direto da ady. Clientes de parceiros não entram nestes números.'
+          : 'Base de parceiros. O valor pago pelo parceiro é pagamento único: entra em "Receita no período", nunca no MRR.'}
+      </div>
+    )}
+
+    {isSuper && tab === 'parceiros' ? <PartnersDashboardTab period={periodo} /> : (<>
     {/* KPI cards */}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
       {kpis.map((kpi) => (
@@ -260,6 +290,7 @@ export function DashboardAdminPage() {
       </div>
 
     </div>
+    </>)}
     </div>
   );
 }

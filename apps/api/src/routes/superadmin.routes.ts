@@ -111,6 +111,9 @@ router.get('/healthchecks/users', controllers.metaHealthchecks.listUsers);
 router.get('/healthchecks', controllers.metaHealthchecks.getLatest);
 router.post('/healthchecks/run', controllers.metaHealthchecks.run);
 
+// Dashboard: aba Parceiros
+router.get("/dashboard/partners", controllers.superadmin.getPartnersDashboard);
+
 // Setup tenant + user
 router.post("/setup-tenant", controllers.superadmin.setupTenant);
 
@@ -121,6 +124,10 @@ router.get("/partners/:id", controllers.partners.get);
 router.patch("/partners/:id", controllers.partners.update);
 // chave de IA: super só vê se existe; quem cadastra é o próprio parceiro
 router.get("/partners/:id/ai-key", controllers.partners.getAiKey);
+// pagamento único do parceiro à ady
+router.get("/partners/:id/payment", controllers.partners.getPayment);
+router.post("/partners/:id/payment", controllers.partners.createPayment);
+router.delete("/partners/:id/payment/:paymentId", controllers.partners.deletePayment);
 router.get("/deleted-tenants", controllers.partners.listDeletedTenants);
 router.post("/deleted-tenants/:id/restore", controllers.partners.restoreTenant);
 

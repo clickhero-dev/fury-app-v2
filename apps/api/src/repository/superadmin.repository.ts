@@ -18,6 +18,7 @@ import {
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import { provisionTrialSubscription } from '../services/billing/trial-signup.js';
+import { daysAgoSaoPauloYMD, todaySaoPauloYMD } from '../utils/date-sao-paulo.js';
 
 type Tenant = typeof tenants.$inferSelect;
 type User = typeof users.$inferSelect;
@@ -26,6 +27,29 @@ type Subscription = typeof subscriptions.$inferSelect;
 
 // ── Dashboard (stats globais) ───────────────────────────────────
 export type DashboardPeriod = '7d' | '30d' | '90d';
+
+export interface PartnersDashboard {
+  revenueCents: number;
+  activePartners: number;
+  newPartners: number;
+  slotsUsed: number;
+  slotsTotal: number;
+  partnerClientsActive: number;
+  partnerClientsTotal: number;
+  partners: {
+    id: string;
+    name: string;
+    paidCents: number | null;
+    paidAt: string | null;
+    usedTenants: number;
+    maxTenants: number;
+    activeClients: number;
+    aiKeyConfigured: boolean;
+  }[];
+}
+
+// assinatura em dia (mesma regra do checkSubscriptionActive); t = alias de tenants
+const ACTIVE_SUB_SQL = sql.raw(`EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id AND s.status = 'active' AND (s.is_non_expirable OR s.current_period_end IS NULL OR s.current_period_end > now()))`);
 
 export type ActivityItem = {
   tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao';
@@ -114,6 +138,9 @@ export const PARTNER_REACHABLE_ROLES = ['user', 'user_partner'];
 function planOwner(partnerId: string | null) {
   return partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId);
 }
+
+// cliente direto da ady: sem parceiro e não é a conta própria de um parceiro (usar dentro de SELECT ... FROM tenants)
+export const ADY_DIRECT_TENANT_SQL = sql.raw(`partner_id IS NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.tenant_id = tenants.id AND u.platform_role = 'admin_partner')`);
 
 // clientes não excluídos; com partnerId, só os daquele parceiro
 function liveTenants(partnerId: string | null) {
@@ -543,8 +570,9 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const days = parseInt(period, 10);
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const now = new Date();
-    // cliente excluído (soft-delete) ou de outro parceiro fica fora das contas
-    const ofPartner = partnerId ? sql` AND partner_id = ${partnerId}` : sql``;
+    // parceiro: só os clientes dele; super: só clientes diretos da ady (sem parceiro e sem conta de parceiro)
+    const ofPartner = partnerId ? sql` AND partner_id = ${partnerId}` : sql` AND ${ADY_DIRECT_TENANT_SQL}`;
+    const scopedTenants = and(liveTenants(partnerId), partnerId ? undefined : sql`${tenants.id} IN (SELECT id FROM tenants WHERE ${ADY_DIRECT_TENANT_SQL})`);
     const liveTenant = sql`${subscriptions.tenantId} IN (SELECT id FROM tenants WHERE deleted_at IS NULL${ofPartner})`;
 
     // "Ativa" = mesma semântica do middleware checkSubscriptionActive
@@ -580,7 +608,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [newClientsRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(tenants)
-      .where(and(liveTenants(partnerId), gte(tenants.createdAt, start)));
+      .where(and(scopedTenants, gte(tenants.createdAt, start)));
     const [cancelRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(subscriptions)
@@ -603,7 +631,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .limit(10);
 
     const recentNewTenants = await this.db.query.tenants.findMany({
-      where: and(liveTenants(partnerId), gte(tenants.createdAt, start)),
+      where: and(scopedTenants, gte(tenants.createdAt, start)),
       orderBy: [desc(tenants.createdAt)],
       limit: 5,
     });
@@ -656,6 +684,52 @@ export class SuperAdminRepository extends TenantScopedRepository {
         .sort((a, b) => b.clients - a.clients),
       expiredAccounts: countExpiredAccounts(expiredRows as any, now),
       recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any, recentRenewals as any),
+    };
+  }
+
+  // aba Parceiros do super: receita única, vagas e clientes por parceiro
+  async getPartnersDashboard(period: DashboardPeriod): Promise<PartnersDashboard> {
+    const days = parseInt(period, 10);
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const from = daysAgoSaoPauloYMD(days);
+    const to = todaySaoPauloYMD();
+
+    // pagamento de parceiro excluído também conta (o dinheiro entrou)
+    const [revenue] = await this.db.execute(sql`SELECT COALESCE(SUM(amount_cents), 0)::bigint AS cents
+      FROM ady_partner_payments WHERE paid_at >= ${from}::date AND paid_at <= ${to}::date`);
+
+    const rows = (await this.db.execute(sql`SELECT p.id, p.name, p.max_tenants AS "maxTenants", p.created_at AS "createdAt",
+        (p.openrouter_key_last4 IS NOT NULL) AS "aiKeyConfigured",
+        pay.amount_cents AS "paidCents", pay.paid_at::text AS "paidAt",
+        (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL) AS "usedTenants",
+        (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL AND ${ACTIVE_SUB_SQL}) AS "activeClients"
+      FROM ady_partners p
+      LEFT JOIN ady_partner_payments pay ON pay.partner_id = p.id
+      WHERE p.deleted_at IS NULL
+      ORDER BY p.name ASC`)) as unknown as Array<PartnersDashboard['partners'][number] & { createdAt: Date | string; paidCents: number | string | null }>;
+
+    const partners = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      paidCents: r.paidCents === null ? null : Number(r.paidCents),
+      paidAt: r.paidAt,
+      usedTenants: Number(r.usedTenants),
+      maxTenants: Number(r.maxTenants),
+      activeClients: Number(r.activeClients),
+      aiKeyConfigured: Boolean(r.aiKeyConfigured),
+    }));
+    const sum = (f: (p: (typeof partners)[number]) => number) => partners.reduce((acc, p) => acc + f(p), 0);
+    const slotsUsed = sum((p) => p.usedTenants);
+
+    return {
+      revenueCents: Number((revenue as { cents?: string | number } | undefined)?.cents ?? 0),
+      activePartners: partners.length,
+      newPartners: rows.filter((r) => new Date(r.createdAt) >= start).length,
+      slotsUsed,
+      slotsTotal: sum((p) => p.maxTenants),
+      partnerClientsActive: sum((p) => p.activeClients),
+      partnerClientsTotal: slotsUsed,
+      partners,
     };
   }
 }

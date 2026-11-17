@@ -252,6 +252,16 @@ export class SuperAdminController {
     }
   };
 
+  // aba Parceiros (rota só super)
+  getPartnersDashboard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { period } = dashboardPeriodSchema.parse(req.query);
+      res.json({ success: true, data: await this.repo.getPartnersDashboard(period), timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   // ─── Tenants ───────────────────────────────────────────
 
   listTenants = async (req: Request, res: Response, next: NextFunction) => {

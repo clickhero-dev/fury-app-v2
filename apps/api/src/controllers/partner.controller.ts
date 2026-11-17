@@ -8,6 +8,7 @@ import { rbacService } from "../services/core/rbac.service.js";
 import { openrouterService } from "../services/llms/openrouter.service.js";
 import { encryptAccessToken } from "../lib/meta-api.js";
 import { clearAiKeyCache } from "../lib/ai-key-context.js";
+import { todaySaoPauloYMD } from "../utils/date-sao-paulo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,6 +23,24 @@ const createPartnerSchema = z.object({
 const updatePartnerSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
   maxTenants: z.number().int().min(0).max(10000).optional(),
+});
+
+const MAX_PAYMENT_CENTS = 9_999_999_999;
+
+// data real (AAAA-MM-DD), nunca futura
+const paidAtSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use o formato AAAA-MM-DD")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, "Data inválida")
+  .refine((v) => v <= todaySaoPauloYMD(), "A data não pode ser futura");
+
+const createPaymentSchema = z.object({
+  paidAt: paidAtSchema,
+  amountCents: z.number().int("Informe o valor em centavos").min(1, "O valor deve ser maior que zero").max(MAX_PAYMENT_CENTS, "Valor acima do permitido"),
+  note: z.string().trim().max(500).optional(),
 });
 
 // formato da chave do provedor; a mensagem nunca repete o valor
@@ -127,6 +146,40 @@ export class PartnerController {
       // usuários do cliente voltam a entrar na hora
       await rbacService.bumpVersion();
       ok(res, null);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── Pagamento do parceiro (só super; um por parceiro) ──
+  getPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      ok(res, { payment: await this.repo.getPayment(partner.id) });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const body = createPaymentSchema.parse(req.body);
+      const result = await this.repo.createPayment(partner.id, { amountCents: body.amountCents, paidAt: body.paidAt, note: body.note || null }, req.user!.userId);
+      if (result === "exists")
+        throw new AppError(409, "PAYMENT_EXISTS", "Este parceiro já tem um pagamento registrado. Exclua o atual para registrar outro.");
+      ok(res, { payment: await this.repo.getPayment(partner.id) }, 201);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deletePayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const removed = UUID_RE.test(req.params.paymentId) && (await this.repo.deletePayment(partner.id, req.params.paymentId, req.user!.userId));
+      if (!removed) throw new AppError(404, "PAYMENT_NOT_FOUND", "Pagamento não encontrado");
+      ok(res, { payment: null });
     } catch (err) {
       next(err);
     }

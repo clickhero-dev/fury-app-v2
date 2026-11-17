@@ -1,4 +1,4 @@
-import { db as defaultDb, type Database, adyPartners, adyRbacAuditLog, tenants, users } from '@fury/db';
+import { db as defaultDb, type Database, adyPartners, adyPartnerPayments, adyRbacAuditLog, tenants, users } from '@fury/db';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 export interface PartnerSummary {
@@ -9,6 +9,15 @@ export interface PartnerSummary {
   accountEmail: string | null;
   accountUserId: string | null;
   keyLast4: string | null;
+  createdAt: Date;
+}
+
+export interface PartnerPayment {
+  id: string;
+  amountCents: number;
+  paidAt: string;
+  note: string | null;
+  createdByName: string | null;
   createdAt: Date;
 }
 
@@ -117,6 +126,67 @@ export class PartnerRepository {
         partnerId,
         details: value ? { last4: value.last4 } : {},
       });
+    });
+  }
+
+  // ── Pagamento do parceiro (um por parceiro; só super) ──
+  async getPayment(partnerId: string): Promise<PartnerPayment | null> {
+    const [row] = await this.db
+      .select({
+        id: adyPartnerPayments.id,
+        amountCents: adyPartnerPayments.amountCents,
+        paidAt: adyPartnerPayments.paidAt,
+        note: adyPartnerPayments.note,
+        createdByName: users.name,
+        createdAt: adyPartnerPayments.createdAt,
+      })
+      .from(adyPartnerPayments)
+      .leftJoin(users, eq(users.id, adyPartnerPayments.createdBy))
+      .where(eq(adyPartnerPayments.partnerId, partnerId));
+    return row ?? null;
+  }
+
+  // 'exists' = parceiro já tem pagamento (índice único garante na corrida)
+  async createPayment(partnerId: string, data: { amountCents: number; paidAt: string; note: string | null }, actorUserId: string): Promise<'created' | 'exists'> {
+    try {
+      await this.db.transaction(async (tx) => {
+        const [payment] = await tx
+          .insert(adyPartnerPayments)
+          .values({ partnerId, amountCents: data.amountCents, paidAt: data.paidAt, note: data.note, createdBy: actorUserId })
+          .returning({ id: adyPartnerPayments.id });
+        await tx.insert(adyRbacAuditLog).values({
+          actorUserId,
+          action: 'partner_payment_created',
+          entityType: 'partner',
+          entityKey: partnerId,
+          partnerId,
+          details: { paymentId: payment!.id, amountCents: data.amountCents, paidAt: data.paidAt },
+        });
+      });
+      return 'created';
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') return 'exists';
+      throw err;
+    }
+  }
+
+  // false = pagamento não é deste parceiro
+  async deletePayment(partnerId: string, paymentId: string, actorUserId: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [removed] = await tx
+        .delete(adyPartnerPayments)
+        .where(and(eq(adyPartnerPayments.id, paymentId), eq(adyPartnerPayments.partnerId, partnerId)))
+        .returning({ amountCents: adyPartnerPayments.amountCents, paidAt: adyPartnerPayments.paidAt });
+      if (!removed) return false;
+      await tx.insert(adyRbacAuditLog).values({
+        actorUserId,
+        action: 'partner_payment_deleted',
+        entityType: 'partner',
+        entityKey: partnerId,
+        partnerId,
+        details: { paymentId, amountCents: removed.amountCents, paidAt: removed.paidAt },
+      });
+      return true;
     });
   }
 

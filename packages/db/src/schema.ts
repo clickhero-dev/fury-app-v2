@@ -1463,6 +1463,25 @@ export const adyRbacAuditLog = pgTable(
   }),
 );
 
+// Pagamento (único) do parceiro à ady; em centavos
+export const adyPartnerPayments = pgTable(
+  'ady_partner_payments',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    partnerId: uuid('partner_id').notNull().references(() => adyPartners.id, { onDelete: 'cascade' }),
+    amountCents: integer('amount_cents').notNull(),
+    paidAt: date('paid_at').notNull(),
+    note: text('note'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    partnerUniq: uniqueIndex('ady_partner_payments_partner_uniq').on(table.partnerId),
+    paidAtIdx: index('ady_partner_payments_paid_at_idx').on(table.paidAt),
+    amountPositive: check('ady_partner_payments_amount_cents_check', sql`${table.amountCents} > 0`),
+  }),
+);
+
 export const allTables = {
   tenants,
   users,
@@ -1514,4 +1533,5 @@ export const allTables = {
   adyRbacViewsBlocked,
   adyRbacPlanViewsBlocked,
   adyRbacAuditLog,
+  adyPartnerPayments,
 };

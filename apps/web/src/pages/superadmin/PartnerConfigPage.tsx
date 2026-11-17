@@ -6,15 +6,16 @@ import { errorMessage } from "@/lib/error-message";
 import { apiMessage, SlotsBar, type Partner } from "./PartnersPage";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { IntegrationsPanel } from "./IntegrationsPanel";
+import { PartnerPaymentPanel } from "./PartnerPaymentPanel";
 import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
 
-type Tab = "dados" | "limites" | "permissoes" | "integracoes";
+type Tab = "dados" | "limites" | "permissoes" | "integracoes" | "pagamento";
 
 const inputCls =
   "w-full bg-admin-bg border border-admin-border rounded-xl px-3 py-2.5 text-sm text-admin-text focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-60";
 const btnCls = "ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-4 py-2.5";
 
-// Configurações do parceiro: dados, limites, permissões e integrações
+// Configurações do parceiro: dados, limites, permissões, integrações e pagamento
 export function PartnerConfigPage() {
   const { id } = useParams();
   const [partner, setPartner] = useState<Partner | null>(null);
@@ -97,6 +98,9 @@ export function PartnerConfigPage() {
         <button role="tab" aria-selected={tab === "integracoes"} className={tabCls("integracoes")} onClick={() => { setTab("integracoes"); setMsg(""); }}>
           Integrações
         </button>
+        <button role="tab" aria-selected={tab === "pagamento"} className={tabCls("pagamento")} onClick={() => { setTab("pagamento"); setMsg(""); }}>
+          Pagamento
+        </button>
       </div>
 
       {msg && <div role="status" className="text-sm text-text-primary">{msg}</div>}
@@ -153,6 +157,8 @@ export function PartnerConfigPage() {
       {tab === "permissoes" && <PermissionsPanel partnerId={partner.id} />}
 
       {tab === "integracoes" && <IntegrationsPanel url={`/admin/partners/${partner.id}/ai-key`} readOnly />}
+
+      {tab === "pagamento" && <PartnerPaymentPanel partnerId={partner.id} />}
 
       {resetOpen && (
         <ResetPasswordModal
