@@ -359,6 +359,34 @@ export async function runMigrationsAndValidate(): Promise<void> {
   if (!validation.ok) {
     throw new Error(`Migration validation failed: missing tables ${validation.missing.join(', ')}`);
   }
+  await validateRatingConstraint();
+}
+
+/** The table alone is insufficient for ON CONFLICT: verify its actual arbiter.
+ * Read-only: schema drift must be investigated before any corrective DDL. */
+export async function validateRatingConstraint(): Promise<void> {
+  const client = postgres(connectionString, { max: 1 });
+  try {
+    const [result] = await client<{ valid: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_index i ON i.indexrelid = c.conindid
+        WHERE c.conrelid = to_regclass('public.creative_asset_ratings')
+          AND c.contype = 'u' AND NOT c.condeferrable
+          AND i.indisvalid AND i.indisready AND i.indisunique
+          AND ARRAY(
+            SELECT a.attname FROM unnest(c.conkey) AS k(attnum)
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+            ORDER BY a.attname
+          ) = ARRAY['creative_asset_id', 'tenant_id', 'user_id']::name[]
+      ) AS valid
+    `;
+    if (!result?.valid) {
+      throw new Error('Migration validation failed: creative_asset_ratings: missing valid immediate unique constraint');
+    }
+  } finally {
+    await client.end();
+  }
 }
 
 // CLI entry point — only runs when file is executed directly

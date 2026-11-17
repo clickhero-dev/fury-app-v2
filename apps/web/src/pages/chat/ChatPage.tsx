@@ -394,7 +394,9 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   }
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    const text = input.trim();
+    await submitMessage(input.trim());
+  }
+  async function submitMessage(text: string) {
     const attachments = media.ready;
     const key = current || '';
     if ((!text && !attachments.length) || composerDisabled || deletingRef.current || sendingRef.current.has(key) || media.isBlocked() || dictation.active) return;
@@ -544,7 +546,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       </DialogPrimitive.Trigger>
 <span className="ady-chat-avatar" aria-hidden="true"><AdySymbol size={29}/></span>
 <div className="ady-chat-header-copy">
-<div className="ady-chat-identity"><h2>Ady</h2><span>Assistente de IA</span></div>
+<div className="ady-chat-identity"><h2>Assistente do Ady</h2></div>
 <p title={currentTitle}>{currentTitle}</p>
 </div>
 {current && <DropdownMenu.Root>
@@ -587,7 +589,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
 <h1>Como posso ajudar?</h1>
 <p>Conte sua ideia ou escolha uma sugestão para começar.</p>
 </div>
-<ChatQuickActions onSelect={prompt => { setInput(prompt); inputRef.current?.focus(); }} disabled={composerDisabled}/>
+<ChatQuickActions onSelect={prompt => { void submitMessage(prompt); }} disabled={composerDisabled}/>
 </div>}<MessageList messages={messages} approvals={approvals} conversationId={current} clarifications={clarifications} onChoose={choose} disabled={opening || deleting || sendUncertain || busy}>{approvals.map(a => <article className="ady-chat-approval" data-status={a.status} data-approval-id={a.id} key={a.id}>
 <strong>{a.status === 'pending' ? 'Confirme esta ação' : 'Ação'}: {a.action}</strong>
 <ParameterValues value={a.parameters}/>{a.status === 'pending' ? <button onClick={() => approve(a.id)} disabled={opening || deleting || approving !== null}>{approving === a.id ? 'Confirmando…' : 'Confirmar ação'}</button> : approvalFailureFromResult(a.status, a.result) ? <p role="alert">{approvalFailureFromResult(a.status, a.result)?.message}</p> : (['unknown','failed'].includes(a.status) || a.result?.job?.status === 'unknown') ? <p>O resultado não pôde ser confirmado. Verifique o estado da ação antes de tentar novamente.</p> : <p>Status: {a.result?.jobId && !['done','error','failed'].includes(a.result?.job?.status || '') ? 'Em andamento' : ['error','failed'].includes(a.result?.job?.status || '') ? 'Falhou' : a.status === 'completed' ? 'Concluída' : a.status === 'expired' ? 'Expirada' : 'Em andamento'}</p>}{typeof a.result?.imageUrl === 'string' && /^https:\/\//i.test(a.result.imageUrl) && <img src={a.result.imageUrl} alt="Imagem gerada" className="max-w-full rounded-xl"/>}{a.result?.jobId && !['done','error','failed','unknown'].includes(a.result?.job?.status || '') && <p>O cancelamento desta geração está indisponível. O vídeo continuará sendo processado.</p>}{['error','failed'].includes(a.result?.job?.status || '') && <p>{a.result?.job?.error === 'Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.' ? a.result.job.error : 'Não foi possível concluir o vídeo.'}</p>}{typeof a.result?.job?.videoUrl === 'string' && /^https:\/\//i.test(a.result.job.videoUrl) && <video src={a.result.job.videoUrl} aria-label="Vídeo gerado" controls className="max-w-full"/>}{typeof a.result?.videoUrl === 'string' && /^https:\/\//i.test(a.result.videoUrl) && <video src={a.result.videoUrl} aria-label="Vídeo gerado" controls className="max-w-full"/>}</article>)}{plans.plans.map(plan => <ChatPlanCard key={plan.id} plan={plan} busy={plans.busyPlanIds.includes(plan.id)} error={plans.errors[plan.id]} onAction={plans.onAction} onEdit={plans.onEdit} onCompleteTask={plans.onCompleteTask}/> )}</MessageList>{plans.error && <p role="alert">{plans.error}</p>}{!busy && responseRun === 'running' && <p role="status">Aguardando a resposta em andamento…</p>}{latestRuns(responseRuns).filter(run => ['failed','interrupted'].includes(run.status)).map(run => <button key={run.id} disabled={opening || creating || deleting || busy || sendUncertain} onClick={() => streamResponse(undefined, current, [], undefined, run.id)}>Retomar resposta{messages.find(message => message.id === run.user_message_id)?.content ? `: ${messages.find(message => message.id === run.user_message_id)?.content}` : ''}</button>)}{!responseRuns.length && !busy && ['failed','interrupted'].includes(responseRun || '') && <button disabled={opening || creating || deleting} onClick={() => streamResponse()}>Retomar resposta</button>}{opening && <p role="status">Carregando conversa…</p>}{creating && <p role="status">Iniciando conversa…</p>}{busy && <p role="status">Ady está respondendo…</p>}{error && <div role="alert">

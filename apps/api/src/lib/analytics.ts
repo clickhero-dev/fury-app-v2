@@ -47,7 +47,7 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
-      environment: context.environment ?? process.env.APP_ENV ?? process.env.NODE_ENV ?? 'unknown',
+      environment: context.environment?.trim() || process.env.APP_ENV?.trim() || process.env.NODE_ENV?.trim() || 'unknown',
       requestId: context.requestId,
       reason: context.reason,
       providerStatus: context.providerStatus,

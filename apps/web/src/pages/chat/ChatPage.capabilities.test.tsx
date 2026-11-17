@@ -13,21 +13,15 @@ const json = (data: unknown) => new Response(JSON.stringify(data));
 beforeEach(() => { sessionStorage.clear(); localStorage.setItem('token','token'); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('integra as quatro sugestões no rascunho sem enviar', async () => {
+it('integra etapa específica sem alterar o compositor ou enviar no toque', async () => {
   const fetchMock = vi.fn(async () => json([]));
   vi.stubGlobal('fetch', fetchMock);
   render(<ChatPage/>);
-  for (const [label, prompt] of [
-    ['Planejar postagens do mês', 'Quero planejar as postagens do mês'],
-    ['Criar campanha', 'Quero criar uma campanha paga ou orgânica'],
-    ['Criar vídeos', 'Quero criar um vídeo'],
-    ['Criar imagens', 'Quero criar uma imagem'],
-  ]) {
-    fireEvent.click(screen.getByRole('button', {name:label}));
-    expect(screen.getByLabelText('Mensagem')).toHaveValue(prompt);
-    expect(screen.getByLabelText('Mensagem')).toHaveFocus();
-  }
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole('button', {name:'Criar post para o Instagram',exact:true}));
+  expect(screen.getByRole('heading',{name:'Criar post para o Instagram'})).toBeInTheDocument();
+  expect(screen.getByLabelText('Mensagem')).toHaveValue('');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
 it('consulta aprovações de worker de plano ativo e isola resposta atrasada ao trocar de conversa', async () => {
