@@ -126,7 +126,7 @@ export class AuthService {
 
   async register(data: { name: string; email: string; password: string; companyName: string }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
     const existingUser = await this.repo('').findUserByEmail(data.email);
-    if (existingUser) throw new AppError(409, 'EMAIL_EXISTS', 'Email already registered');
+    if (existingUser) throw new AppError(409, 'EMAIL_EXISTS', 'E-mail já cadastrado');
 
     const baseSlug = generateSlug(data.companyName);
     const slug = await this.ensureUniqueSlug(baseSlug);
@@ -165,12 +165,12 @@ export class AuthService {
 
   async login(data: { email: string; password: string }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
     const user = await this.repo('').findUserByEmail(data.email);
-    if (!user || !user.passwordHash) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!user || !user.passwordHash) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
     // conta excluída responde igual a senha errada (não revela que existe)
-    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -208,14 +208,14 @@ export class AuthService {
     const t1 = Date.now();
     const isValid = await verifyRefreshTokenHash(payload.userId, data.refreshToken);
     const t2 = Date.now();
-    if (!isValid) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or revoked refresh token');
+    if (!isValid) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sessão expirada. Entre novamente.');
 
     const user = await this.repo('').findUserById(payload.userId);
     const t3 = Date.now();
-    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
 
     const remainingTtl = payload.sessionExpiresAt === undefined ? undefined : payload.sessionExpiresAt - Math.floor(Date.now() / 1000);
-    if (remainingTtl !== undefined && remainingTtl <= 0) throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Refresh token has expired');
+    if (remainingTtl !== undefined && remainingTtl <= 0) throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
     await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -237,7 +237,7 @@ export class AuthService {
 
   async getMe(userId: string): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     const tenant = await this.repo(user.tenantId).findTenant();
     return {
       ...userToDTO(user),
@@ -259,7 +259,7 @@ export class AuthService {
     data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown>; businessContext?: string },
   ): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
 
     const userUpdates: Record<string, unknown> = {};
     if (data.name !== undefined) userUpdates.name = data.name;
@@ -347,7 +347,7 @@ export class AuthService {
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     if (!user.passwordHash) throw new AppError(400, 'NO_PASSWORD', 'Sua conta usa login social. Defina uma senha primeiro.');
 
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -364,7 +364,7 @@ export class AuthService {
    */
   async setInitialPassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     if (user.passwordHash && !user.mustChangePassword) {
       throw new AppError(409, 'PASSWORD_ALREADY_SET', 'Esta conta já tem uma senha. Use "alterar senha".');
     }

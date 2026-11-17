@@ -13,7 +13,7 @@ export class AutomationService {
   }
 
   async createAutomationRule(args: { tenantId: string; name: string; description?: string; trigger: string; threshold: number; action: string; enabled?: boolean }) {
-    if (args.threshold < 0) throw new AppError(400, 'INVALID_THRESHOLD', 'Threshold cannot be negative');
+    if (args.threshold < 0) throw new AppError(400, 'INVALID_THRESHOLD', 'O limite não pode ser negativo.');
     return this.repo(args.tenantId).createAutomationRule({
       name: args.name,
       description: args.description,
@@ -77,7 +77,7 @@ export class AutomationService {
     const repo = this.repo(tenantId);
     const existing = await repo.findAutomationRuleById(id);
     if (!existing) {
-      throw new AppError(403, 'FORBIDDEN', 'Rule not found or does not belong to this tenant');
+      throw new AppError(403, 'FORBIDDEN', 'Regra não encontrada.');
     }
     await repo.deleteAutomationRule(id);
   }

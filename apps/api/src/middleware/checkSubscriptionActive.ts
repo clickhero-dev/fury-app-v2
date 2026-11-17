@@ -22,7 +22,7 @@ export function checkSubscriptionActive(
       }
 
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;
-      if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado'));
+      if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Cliente não encontrado'));
 
       const sub = await new SubscriptionRepository(tenantId).findSubscription();
 

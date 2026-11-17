@@ -7,6 +7,7 @@ import { apiMessage } from "./PartnersPage";
 import { Button } from "@/components/ui/button";
 import { ListPagination, usePagination } from "./ListPagination";
 import { statusLabel } from "./subscriptionLabels";
+import { errorMessage } from "@/lib/error-message";
 
 interface DeletedTenant {
   id: string;
@@ -43,7 +44,7 @@ export function TenantsPage() {
   const [restoring, setRestoring] = useState<string | null>(null);
 
   function loadDeleted() {
-    api.get("/admin/deleted-tenants").then((res) => setDeleted(res.data.data)).catch(() => {});
+    api.get("/admin/deleted-tenants").then((res) => setDeleted(res.data.data)).catch((err) => setMsg(errorMessage(err, "Não foi possível carregar os clientes excluídos")));
   }
 
   async function handleRestore(t: DeletedTenant) {
@@ -65,7 +66,7 @@ export function TenantsPage() {
     api
       .get("/admin/tenants")
       .then((res) => { setTenants(res.data.data); })
-      .catch(() => {})
+      .catch((err) => setMsg(errorMessage(err, "Não foi possível carregar os clientes")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -85,8 +86,8 @@ export function TenantsPage() {
       setTenants((prev) => prev.filter((t) => t.id !== deleteTarget.id));
       setMsg(`Cliente "${deleteTarget.name}" excluído`);
       setDeleteTarget(null);
-    } catch {
-      setMsg("Erro ao excluir cliente");
+    } catch (err) {
+      setMsg(errorMessage(err, "Não foi possível excluir o cliente"));
     } finally {
       setDeleting(false);
     }

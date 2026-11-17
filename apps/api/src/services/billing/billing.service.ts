@@ -109,7 +109,7 @@ export class BillingService {
         (existing.status === 'trial' && existing.trialEndsAt && now > existing.trialEndsAt) ||
         (existing.status === 'active' && existing.currentPeriodEnd && now > existing.currentPeriodEnd);
       if (isExpired) throw new AppError(403, 'SUBSCRIPTION_EXPIRED', 'Sua assinatura está vencida. Entre em contato com o suporte.');
-      throw new AppError(409, 'ALREADY_SUBSCRIBED', 'Tenant já possui assinatura ativa');
+      throw new AppError(409, 'ALREADY_SUBSCRIBED', 'Este cliente já possui assinatura ativa');
     }
 
     let asaasCustomer = await this.asaas.findCustomerByExternalReference(tenantId);

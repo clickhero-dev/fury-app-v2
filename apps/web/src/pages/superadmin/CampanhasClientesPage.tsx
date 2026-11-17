@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Building2, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/error-message";
 import { ListPagination, usePagination } from "./ListPagination";
 
 interface Tenant {
@@ -16,15 +17,15 @@ export function CampanhasClientesPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
         const res = await api.get("/admin/tenants");
         setTenants(res.data.data);
-      } catch {
-        setError(true);
+      } catch (err) {
+        setError(errorMessage(err, "Não foi possível carregar os clientes"));
       } finally {
         setLoading(false);
       }
@@ -60,7 +61,7 @@ export function CampanhasClientesPage() {
         </div>
       </div>
 
-      {error && <div className="text-center py-12 text-error text-sm">Erro ao carregar clientes</div>}
+      {error && <div role="alert" className="text-center py-12 text-error text-sm">{error}</div>}
 
       {!error && (
         <div className="grid gap-3">

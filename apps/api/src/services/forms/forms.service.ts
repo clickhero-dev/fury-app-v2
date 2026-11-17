@@ -28,7 +28,7 @@ export class FormsService {
   ) {
     const repo = this.repo(tenantId);
     const existing = await repo.findFormSubmission(formSubmissionId);
-    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Form submission not found');
+    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Formulário não encontrado');
     const updated = await repo.patchFormSubmission(formSubmissionId, patch);
     if (!updated) throw new AppError(500, 'INTERNAL_ERROR', 'Failed to update form submission');
     return updated;

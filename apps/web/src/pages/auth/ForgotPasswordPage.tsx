@@ -7,6 +7,7 @@ import { Loader2, Mail } from 'lucide-react';
 import { useForgotPassword } from '@/hooks/useForgotPassword';
 import type { ForgotPasswordRequest } from '@/types/auth';
 import { AdySymbol } from '@/components/AdySymbol';
+import { errorMessage } from '@/lib/error-message';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido').nonempty('Email é obrigatório'),
@@ -41,7 +42,7 @@ export function ForgotPasswordPage() {
       setSuccessEmail(data.email);
       setShowSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao processar solicitação');
+      setError(errorMessage(err, 'Não foi possível enviar o código de recuperação'));
     }
   };
 

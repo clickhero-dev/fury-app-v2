@@ -104,6 +104,21 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
   });
 
+  it('falha ao carregar conexões mostra o motivo e não oferece conectar', async () => {
+    mockApiGet.mockImplementation(async (url: string) => {
+      if (url === '/meta/connections') throw Object.assign(new Error('Network Error'), { isAxiosError: true });
+      if (url === '/meta/scopes') return { data: { success: true, data: { scopes: [] } } };
+      return { data: { success: true, data: null } };
+    });
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText(/^Não foi possível carregar as conexões Meta\. Sem conexão com o servidor/, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma conta de anúncio conectada')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Conectar conta Meta/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+  });
+
   it('exibe erro OAuth da Meta com o código técnico e remove o parâmetro da URL', async () => {
     mockApi([]);
     render(<IntegracoesContent />, { wrapper: makeWrapper('/configuracoes/integracoes?error=ad_account_in_use') });

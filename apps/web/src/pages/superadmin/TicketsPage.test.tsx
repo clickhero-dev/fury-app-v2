@@ -299,7 +299,7 @@ describe('TicketsPage', () => {
   });
 
   it('oferece a tarefa criada no snack quando um anexo falha', async () => {
-    mockPost.mockRejectedValue({ response: { data: { error: {
+    mockPost.mockRejectedValue({ isAxiosError: true, response: { data: { error: {
       message: 'O ticket foi aberto, mas não foi possível anexar todos os arquivos.',
       details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
     } } } });
@@ -569,7 +569,7 @@ describe('TicketsPage', () => {
 
   it('mantém motivo na modal quando a API falha para permitir nova tentativa', async () => {
     mockTicketsData({ open: [ticket('review-3', 'Ajustar relatório', { status: 'homologação' })], resolved: [] });
-    mockPost.mockRejectedValue({ response: { data: { error: { message: 'Não foi possível atualizar o chamado agora. Tente novamente.' } } } });
+    mockPost.mockRejectedValue({ isAxiosError: true, response: { data: { error: { message: 'Não foi possível atualizar o chamado agora. Tente novamente.' } } } });
     render(<TicketsPage />);
     const user = setupUser();
     await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Ajustar relatório' }));

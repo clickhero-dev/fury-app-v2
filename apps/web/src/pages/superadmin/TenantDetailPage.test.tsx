@@ -168,7 +168,7 @@ describe('TenantDetailPage — créditos de imagem', () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(screen.getByText('Não foi possível remover. Tente novamente.')).toBeInTheDocument();
+      expect(screen.getByText(/^Não foi possível remover\./)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Aguarde 5s' })).toBeDisabled();
     } finally {
       vi.useRealTimers();
@@ -212,7 +212,7 @@ describe('TenantDetailPage — créditos de imagem', () => {
     await user.click(await screen.findByRole('button', { name: 'Assinatura' }));
     await user.click(await screen.findByRole('button', { name: 'Renovar cota' }));
 
-    expect(await screen.findByText('Não foi possível renovar a cota. Tente novamente.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Não foi possível renovar a cota\./)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
   });
 
@@ -303,7 +303,22 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
     await user.click(screen.getByRole('button', { name: /^Criar$/ }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Criar Usuário' });
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Erro ao criar usuário');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível criar o usuário. Não conseguimos identificar o motivo.');
+  });
+
+  it('erro ao criar mostra o motivo vindo da API', async () => {
+    mockPost.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { error: { code: 'EMAIL_EXISTS', message: 'Email já cadastrado' } } },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Criar Usuário' }));
+    await user.type(screen.getByLabelText('Nome'), 'Ana');
+    await user.click(screen.getByRole('button', { name: /^Criar$/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Criar Usuário' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível criar o usuário. Email já cadastrado.');
   });
 
   it('fechar o modal descarta a senha digitada', async () => {
@@ -343,7 +358,7 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
     await user.type(screen.getByLabelText('Nova senha'), 'NovaSenha#1');
     await user.type(screen.getByLabelText('Confirmar senha'), 'NovaSenha#1');
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Trocar senha/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível trocar a senha. Tente novamente.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível trocar a senha.');
   });
 
   it('com até 9 usuários não mostra paginação', async () => {
@@ -384,5 +399,13 @@ describe('TenantDetailPage — criar usuário e paginação', () => {
 
     expect(await screen.findByText('Nova Pessoa')).toBeInTheDocument();
     expect(screen.getByText('Mostrando 10–10 de 10')).toBeInTheDocument();
+  });
+});
+
+describe('TenantDetailPage — falha ao carregar', () => {
+  it('mostra o motivo em vez de "Cliente não encontrado"', async () => {
+    mockGet.mockRejectedValue({ isAxiosError: true, response: { status: 403, data: { error: { code: 'FORBIDDEN', message: 'Acesso negado' } } } });
+    renderPage();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar o cliente. Acesso negado.');
   });
 });

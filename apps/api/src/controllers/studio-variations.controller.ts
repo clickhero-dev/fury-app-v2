@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { StudioVariationsService } from '../services/studio/studio-variations.service.js';
+import { validationBody } from '../middleware/errorHandler.js';
 
 const batchSchema = z.object({ batchId: z.string().uuid(), assetId: z.string().uuid() });
 
@@ -15,7 +16,7 @@ export class StudioVariationsController {
       const result = await this.service.createBatch(tenantId, body, publicBaseUrl);
       res.status(202).json(result);
     } catch (error) {
-      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      if (error instanceof z.ZodError) res.status(400).json(validationBody(error));
       else next(error);
     }
   };
@@ -26,7 +27,7 @@ export class StudioVariationsController {
       const tenantId = req.tenant?.tenantId as string;
       res.json(await this.service.getBatch(tenantId, batchId));
     } catch (error) {
-      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      if (error instanceof z.ZodError) res.status(400).json(validationBody(error));
       else next(error);
     }
   };
@@ -37,7 +38,7 @@ export class StudioVariationsController {
       const tenantId = req.tenant?.tenantId as string;
       res.json(await this.service.cancelBatch(tenantId, batchId));
     } catch (error) {
-      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      if (error instanceof z.ZodError) res.status(400).json(validationBody(error));
       else next(error);
     }
   };

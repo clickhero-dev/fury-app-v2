@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { BrandKitService } from '../services/brand-kit/brand-kit.service.js';
+import { errorBody } from '../middleware/errorHandler.js';
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -48,7 +49,7 @@ export class BrandKitController {
       const { tenantId } = req.tenant!;
       const brandKit = await this.service.getBrandKit(tenantId);
       if (!brandKit) {
-        res.status(404).json({ success: false, message: 'Brand Kit não configurado', timestamp: new Date().toISOString() });
+        res.status(404).json(errorBody('BRAND_KIT_NOT_FOUND', 'Kit da marca ainda não configurado'));
         return;
       }
       res.json({ success: true, data: brandKit, timestamp: new Date().toISOString() });
@@ -80,7 +81,7 @@ export class BrandKitController {
     try {
       const { tenantId } = req.tenant!;
       if (!req.file) {
-        res.status(400).json({ success: false, message: 'Nenhum arquivo enviado', timestamp: new Date().toISOString() });
+        res.status(400).json(errorBody('NO_FILE', 'Nenhum arquivo enviado'));
         return;
       }
       const data = await this.service.uploadLogo(tenantId, { buffer: req.file.buffer, mimetype: req.file.mimetype });
@@ -95,7 +96,7 @@ export class BrandKitController {
       const { tenantId } = req.tenant!;
       const files = (req.files as Express.Multer.File[] | undefined) ?? [];
       if (files.length === 0) {
-        res.status(400).json({ success: false, message: 'Nenhum arquivo enviado', timestamp: new Date().toISOString() });
+        res.status(400).json(errorBody('NO_FILE', 'Nenhum arquivo enviado'));
         return;
       }
       const result = await this.service.uploadPhotos(

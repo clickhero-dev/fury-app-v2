@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Briefcase, Plus, X } from "lucide-react";
 import { isAxiosError } from "axios";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/error-message";
 
 export interface Partner {
   id: string;
@@ -40,12 +41,13 @@ export function PartnersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
 
   const load = () =>
     api
       .get("/admin/partners")
-      .then((res) => setPartners(res.data.data))
-      .catch(() => {})
+      .then((res) => { setPartners(res.data.data); setListError(""); })
+      .catch((err) => setListError(errorMessage(err, "Não foi possível carregar os parceiros")))
       .finally(() => setLoading(false));
 
   useEffect(() => {
@@ -124,7 +126,7 @@ export function PartnersPage() {
           </thead>
           <tbody>
             {partners.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-text-tertiary">Nenhum parceiro cadastrado</td></tr>
+              <tr><td colSpan={4} role={listError ? "alert" : undefined} className="px-4 py-10 text-center text-text-tertiary">{listError || "Nenhum parceiro cadastrado"}</td></tr>
             )}
             {partners.map((p) => (
               <tr key={p.id} className="border-b border-border last:border-0">

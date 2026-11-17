@@ -91,7 +91,7 @@ describe('GET /api/studio/assets', () => {
       .query({ type: 'invalid' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Validation error');
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('grupo com múltiplas versões aparece uma única vez na listagem (Fase 2)', async () => {

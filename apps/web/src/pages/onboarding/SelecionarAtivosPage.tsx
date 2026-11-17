@@ -1,5 +1,5 @@
 import { useState, useTransition, useId } from "react";
-import axios from 'axios';
+import { errorMessage } from '@/lib/error-message';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { AdySymbol } from "@/components/AdySymbol";
@@ -352,8 +352,7 @@ export function SelecionarAtivosPage() {
       });
     },
     onError: (error: unknown) => {
-      const apiMessage = axios.isAxiosError(error) ? error.response?.data?.error?.message : undefined;
-      showError(apiMessage ?? (error instanceof Error ? error.message : 'Erro ao salvar a seleção. Tente novamente.'));
+      showError(errorMessage(error, 'Não foi possível salvar a seleção'));
     },
   });
 

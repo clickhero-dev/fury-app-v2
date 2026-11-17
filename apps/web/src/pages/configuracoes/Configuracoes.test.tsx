@@ -176,6 +176,7 @@ describe('Configuracoes — Página de destino (aba Geral)', () => {
   it('mostra a mensagem do servidor quando o slug do novo nome já existe (409 SLUG_EXISTS)', async () => {
     mockApi();
     mockApiPatch.mockRejectedValue({
+      isAxiosError: true,
       response: {
         status: 409,
         data: { success: false, error: { code: 'SLUG_EXISTS', message: 'Já existe um negócio com esse nome. Escolha outro nome.' } },

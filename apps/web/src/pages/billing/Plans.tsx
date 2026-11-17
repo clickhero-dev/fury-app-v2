@@ -16,6 +16,7 @@ import { usePlans, useSubscription, useSubscribe } from '@/hooks/useBilling';
 import { useAuth } from '@/hooks/useAuth';
 import type { Plan } from '@/types/billing';
 import { getStoredPlatformRole } from '@/lib/platform-role';
+import { errorMessage } from '@/lib/error-message';
 
 const PLAN_DISPLAY: Record<string, {
   icon: React.ReactNode;
@@ -123,8 +124,7 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           }
         },
         onError: (err: unknown) => {
-          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-          setError(msg ?? 'Erro ao processar assinatura. Tente novamente.');
+          setError(errorMessage(err, 'Não foi possível processar a assinatura'));
         },
       }
     );

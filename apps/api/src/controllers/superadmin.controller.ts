@@ -203,7 +203,7 @@ export class SuperAdminController {
   private async tenantInScope(req: Request, tenantId: string) {
     const tenant = await this.repo.getTenantById(tenantId, partnerOf(req));
     if (!tenant)
-      throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
+      throw new AppError(404, "TENANT_NOT_FOUND", "Cliente não encontrado");
     return tenant;
   }
 
@@ -361,7 +361,7 @@ export class SuperAdminController {
 
       const existing = await repo.findUserByEmail(body.email);
       if (existing)
-        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+        throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.password, 10);
       const values = {
@@ -407,7 +407,7 @@ export class SuperAdminController {
 
       const existingEmail = await repo.findUserByEmailCaseInsensitive(body.userEmail);
       if (existingEmail)
-        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+        throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.userPassword, 10);
 
@@ -420,7 +420,7 @@ export class SuperAdminController {
         userRole: body.userRole,
       });
       if (result.status === "conflict") {
-        const message = result.code === "SLUG_EXISTS" ? "Slug já existe" : "Email já cadastrado";
+        const message = result.code === "SLUG_EXISTS" ? "Slug já existe" : "E-mail já cadastrado";
         throw new AppError(409, result.code, message);
       }
 
@@ -457,7 +457,7 @@ export class SuperAdminController {
 
       // e-mail preso mesmo de conta excluída
       if (await this.repo.findUserByEmail(body.userEmail))
-        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+        throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const base = slugify(body.name) || "cliente";
       const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;

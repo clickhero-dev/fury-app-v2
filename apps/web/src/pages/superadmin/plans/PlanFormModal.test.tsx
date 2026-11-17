@@ -40,7 +40,7 @@ describe('PlanFormModal — ajustes', () => {
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
 
     reject(new Error('falha'));
-    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Erro ao salvar');
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Não foi possível salvar o plano.');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 

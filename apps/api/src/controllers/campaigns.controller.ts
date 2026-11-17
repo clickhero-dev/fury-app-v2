@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { uploadAsset } from '../services/storage/storage.service.js';
 import { CampaignsService, campaignsService } from '../services/campaigns/campaigns.service.js';
 import { CampaignRepository } from '../repository/campaign.repository.js';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError, errorBody } from '../middleware/errorHandler.js';
 import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 import {
   getCampaignsCache,
@@ -399,7 +399,7 @@ export class CampaignsController {
       const data = createCampaignSchema.parse(req.body);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const campaign = await this.campaignsService.createCampaign({
@@ -425,11 +425,11 @@ export class CampaignsController {
       const { id } = req.params;
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const result = await this.campaignsService.pauseCampaign({ tenantId, campaignId: id });
@@ -451,11 +451,11 @@ export class CampaignsController {
       const { id } = req.params;
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const result = await this.campaignsService.resumeCampaign({ tenantId, campaignId: id });
@@ -478,11 +478,11 @@ export class CampaignsController {
       const { id } = req.params;
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const campaign = await this.campaignsService.updateCampaignBudget({
@@ -509,17 +509,17 @@ export class CampaignsController {
       const { id } = req.params;
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const detail = await this.campaignsService.getCampaignPanelDetail({ tenantId, campaignId: id });
 
       if (!detail) {
-        return res.status(404).json({ error: 'Campanha não encontrada' });
+        return res.status(404).json(errorBody('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada'));
       }
 
       return res.json(detail);
@@ -533,7 +533,7 @@ export class CampaignsController {
       const query = getCampaignsSchema.parse(req.query);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const cacheKey = { tenantId, status: query.status, limit: query.limit, offset: query.offset };
@@ -583,11 +583,11 @@ export class CampaignsController {
       const tenantId = req.tenant?.tenantId || '';
 
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const campaign = await this.campaignsService.updateCampaign({
@@ -713,11 +713,11 @@ export class CampaignsController {
       const userId = (req as any).user?.id || '';
 
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const campaign = await this.campaignsService.updateCampaignStatus({
@@ -747,11 +747,11 @@ export class CampaignsController {
       const userId = (req as any).user?.id || '';
 
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const campaign = await this.campaignsService.softDeleteCampaign({
@@ -780,11 +780,11 @@ export class CampaignsController {
       const tenantId = req.tenant?.tenantId || '';
 
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const insights = await this.campaignsService.getCampaignInsights({
@@ -810,7 +810,7 @@ export class CampaignsController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const data = await this.campaignsService.getLeadCampaigns({ tenantId });
@@ -832,10 +832,10 @@ export class CampaignsController {
       const tenantId = req.tenant?.tenantId || '';
 
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       if (!id) {
-        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       }
 
       const result = await this.campaignsService.getCampaignLeads({
@@ -858,7 +858,7 @@ export class CampaignsController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const result = await this.campaignsService.getAllCampaignLeads({ tenantId });
@@ -902,7 +902,7 @@ export class CampaignsController {
       const data = createWizardSchema.parse(req.body);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const result = await this.campaignsService.createCampaignFromWizard({
@@ -958,7 +958,7 @@ export class CampaignsController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       if (!req.file) {
@@ -1015,7 +1015,7 @@ export class CampaignsController {
         return res.status(401).json({
           success: false,
           endpoint: 'mcp-log',
-          error: { code: 'UNAUTHORIZED', message: 'Tenant ID required' },
+          error: { code: 'UNAUTHORIZED', message: 'Cliente não identificado na sessão. Entre novamente.' },
           steps,
         });
       }
@@ -1116,7 +1116,7 @@ export class CampaignsController {
       const query = metaGeoLocationsSchema.parse(req.query);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const results = await this.campaignsService.searchMetaLocations({ tenantId, query: query.q, types: query.types });
@@ -1136,7 +1136,7 @@ export class CampaignsController {
       const { lat, lng } = cityByCoordsSchema.parse(req.query);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const city = await this.campaignsService.findMetaCityByCoords({ tenantId, lat, lng });
@@ -1152,7 +1152,7 @@ export class CampaignsController {
       const query = metaLocationsSchema.parse(req.query);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const results = await this.campaignsService.searchMetaInterests({ tenantId, query: query.q });
@@ -1185,7 +1185,7 @@ export class CampaignsController {
       const { imageUrl, assetId } = suggestTextSchema.parse(req.body);
 
       const tenantId = req.tenant?.tenantId || '';
-      if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
 
       const repo = this.repoFactory(tenantId);
 

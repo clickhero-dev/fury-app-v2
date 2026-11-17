@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import type { SubscriptionStatus } from '@/types/billing';
+import { errorMessage } from '@/lib/error-message';
 
 const STATUS_CONFIG: Record<SubscriptionStatus, {
   label: string;
@@ -81,8 +82,7 @@ export function Subscription() {
         setCancelDialogOpen(false);
       },
       onError: (err: unknown) => {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        setCancelError(msg ?? 'Erro ao cancelar assinatura.');
+        setCancelError(errorMessage(err, 'Não foi possível cancelar a assinatura'));
       },
     });
   };

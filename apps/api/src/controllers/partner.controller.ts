@@ -71,7 +71,7 @@ export class PartnerController {
       const body = createPartnerSchema.parse(req.body);
       // e-mail preso mesmo de conta excluída
       if (await this.adminRepo.findUserByEmail(body.accountEmail))
-        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+        throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const base = slugify(body.name) || "parceiro";
       const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;

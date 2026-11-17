@@ -162,7 +162,7 @@ export function verifyOAuthState(state: string): OAuthStatePayload {
     const secret = getRequiredEnv('JWT_SECRET');
     return jwt.verify(state, secret) as OAuthStatePayload;
   } catch {
-    throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
+    throw new AppError(401, 'INVALID_OAUTH_STATE', 'A autorização expirou ou é inválida. Tente conectar de novo.');
   }
 }
 
@@ -316,7 +316,7 @@ export class MetaService {
     const connection = await this.repo(tenantId).findLatestMetaConnection();
 
     if (!connection) {
-      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
     }
 
     return decryptToken(connection.accessToken);
@@ -515,7 +515,7 @@ export class MetaService {
     const connection = await repo.findLatestMetaConnection();
 
     if (!connection) {
-      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
     }
 
     const accessToken = await this.getTenantAccessToken(tenantId);
@@ -576,7 +576,7 @@ export class MetaService {
         selectedInstagramUsername,
         updatedAt: new Date(),
       });
-    if (!updated) throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada para este tenant.');
+    if (!updated) throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada. Conecte em Configurações > Integrações.');
     return {
       businessIds: selection.businessIds,
       pageIds: selection.pageIds,
@@ -754,7 +754,7 @@ export class MetaService {
     const connection = await this.repo(tenantId).findLatestMetaConnection();
 
     if (!connection) {
-      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
     }
 
     const accessToken = decryptToken(connection.accessToken);
@@ -857,7 +857,7 @@ export class MetaService {
     const existing = await repo.findMetaConnectionById(connectionId);
 
     if (!existing) {
-      throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
+      throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada. Conecte em Configurações > Integrações.');
     }
 
     await this.metaSyncRepoFactory(tenantId).deleteAllMetaSyncedData();
@@ -873,13 +873,13 @@ export class MetaService {
     const connection = await repo.findMetaConnectionById(connectionId);
 
     if (!connection) {
-      throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
+      throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada. Conecte em Configurações > Integrações.');
     }
 
     const adAccounts = (connection.adAccounts as MetaAdAccount[]) ?? [];
     const exists = adAccounts.some((a) => a.id === adAccountId);
     if (!exists) {
-      throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
+      throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Esta conta de anúncios não pertence à conexão Meta escolhida.');
     }
 
     // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.

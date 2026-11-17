@@ -1,6 +1,7 @@
 import { Activity, CheckCircle2, CircleAlert, CircleX, Clock3, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 
 interface HealthcheckUser {
   userId: string;
@@ -90,8 +91,8 @@ export function HealthchecksPage() {
       const rows = (response.data?.data ?? []) as HealthcheckUser[];
       setUsers(rows);
       setSelectedUser((current) => current ? rows.find((row) => row.userId === current.userId) ?? current : null);
-    } catch {
-      setError('Não foi possível carregar os usuários e integrações Meta.');
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível carregar os usuários e integrações Meta'));
       setUsers([]);
     } finally {
       setLoadingUsers(false);
@@ -123,8 +124,8 @@ export function HealthchecksPage() {
     try {
       const response = await api.get(`/admin/healthchecks?userId=${encodeURIComponent(user.userId)}`);
       setResult(response.data?.data?.result ?? null);
-    } catch {
-      setError('Não foi possível carregar o último healthcheck. Tente novamente.');
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível carregar o último healthcheck'));
     } finally {
       setLoadingResult(false);
     }
@@ -152,8 +153,8 @@ export function HealthchecksPage() {
       const response = await api.post('/admin/healthchecks/run', { userId: selectedUser.userId });
       setResult(response.data?.data ?? null);
       void loadUsers();
-    } catch {
-      setError('Não foi possível executar o healthcheck agora. Tente novamente.');
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível executar o healthcheck'));
     } finally {
       setRunning(false);
     }

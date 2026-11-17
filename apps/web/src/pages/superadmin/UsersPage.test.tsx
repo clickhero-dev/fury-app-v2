@@ -71,13 +71,13 @@ describe('UsersPage — setup tenant', () => {
   });
 
   it('Cenário: falha inesperada mostra a mensagem genérica', async () => {
-    mockPost.mockRejectedValue({ response: { status: 500, data: { error: { code: 'INTERNAL_SERVER_ERROR' } } } });
+    mockPost.mockRejectedValue({ isAxiosError: true, response: { status: 500, data: { error: { code: 'INTERNAL_SERVER_ERROR' } } } });
     const user = userEvent.setup();
     renderPage();
     await fillForm(user);
     await user.click(screen.getByRole('button', { name: 'Criar' }));
 
-    expect(await screen.findByText('Não foi possível criar o cliente. Tente novamente.')).toBeTruthy();
+    expect(await screen.findByText('Não foi possível criar o cliente. Erro no servidor. Tente de novo; se continuar, fale com o suporte.')).toBeTruthy();
   });
 
   it('Cenário: clique duplo não dispara duas criações', async () => {
@@ -100,4 +100,12 @@ it('Dado um novo cliente, quando revelo sua senha, então o formulário não é 
   expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
   expect(screen.getByLabelText('Senha')).toHaveValue('SenhaSegura1!');
   expect(mockPost).not.toHaveBeenCalled();
+});
+
+describe('UsersPage — falha ao listar', () => {
+  it('mostra o motivo em vez de lista vazia', async () => {
+    mockGet.mockRejectedValue({ isAxiosError: true });
+    renderPage();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Não foi possível carregar os usuários\. Sem conexão com o servidor/);
+  });
 });

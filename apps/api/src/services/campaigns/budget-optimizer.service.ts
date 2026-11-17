@@ -348,7 +348,7 @@ export function validateSuggestion(suggestion: BudgetSuggestion): ValidationResu
   // Check required fields
   if (!suggestion.campaignId || suggestion.campaignId.trim() === '') {
     errors.push(
-      new ValidationError('campaignId', 'REQUIRED', 'Campaign ID is required'),
+      new ValidationError('campaignId', 'REQUIRED', 'Informe a campanha.'),
     );
   } else if (!isValidUUID(suggestion.campaignId)) {
     errors.push(

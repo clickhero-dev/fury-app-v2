@@ -12,6 +12,7 @@ import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
 import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
 import { login as authLogin } from '@/store/slices/authSlice';
 import { store } from '@/store';
+import { errorMessage } from '@/lib/error-message';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -29,7 +30,7 @@ function getFriendlyError(err: unknown): string {
       return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
     }
   }
-  return 'Ocorreu um erro inesperado. Tente novamente em alguns instantes.';
+  return errorMessage(err, 'Não foi possível entrar');
 }
 
 export function LoginPage() {
@@ -79,8 +80,8 @@ export function LoginPage() {
         stripSocialParams();
         navigate('/inicio', { replace: true });
       })
-      .catch(() => {
-        setError('Não foi possível concluir o login com Facebook. Tente novamente.');
+      .catch((err) => {
+        setError(errorMessage(err, 'Não foi possível concluir o login com Facebook'));
         stripSocialParams();
       });
     }, [navigate]);
@@ -109,8 +110,8 @@ export function LoginPage() {
       setError('');
       await demoLoginMutation.mutateAsync();
       navigate('/dashboard');
-    } catch {
-      setError('A conta demo está temporariamente indisponível. Tente novamente em instantes.');
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível abrir a conta demo'));
     }
   };
 

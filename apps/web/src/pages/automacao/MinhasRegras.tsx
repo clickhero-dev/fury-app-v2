@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppLayout, PageHeader, Button, DataTable, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components';
 import { FuryRuleDialog } from '@/components/FuryRuleDialog';
+import { errorMessage } from '@/lib/error-message';
 import {
   useGetFuryRules,
   useCreateFuryRule,
@@ -34,6 +35,7 @@ export function MinhasRegrasContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
+  const [pageError, setPageError] = useState('');
 
   const { data, isLoading } = useGetFuryRules();
   const createMutation = useCreateFuryRule();
@@ -65,20 +67,17 @@ export function MinhasRegrasContent() {
    *
    * @param payload - Dados do formulário validados pelo `FuryRuleDialog`
    */
+  // erro sobe para o diálogo, que mostra o motivo e continua aberto
   const handleSave = async (payload: CreateFuryRulePayload) => {
-    try {
-      if (selectedRule) {
-        await updateMutation.mutateAsync({
-          id: selectedRule.id,
-          payload,
-        });
-      } else {
-        await createMutation.mutateAsync(payload);
-      }
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving rule:', error);
+    if (selectedRule) {
+      await updateMutation.mutateAsync({
+        id: selectedRule.id,
+        payload,
+      });
+    } else {
+      await createMutation.mutateAsync(payload);
     }
+    handleCloseDialog();
   };
 
   /**
@@ -87,13 +86,14 @@ export function MinhasRegrasContent() {
    * @param rule - Regra cujo status será invertido
    */
   const handleToggleActive = async (rule: FuryRule) => {
+    setPageError('');
     try {
       await updateMutation.mutateAsync({
         id: rule.id,
         payload: { isActive: !rule.isActive },
       });
     } catch (error) {
-      console.error('Error toggling rule:', error);
+      setPageError(errorMessage(error, rule.isActive ? 'Não foi possível desativar a regra' : 'Não foi possível ativar a regra'));
     }
   };
 
@@ -109,10 +109,11 @@ export function MinhasRegrasContent() {
   /** Executa a deleção da regra após confirmação do usuário. */
   const handleConfirmDelete = async () => {
     if (!deleteRuleId) return;
+    setPageError('');
     try {
       await deleteMutation.mutateAsync(deleteRuleId);
     } catch (error) {
-      console.error('Error deleting rule:', error);
+      setPageError(errorMessage(error, 'Não foi possível excluir a regra'));
     } finally {
       setDeleteRuleId(null);
     }
@@ -254,6 +255,8 @@ export function MinhasRegrasContent() {
             +<span className="hidden sm:inline"> Nova Regra</span>
           </Button>
         </div>
+
+        {pageError && <p role="alert" className="text-sm text-error">{pageError}</p>}
 
         <DataTable
           columns={columns}

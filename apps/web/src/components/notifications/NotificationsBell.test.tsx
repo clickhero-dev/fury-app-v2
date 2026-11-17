@@ -40,4 +40,12 @@ describe('NotificationsBell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ativar modo escuro' }));
     expect(theme.setDark).toHaveBeenCalledWith(true);
   });
+
+  it('falha ao marcar como lida mostra o motivo', async () => {
+    patch.mockImplementationOnce(async () => { throw Object.assign(new Error('Network Error'), { isAxiosError: true }); });
+    renderBell();
+    fireEvent.click(await screen.findByRole('button', { name: /notificações/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /marcar aviso como lida/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Não foi possível marcar como lida\. Sem conexão com o servidor/);
+  });
 });

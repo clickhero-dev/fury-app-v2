@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Card, Input } from '@/components';
 import type { FuryRule, CreateFuryRulePayload } from '@/hooks/useFuryRules';
+import { errorMessage } from '@/lib/error-message';
 
 interface FuryRuleDialogProps {
   /** Controla a visibilidade do dialog. */
@@ -80,6 +81,7 @@ export function FuryRuleDialog({
   rule,
   isPending = false,
 }: FuryRuleDialogProps) {
+  const [saveError, setSaveError] = useState('');
   const [form, setForm] = useState<CreateFuryRulePayload>({
     name: '',
     conditionField: 'roas',
@@ -114,11 +116,12 @@ export function FuryRuleDialog({
   }, [rule, isOpen]);
 
   const handleSave = async () => {
+    setSaveError('');
     try {
       await onSave(form);
       onClose();
     } catch (error) {
-      console.error('Error saving rule:', error);
+      setSaveError(errorMessage(error, 'Não foi possível salvar a regra'));
     }
   };
 
@@ -238,6 +241,8 @@ export function FuryRuleDialog({
               </label>
             </div>
           </div>
+
+          {saveError && <p role="alert" className="mt-4 text-sm text-error">{saveError}</p>}
 
           {/* Botões de ação */}
           <div className="flex gap-3 justify-end mt-6">

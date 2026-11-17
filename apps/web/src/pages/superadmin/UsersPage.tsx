@@ -5,6 +5,7 @@ import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-re
 import api from "@/lib/api";
 import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
 import { RoleHelp } from "./RoleHelp";
+import { errorMessage } from "@/lib/error-message";
 
 interface User {
   id: string;
@@ -40,6 +41,7 @@ export function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
   const [form, setForm] = useState({
     tenantName: "",
     userName: "",
@@ -61,8 +63,10 @@ export function UsersPage() {
 
       const res = await api.get(`/admin/users?${params.toString()}`);
       setData(res.data.data);
-    } catch {
+      setListError("");
+    } catch (err) {
       setData(null);
+      setListError(errorMessage(err, "Não foi possível carregar os usuários"));
     } finally {
       setLoading(false);
     }
@@ -207,7 +211,7 @@ export function UsersPage() {
           ? "Já existe um cliente com este identificador. Altere o nome ou verifique os clientes cadastrados."
           : apiError?.code === "EMAIL_EXISTS"
             ? "Este email já está em uso."
-            : "Não foi possível criar o cliente. Tente novamente.",
+            : errorMessage(err, "Não foi possível criar o cliente"),
       );
     } finally {
       setSaving(false);
@@ -273,8 +277,8 @@ export function UsersPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="text-center py-12 text-text-tertiary text-sm">
-          Nenhum usuário encontrado
+        <div role={listError ? "alert" : undefined} className="text-center py-12 text-text-tertiary text-sm">
+          {listError || "Nenhum usuário encontrado"}
         </div>
       ) : (
         <>

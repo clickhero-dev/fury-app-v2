@@ -67,4 +67,15 @@ describe('TrialPasswordModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar senha' }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
   });
+
+  it('mostra o motivo da API quando a senha é recusada', async () => {
+    post.mockImplementationOnce(async () => {
+      throw Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { error: { code: 'VALIDATION_ERROR', message: 'Verifique o campo: Nova senha: mínimo de 8 caracteres.' } } } });
+    });
+    render(<TrialPasswordModal onComplete={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Nova senha'), { target: { value: 'NovaSenha1!' } });
+    fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: 'NovaSenha1!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar senha' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar sua senha. Verifique o campo: Nova senha: mínimo de 8 caracteres.');
+  });
 });

@@ -16,7 +16,7 @@ export function checkPlanFeature(feature: PlanFeature) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;
-      if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Tenant not found'));
+      if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Cliente não encontrado.'));
 
       const sub = await new SubscriptionRepository(tenantId).findSubscription();
 

@@ -202,7 +202,7 @@ export class MetaSyncV2Controller {
 
   private tenantOf(req: Request): string {
     const tenantId = req.tenant?.tenantId ?? '';
-    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
     return tenantId;
   }
 
@@ -314,7 +314,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const { id } = req.params;
-      if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+      if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       const demo = await this.demoFor(tenantId);
       if (demo || this.isDemo(req)) {
         const campaign = demo ? demo.campaigns.find((item) => item.id === id) : demoCampaign(id);
@@ -342,7 +342,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const { id } = req.params;
-      if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+      if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Informe a campanha.');
       if (this.isDemo(req)) return res.json({ success: true, data: demoLeads(id), ...this.demoFields(), timestamp: new Date().toISOString() });
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
@@ -411,7 +411,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const { id } = req.params;
-      if (!id) throw new AppError(400, 'MISSING_LEAD_ID', 'Lead ID is required');
+      if (!id) throw new AppError(400, 'MISSING_LEAD_ID', 'Informe o cliente (lead).');
 
       const { status } = updateLeadStatusSchema.parse(req.body);
 

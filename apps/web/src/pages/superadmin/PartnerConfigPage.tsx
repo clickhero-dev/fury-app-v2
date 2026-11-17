@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { KeyRound } from "lucide-react";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/error-message";
 import { apiMessage, SlotsBar, type Partner } from "./PartnersPage";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { IntegrationsPanel } from "./IntegrationsPanel";
@@ -17,7 +18,7 @@ const btnCls = "ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 t
 export function PartnerConfigPage() {
   const { id } = useParams();
   const [partner, setPartner] = useState<Partner | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [notFound, setNotFound] = useState("");
   const [tab, setTab] = useState<Tab>("dados");
   const [name, setName] = useState("");
   const [maxTenants, setMaxTenants] = useState(0);
@@ -36,7 +37,7 @@ export function PartnerConfigPage() {
         setName(p.name);
         setMaxTenants(p.maxTenants);
       })
-      .catch(() => setNotFound(true));
+      .catch((err) => setNotFound(errorMessage(err, "Não foi possível carregar o parceiro")));
   }, [id]);
 
   async function save(payload: Partial<Pick<Partner, "name" | "maxTenants">>) {
@@ -69,7 +70,7 @@ export function PartnerConfigPage() {
     }
   }
 
-  if (notFound) return <div className="text-text-secondary text-sm">Parceiro não encontrado.</div>;
+  if (notFound) return <div role="alert" className="text-text-secondary text-sm">{notFound}</div>;
   if (!partner) return <div className="text-text-tertiary text-sm">Carregando...</div>;
 
   const belowUsage = maxTenants < partner.usedTenants;

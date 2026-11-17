@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 import type { AdminDashboardStats, DashboardPeriod } from '../../types/admin';
 import { formatBRL, planColor } from './adminDashboard.utils';
 
@@ -47,7 +48,7 @@ export function DashboardAdminPage() {
     api
       .get('/admin/dashboard', { params: { period: periodo } })
       .then((r) => setStats(r.data.data))
-      .catch(() => setError('Não foi possível carregar os dados do dashboard.'))
+      .catch((err) => setError(errorMessage(err, 'Não foi possível carregar os dados do dashboard')))
       .finally(() => setLoading(false));
   }, [periodo]);
 

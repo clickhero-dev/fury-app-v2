@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useSaveAutomationRules, type AutomationRules } from '@/hooks/useSaveAutomationRules';
+import { errorMessage } from '@/lib/error-message';
 
 export function RegrasCampanhas() {
   const [rules, setRules] = useState<AutomationRules>({
@@ -34,8 +35,7 @@ export function RegrasCampanhas() {
       await saveRulesMutation.mutateAsync(rules);
       setFeedback({ type: 'success', message: 'Regras salvas com sucesso!' });
     } catch (error) {
-      console.error('Save rules error:', error);
-      setFeedback({ type: 'error', message: 'Erro ao salvar regras. Tente novamente.' });
+      setFeedback({ type: 'error', message: errorMessage(error, 'Não foi possível salvar as regras') });
     }
   };
 

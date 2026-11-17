@@ -6,6 +6,7 @@ import { setPolicyAccepted, selectPolicy } from '../../store/slices/authSlice';
 import { selectIsAuthenticated } from '../../store/slices/authSlice';
 import api from '../../lib/api';
 import { captureEvent } from '../../lib/posthog';
+import { errorMessage } from '@/lib/error-message';
 
 interface PolicyCurrentResponse {
   success: boolean;
@@ -66,8 +67,8 @@ export function PoliticaDeUsoPage() {
       void queryClient.invalidateQueries({ queryKey: ['policy-current'] });
       navigate(location.state?.initialDestination === '/chat' ? '/chat' : '/dashboard', { replace: true });
     },
-    onError: () => {
-      setError('Não foi possível registrar o aceite. Tente novamente.');
+    onError: (err) => {
+      setError(errorMessage(err, 'Não foi possível registrar o aceite'));
     },
   });
 

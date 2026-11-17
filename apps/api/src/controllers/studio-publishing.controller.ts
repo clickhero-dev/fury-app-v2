@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError, validationBody } from '../middleware/errorHandler.js';
 import { StudioPublishingService } from '../services/studio/studio-publishing.service.js';
 import { db, brandKits } from '@fury/db';
 import { eq } from 'drizzle-orm';
@@ -16,7 +16,7 @@ const generateImageSchema = z
     adAccountId: z.string().min(1, 'adAccountId e obrigatorio').optional(),
   })
   .refine((value) => Boolean(value.prompt?.trim() || value.briefing?.trim()), {
-    message: 'Prompt da imagem e obrigatorio.',
+    message: 'Descreva a imagem que deseja gerar.',
     path: ['prompt'],
   });
 
@@ -50,7 +50,7 @@ export class StudioPublishingController {
 
   private zodError(res: Response, err: unknown): boolean {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json(validationBody(err));
       return true;
     }
     return false;
@@ -64,7 +64,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const body = generateImageSchema.parse(req.body);
@@ -82,7 +82,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const query = listAssetsQuerySchema.parse(req.query);
@@ -108,7 +108,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -127,7 +127,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -142,7 +142,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -174,7 +174,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const body = renderCreativeSchema.parse(req.body);
@@ -204,7 +204,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -222,7 +222,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -237,7 +237,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const assetId = z.string().min(1).parse(req.params.assetId);
@@ -252,7 +252,7 @@ export class StudioPublishingController {
     try {
       const tenantId = this.tenantId(req);
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const body = uploadToMetaSchema.parse(req.body);

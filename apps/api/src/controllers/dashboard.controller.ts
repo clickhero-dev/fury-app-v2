@@ -18,7 +18,7 @@ export class DashboardController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { date_from, date_to } = instagramInsightsQuerySchema.parse(req.query);

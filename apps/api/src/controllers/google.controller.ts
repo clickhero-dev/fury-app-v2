@@ -24,7 +24,7 @@ export class GoogleController {
   getAuthUrl = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { context, frontendUrl } = contextQuerySchema.parse(req.query);
       // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
@@ -99,7 +99,7 @@ export class GoogleController {
   getConnection = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const connection = await this.googleService.getGoogleConnection(req.tenant.tenantId);
       res.status(200).json({
@@ -115,7 +115,7 @@ export class GoogleController {
   disconnectConnection = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const params = connectionIdParamsSchema.parse(req.params);
       const data = await this.googleService.disconnectGoogleConnection(params.id, req.tenant.tenantId);
@@ -136,7 +136,7 @@ export class GoogleController {
   getAccounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const data = await this.googleService.getGoogleAccounts(req.tenant.tenantId);
       res.status(200).json({
@@ -152,7 +152,7 @@ export class GoogleController {
   lookup = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const data = await this.googleService.lookupGoogleProfile(req.tenant.tenantId);
       res.status(200).json({
@@ -168,7 +168,7 @@ export class GoogleController {
   getSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const data = await this.googleService.getGoogleSettings(req.tenant.tenantId);
       res.status(200).json({
@@ -184,7 +184,7 @@ export class GoogleController {
   updateSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const data = await this.googleService.updateGoogleSettings(req.tenant.tenantId, req.body);
       res.status(200).json({
@@ -200,7 +200,7 @@ export class GoogleController {
   getCategories = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { query } = categoriesQuerySchema.parse(req.query);
       const client = await this.googleService.getGoogleApiClient(req.tenant.tenantId);
@@ -218,7 +218,7 @@ export class GoogleController {
   createProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const data = await this.googleService.createProfile(req.tenant.tenantId);
 
@@ -238,7 +238,7 @@ export class GoogleController {
   getVerification = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const data = await this.googleService.getVerification(id, req.tenant.tenantId);
@@ -255,7 +255,7 @@ export class GoogleController {
   completeVerification = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const { method } = verificationSchema.parse(req.body);
@@ -273,7 +273,7 @@ export class GoogleController {
   getProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const data = await this.googleService.getProfile(id, req.tenant.tenantId);
@@ -291,7 +291,7 @@ export class GoogleController {
   getProfileQuality = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const data = await this.googleService.assessProfile(id, req.tenant.tenantId);
@@ -308,7 +308,7 @@ export class GoogleController {
   updateProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const parsed = profileUpdateSchema.parse(req.body);
@@ -326,7 +326,7 @@ export class GoogleController {
   syncProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const data = await this.googleService.syncProfile(id, req.tenant.tenantId);
@@ -343,7 +343,7 @@ export class GoogleController {
   getSyncLogs = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const { limit } = syncLogsQuerySchema.parse(req.query);
@@ -361,12 +361,12 @@ export class GoogleController {
   uploadPhoto = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
 
       if (!req.file) {
-        throw new AppError(400, 'VALIDATION_ERROR', 'Arquivo de foto e obrigatorio.');
+        throw new AppError(400, 'VALIDATION_ERROR', 'Envie o arquivo da foto.');
       }
 
       const fileName = `google-photos/${id}/${Date.now()}-${req.file.originalname}`;
@@ -390,12 +390,12 @@ export class GoogleController {
   deletePhoto = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const { url } = req.query;
       if (!url || typeof url !== 'string') {
-        throw new AppError(400, 'VALIDATION_ERROR', 'URL da foto e obrigatoria.');
+        throw new AppError(400, 'VALIDATION_ERROR', 'Informe o endereço da foto.');
       }
       const data = await this.googleService.removePhoto(id, req.tenant.tenantId, url);
       res.status(200).json({

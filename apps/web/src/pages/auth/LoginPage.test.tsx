@@ -11,7 +11,7 @@ Funcionalidade: acesso comercial direto à conta demo
   Cenário: indisponibilidade da demo informa uma alternativa
     Dado que a API de sessão demo falha
     Quando clica no acesso demo
-    Então vê uma mensagem amigável de indisponibilidade
+    Então vê a mensagem com o motivo da falha
 */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -72,12 +72,12 @@ describe('BDD: LoginPage conta demo', () => {
   });
 
   it('Cenário: indisponibilidade da demo informa uma alternativa', async () => {
-    mutateAsync.mockRejectedValueOnce(new Error('offline'));
+    mutateAsync.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosError: true }));
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
 
-    expect(await screen.findByText(/conta demo está temporariamente indisponível/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^Não foi possível abrir a conta demo\. Sem conexão com o servidor/)).toBeInTheDocument();
   });
 });
 // @vitest-environment jsdom

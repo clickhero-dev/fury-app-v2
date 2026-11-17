@@ -63,7 +63,7 @@ export class FuryEngineService {
   async updateRule(tenantId: string, id: string, payload: Partial<RulePayload>) {
     const repo = this.repo(tenantId);
     const existing = await repo.findPerformanceRuleById(id);
-    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Rule not found');
+    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Regra não encontrada.');
 
     const updates: Record<string, any> = {};
     if (payload.name !== undefined) updates.name = payload.name;
@@ -80,7 +80,7 @@ export class FuryEngineService {
   async deleteRule(tenantId: string, id: string) {
     const repo = this.repo(tenantId);
     const existing = await repo.findPerformanceRuleById(id);
-    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Rule not found');
+    if (!existing) throw new AppError(404, 'NOT_FOUND', 'Regra não encontrada.');
     await repo.deletePerformanceRule(id);
   }
 

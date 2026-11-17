@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError, errorBody } from '../middleware/errorHandler.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
 import { plannerService } from '../services/planner/planner.service.js';
@@ -309,7 +309,7 @@ export class PlannerController {
     try {
       const { tenantId } = req.tenant!;
       if (!req.file) {
-        return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+        return res.status(400).json(errorBody('NO_FILE', 'Nenhum arquivo enviado'));
       }
       const ext = req.file.mimetype === 'image/png' ? 'png'
         : req.file.mimetype === 'image/jpeg' ? 'jpg'

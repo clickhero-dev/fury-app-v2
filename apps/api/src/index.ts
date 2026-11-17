@@ -5,7 +5,9 @@ import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
 import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
-import { errorHandler } from './middleware/errorHandler.js';
+// mensagens do zod em português desde o início
+import './lib/zod-pt.js';
+import { errorBody, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { serve as swaggerServe, setup as swaggerSetup } from 'swagger-ui-express';
 import { readFileSync } from 'fs';
@@ -188,7 +190,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 
     const tenantId = await resolveTenantId(req.params.slug);
     if (!tenantId) {
-      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+      return res.status(404).json(errorBody('TENANT_NOT_FOUND', 'Página não encontrada'));
     }
 
     // Fetch tenant name and brand kit in parallel
@@ -198,7 +200,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
     ]);
 
     if (!tenant) {
-      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+      return res.status(404).json(errorBody('TENANT_NOT_FOUND', 'Página não encontrada'));
     }
 
     res.json({
@@ -235,7 +237,7 @@ app.use((req, res) => {
     success: false,
     error: {
       code: 'NOT_FOUND',
-      message: 'Route not found',
+      message: 'Endereço não encontrado',
     },
     timestamp: new Date().toISOString(),
   });
