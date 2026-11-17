@@ -1,3 +1,4 @@
+import { analyticsEnvironment, requestContext } from './request-context.js';
 import { PostHog } from 'posthog-node';
 
 const POSTHOG_API_KEY = process.env.POSTHOG_API_KEY as string | undefined;
@@ -43,6 +44,8 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
+      environment: analyticsEnvironment(),
+      requestId: requestContext.getStore()?.requestId,
       method: context.method,
       path: context.path,
       statusCode: context.statusCode,

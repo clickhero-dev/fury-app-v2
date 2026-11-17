@@ -51,16 +51,25 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
   const uploadMutation = useUploadCreative();
 
+  const suggesting = useRef(false);
+  const suggestionSnapshot = useRef({ copy: '', selection: '' });
   const suggestMutation = useMutation({
+    retry: false,
     mutationFn: async (body: { imageUrl: string } | { assetId: string }) => {
+      const { copy: originalCopy, selection: originalSelection } = suggestionSnapshot.current;
       const res = await api.post('/campaigns/suggest-text', body);
-      return res.data.data as SuggestResponse;
+      const data = res.data?.data;
+      if (typeof data?.headline !== 'string' || !data.headline.trim() || data.headline.length > 40 ||
+          typeof data.primaryText !== 'string' || !data.primaryText.trim() || data.primaryText.length > 125) throw new Error('Invalid suggestion');
+      return { data: data as SuggestResponse, originalCopy, originalSelection };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ data, originalCopy, originalSelection }) => {
+      if (originalCopy !== JSON.stringify(latestCopyRef.current) || originalSelection !== JSON.stringify(latestValueRef.current)) return;
       setSuggestError(false);
       applyCopy({ headline: data.headline, primaryText: data.primaryText });
     },
     onError: () => setSuggestError(true),
+    onSettled: () => { suggesting.current = false; },
   });
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
@@ -84,9 +93,18 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
       ? { assetId: selectedVideoAssetId }
       : null;
 
-  const suggestErrorMessage =
-    (suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
-      ?.message || 'Não foi possível gerar sugestões agora. Tente novamente em instantes.';
+  function handleSuggest() {
+    if (!suggestBody || suggesting.current) return;
+    suggesting.current = true;
+    suggestionSnapshot.current = {
+      copy: JSON.stringify(latestCopyRef.current),
+      selection: JSON.stringify(latestValueRef.current),
+    };
+    setSuggestError(false);
+    suggestMutation.mutate(suggestBody);
+  }
+
+  const suggestErrorMessage = 'Não foi possível gerar sugestões agora. Tente novamente ou continue escrevendo manualmente.';
 
   /** Aplica o texto (headline/primary/destino) a TODOS os criativos selecionados. */
   function applyCopy(updates: Partial<CopyFields>) {
@@ -407,7 +425,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => suggestBody && suggestMutation.mutate(suggestBody)}
+                onClick={handleSuggest}
                 disabled={suggestMutation.isPending || !suggestBody}
                 className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title={!suggestBody ? 'Selecione uma imagem ou vídeo primeiro' : 'Sugerir com IA'}
