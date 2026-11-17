@@ -221,8 +221,16 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   .ady-chat-desktop-history { display: none; }
   .ady-chat .ady-chat-history-toggle { display: inline-flex; font-size: 0; width: 44px; height: 44px; padding: 0; justify-content: center; flex-shrink: 0; border-color: transparent; border-radius: 50%; }
 }
-@media (max-width: 700px) {
-  .ady-chat { position: fixed; top: var(--chat-viewport-top, 0px); left: 0; width: calc(100% - 1rem); height: calc(var(--chat-viewport-height, 100dvh) - 1rem); margin: .5rem; border-radius: 14px; }
+@media (max-width: 1023px) {
+  .ady-chat {
+    position: fixed;
+    margin: 0;
+    left: calc(var(--chat-viewport-left, 0px) + max(.5rem, env(safe-area-inset-left)));
+    top: calc(var(--chat-viewport-top, 0px) + max(.5rem, env(safe-area-inset-top)));
+    width: calc(var(--chat-viewport-width, 100%) - max(.5rem, env(safe-area-inset-left)) - max(.5rem, env(safe-area-inset-right)));
+    height: calc(var(--chat-viewport-height, 100dvh) - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom)));
+    border-radius: 14px;
+  }
   .ady-chat-header { padding: .65rem 3.5rem .65rem .5rem; gap: .4rem; min-height: 112px; }
   .ady-chat-header > .ady-chat-avatar { flex-basis: 36px; width: 36px; height: 36px; }
   .ady-chat-identity { gap: 0 .35rem; }
@@ -255,9 +263,18 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 }
 
 /* The shell controls belong above the message scrollport on small chat screens. */
-@media (max-width: 700px) {
+@media (max-width: 1023px) {
   body:has(.ady-chat) .ady-notification-controls { flex-direction: column; }
   body:has(.ady-chat) .ady-notification-controls > button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
   body:has(.ady-chat) .ady-notification-controls > [role=dialog] { top: 100%; }
 }
-@media (max-width: 700px) and (max-height: 450px) { .ady-chat-header { min-height: 112px; } }
+@media (max-width: 1023px) and (max-height: 450px) { .ady-chat-header { min-height: 112px; } }
+
+.ady-chat-action-start { display: grid; gap: .6rem; max-width: 100%; margin-top: .75rem; padding: .85rem; border: 1px solid var(--border-main); border-radius: 14px; background: var(--bg-surface); }
+.ady-chat-action-start h2 { font-weight: 650; }
+.ady-chat-action-start textarea { border: 1px solid var(--border-main); border-radius: 8px; padding: .5rem; min-height: 88px; overflow-y: auto; }
+.ady-chat-action-start p { font-size: .8rem; color: var(--text-secondary); }
+.ady-chat-action-start > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ady-chat-welcome { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+.ady-chat-quick button { max-width: 100%; }
+.ady-chat-quick svg { flex-shrink: 0; }
