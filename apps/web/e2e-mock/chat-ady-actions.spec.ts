@@ -50,15 +50,16 @@ for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844
     await fit();
     for (const [label,question,prompt] of actions) {
       await page.getByRole('button',{name:label,exact:true}).click();
-      await expect(page.getByLabel(question,{exact:true})).toBeVisible();
+      await expect(page.getByRole('group',{name:question,exact:true})).toBeVisible();
+      await expect(page.locator('.ady-chat-main').getByRole('textbox')).toHaveCount(1);
       await expect(page.getByRole('textbox',{name:'Mensagem',exact:true})).toHaveValue('');
-      await expect(page.getByRole('button',{name:'Continuar com Ady'})).toBeDisabled();
+      await expect(page.getByRole('button',{name:'Continuar com Ady'})).toHaveCount(0);
       expect(requests).toEqual([]);
       await page.getByRole('button',{name:'Cancelar',exact:true}).click();
       await page.getByRole('button',{name:label,exact:true}).click();
-      await page.getByLabel(question,{exact:true}).fill('Meu negócio de flores');
+      await page.getByRole('textbox',{name:'Mensagem',exact:true}).fill('Meu negócio de flores');
       await fit();
-      await page.getByRole('button',{name:'Continuar com Ady'}).click();
+      await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
       await expect(page.getByText('Conecte sua conta nas integrações para continuar. Nenhuma ação executada.',{exact:true})).toBeVisible();
       expect(sends.at(-1)).toContain(prompt);
       expect(sends.at(-1)).toContain('confirmação explícita');
