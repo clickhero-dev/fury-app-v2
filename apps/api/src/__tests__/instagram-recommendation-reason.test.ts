@@ -45,6 +45,23 @@ const insights = {
 };
 
 describe('InstagramService — motivo de recomendação', () => {
+  it('prioriza seguidores, salvamentos, envios, comentários e curtidas nessa ordem', async () => {
+    const service = createService([
+      { id: 'post-curtidas', media_type: 'IMAGE', media_product_type: 'FEED', media_url: 'https://cdninstagram.com/curtidas.jpg', timestamp: '2026-01-01', like_count: 999, comments_count: 0 },
+      { id: 'reel-seguidores', media_type: 'VIDEO', media_product_type: 'REELS', thumbnail_url: 'https://cdninstagram.com/reel.jpg', timestamp: '2026-01-02', like_count: 1, comments_count: 1 },
+      { id: 'post-salvos', media_type: 'IMAGE', media_product_type: 'FEED', media_url: 'https://cdninstagram.com/salvos.jpg', timestamp: '2026-01-03', like_count: 1, comments_count: 1 },
+    ], {
+      'post-curtidas': { reach: 0, saved: 0, shares: 0, replies: 0, follows: 0 },
+      'reel-seguidores': { reach: 0, saved: 0, shares: 0, replies: 0, follows: 10 },
+      'post-salvos': { reach: 0, saved: 100, shares: 100, replies: 100, follows: 0 },
+    });
+
+    const posts = await service.getRankedPosts('tenant-1', 'followers');
+
+    expect(posts.map((post) => post.id)).toEqual(['reel-seguidores', 'post-salvos', 'post-curtidas']);
+    expect(posts[0]).toMatchObject({ recommended: true, recommendationReason: 'Mais chance de trazer novos seguidores.' });
+  });
+
   it('preserva ranking e adiciona a frase somente ao recomendado elegível', async () => {
     const service = createService(images, insights);
 

@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
 import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
+import { ChatBrandRepository, type ChatBrandValues } from '../../repository/chat-brand.repository.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 type BrandKitRow = { [key: string]: any };
 type BrandKitRepo = Pick<
@@ -42,6 +44,7 @@ export class BrandKitService {
   constructor(
     private repoFactory: (tenantId: string) => BrandKitRepo = (t) => new CampaignRepository(t),
     private storage: Storage = { uploadAsset, deleteAsset },
+    private chatRepoFactory: (tenantId: string) => ChatBrandRepository = (t) => new ChatBrandRepository(t),
   ) {}
 
   private repo(tenantId: string): BrandKitRepo {
@@ -51,6 +54,17 @@ export class BrandKitService {
   async getBrandKit(tenantId: string): Promise<ReturnType<typeof toResponse> | null> {
     const brandKit = await this.repo(tenantId).findBrandKit();
     return brandKit ? toResponse(brandKit) : null;
+  }
+
+  async getChatBrand(tenantId: string) {
+    const brand = await this.chatRepoFactory(tenantId).snapshot();
+    return brand ?? { id: null, version: 'absent', primaryColor: null, secondaryColor: null, voiceTone: null, whatsappNumber: null };
+  }
+
+  async updateChatBrand(tenantId: string, version: string, values: ChatBrandValues) {
+    const result = await this.chatRepoFactory(tenantId).updateIfVersion(version, values);
+    if (!result) throw new AppError(409, 'BRAND_CHANGED', 'A marca mudou. Consulte novamente antes de confirmar.');
+    return result;
   }
 
   async upsertBrandKit(tenantId: string, values: BrandKitValues): Promise<ReturnType<typeof toResponse>> {

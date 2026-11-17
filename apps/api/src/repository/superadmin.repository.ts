@@ -12,6 +12,8 @@ import {
   campaigns,
   creativeAssets,
   adyPartners,
+  adyRbacAuditLog,
+  adyRbacPlanViewsBlocked,
 } from '@fury/db';
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -167,7 +169,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
           role: data.userRole,
         }).returning();
         await provisionTrialSubscription({
-          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: eq(plans.technicalKey, key) })) ?? null,
+          queryPlan: async (key) => (await tx.query.plans.findFirst({ where: and(eq(plans.technicalKey, key), isNull(plans.partnerId)) })) ?? null,
           querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) })) ?? null,
           insertSubscription: async (values) => {
             const [subscription] = await tx.insert(subscriptions).values(values as typeof subscriptions.$inferInsert).returning({ id: subscriptions.id });
@@ -280,6 +282,25 @@ export class SuperAdminRepository extends TenantScopedRepository {
   async findUserById(id: string) {
     return this.db.query.users.findFirst({ where: and(eq(users.id, id), isNull(users.deletedAt)) });
   }
+  // troca a senha e registra quem fez, nunca a senha
+  async resetUserPassword(
+    user: { id: string; tenantId: string; email: string; partnerId?: string | null },
+    passwordHash: string,
+    actor: { userId: string; partnerId: string | null },
+  ) {
+    await this.db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash, resetToken: null, resetTokenExpiresAt: null }).where(eq(users.id, user.id));
+      const [tenant] = await tx.select({ partnerId: tenants.partnerId }).from(tenants).where(eq(tenants.id, user.tenantId));
+      await tx.insert(adyRbacAuditLog).values({
+        actorUserId: actor.userId,
+        action: 'user_password_reset',
+        entityType: 'user',
+        entityKey: user.id,
+        partnerId: tenant?.partnerId ?? user.partnerId ?? null,
+        details: { tenantId: user.tenantId, email: user.email, byPartner: actor.partnerId !== null },
+      });
+    });
+  }
   async findOwnerUser(tenantId: string) {
     return this.db.query.users.findFirst({ where: and(eq(users.tenantId, tenantId), eq(users.role, 'owner')) });
   }
@@ -307,6 +328,19 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [row] = await this.db.insert(users).values(data as any).returning();
     return row;
   }
+  // trava o cliente: duas criações simultâneas não passam do limite
+  async createMemberWithinLimit(data: Partial<User> & { tenantId: string }, max: number): Promise<User | null> {
+    return this.db.transaction(async (tx) => {
+      await tx.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, data.tenantId)).for('update');
+      const [{ used }] = await tx
+        .select({ used: sql<number>`count(*)::int`.mapWith(Number) })
+        .from(users)
+        .where(and(eq(users.tenantId, data.tenantId), eq(users.role, 'member'), isNull(users.deletedAt)));
+      if (used! >= max) return null;
+      const [row] = await tx.insert(users).values(data as any).returning();
+      return row;
+    });
+  }
   async updateUser(id: string, data: Partial<User>) {
     const [row] = await this.db.update(users).set(data as any).where(eq(users.id, id)).returning();
     return row ?? null;
@@ -322,7 +356,45 @@ export class SuperAdminRepository extends TenantScopedRepository {
   // ── Plans ────────────────────────────────────────────────────────
   // partnerId null = planos da ady; senão só os daquele parceiro
   async listPlans(partnerId: string | null = null) {
-    return this.db.query.plans.findMany({ where: planOwner(partnerId), orderBy: [desc(plans.createdAt)] });
+    const rows = await this.db.query.plans.findMany({ where: planOwner(partnerId), orderBy: [desc(plans.createdAt)] });
+    const views = await this.listPlanBlockedViews(rows.map((p) => p.id));
+    return rows.map((p) => ({ ...p, blockedViews: views.get(p.id) ?? [] }));
+  }
+  // funcionalidades tiradas por plano (forma crua)
+  async listPlanBlockedViews(planIds: string[]): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (!planIds.length) return map;
+    const rows = await this.db
+      .select({ planId: adyRbacPlanViewsBlocked.planId, key: adyRbacPlanViewsBlocked.viewKey })
+      .from(adyRbacPlanViewsBlocked)
+      .where(inArray(adyRbacPlanViewsBlocked.planId, planIds));
+    for (const r of rows) map.set(r.planId, [...(map.get(r.planId) ?? []), r.key]);
+    return map;
+  }
+  // troca o conjunto inteiro, tudo ou nada
+  private async replacePlanViews(tx: Pick<Database, 'delete' | 'insert'>, planId: string, keys: string[], actorId: string | null) {
+    await tx.delete(adyRbacPlanViewsBlocked).where(eq(adyRbacPlanViewsBlocked.planId, planId));
+    if (keys.length)
+      await tx.insert(adyRbacPlanViewsBlocked).values(keys.map((viewKey) => ({ planId, viewKey, createdBy: actorId })));
+  }
+  async createPlanWithViews(data: Partial<Plan>, blockedViews: string[], actorId: string | null): Promise<Plan & { blockedViews: string[] }> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.insert(plans).values(data as any).returning();
+      await this.replacePlanViews(tx, row!.id, blockedViews, actorId);
+      return { ...row!, blockedViews };
+    });
+  }
+  async updatePlanWithViews(id: string, data: Partial<Plan>, blockedViews: string[] | undefined, actorId: string | null) {
+    if (data.technicalKey !== undefined) {
+      const existing = await this.db.query.plans.findFirst({ where: eq(plans.id, id) });
+      if (existing?.technicalKey && existing.technicalKey !== data.technicalKey) {
+        throw new Error('PLAN_TECHNICAL_KEY_IMMUTABLE');
+      }
+    }
+    await this.db.transaction(async (tx) => {
+      if (Object.keys(data).length) await tx.update(plans).set(data as any).where(eq(plans.id, id));
+      if (blockedViews !== undefined) await this.replacePlanViews(tx, id, blockedViews, actorId);
+    });
   }
   async findPlanById(id: string) {
     return this.db.query.plans.findFirst({ where: eq(plans.id, id) });
@@ -389,6 +461,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
         name: users.name,
         email: users.email,
         role: users.role,
+        platformRole: users.platformRole,
         tenantId: users.tenantId,
         createdAt: users.createdAt,
         tenantName: tenants.name,

@@ -159,6 +159,14 @@ describe('Permissões (super_admin) — integração', () => {
     expect(await blockedViews(clientAdy)).toEqual([]);
   });
 
+  it('tela desativada (Orçamento smart) some da lista e não pode ser alterada', async () => {
+    const list = (await request(app).get(DEFAULT).set(bearer(superToken))).body.data as { key: string }[];
+    expect(list.map((v) => v.key)).not.toContain('budget');
+    expect(list.map((v) => v.key)).toContain('goals');
+    const res = await request(app).put(DEFAULT).set(bearer(superToken)).send({ viewKey: 'budget', blocked: false });
+    expect(res.status).toBe(400);
+  });
+
   it('todo serviço ligado a uma tela existe no catálogo', () => {
     const keys = new Set(RBAC_SERVICES.map((s) => s.key));
     expect(RBAC_VIEWS.flatMap((v) => v.services ?? []).filter((k) => !keys.has(k))).toEqual([]);

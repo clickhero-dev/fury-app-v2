@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { KeyRound } from "lucide-react";
 import api from "@/lib/api";
 import { apiMessage, SlotsBar, type Partner } from "./PartnersPage";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { IntegrationsPanel } from "./IntegrationsPanel";
+import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
 
 type Tab = "dados" | "limites" | "permissoes" | "integracoes";
 
@@ -21,6 +23,9 @@ export function PartnerConfigPage() {
   const [maxTenants, setMaxTenants] = useState(0);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
 
   useEffect(() => {
     api
@@ -45,6 +50,22 @@ export function PartnerConfigPage() {
       setMsg(apiMessage(err, "Não foi possível salvar."));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // troca a senha da conta do parceiro; sessões caem
+  async function resetPassword(password: string) {
+    if (!partner?.accountUserId) return;
+    setResetting(true);
+    setResetError("");
+    try {
+      await api.post(`/admin/users/${partner.accountUserId}/password`, { password });
+      setResetOpen(false);
+      setMsg("Senha do parceiro alterada");
+    } catch (err) {
+      setResetError(apiMessage(err, "Não foi possível trocar a senha."));
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -89,6 +110,16 @@ export function PartnerConfigPage() {
             <span className="text-xs font-medium text-text-secondary">E-mail da conta do parceiro</span>
             <input className={inputCls} value={partner.accountEmail ?? "Sem conta"} disabled />
           </label>
+          {partner.accountUserId && (
+            <button
+              type="button"
+              onClick={() => { setResetError(""); setResetOpen(true); setMsg(""); }}
+              className="ady-btn h-9 px-3 flex items-center gap-1.5 rounded-lg border border-admin-petrol/40 text-sm font-semibold text-[#17708A] dark:text-[#1E88A8] hover:bg-admin-petrol/10 transition-all"
+            >
+              <KeyRound className="w-4 h-4" />
+              Trocar senha
+            </button>
+          )}
           <button className={btnCls} disabled={saving || !name.trim()} onClick={() => save({ name: name.trim() })}>
             Salvar
           </button>
@@ -121,6 +152,16 @@ export function PartnerConfigPage() {
       {tab === "permissoes" && <PermissionsPanel partnerId={partner.id} />}
 
       {tab === "integracoes" && <IntegrationsPanel url={`/admin/partners/${partner.id}/ai-key`} readOnly />}
+
+      {resetOpen && (
+        <ResetPasswordModal
+          userName={partner.accountEmail ?? partner.name}
+          saving={resetting}
+          error={resetError}
+          onSubmit={resetPassword}
+          onClose={() => setResetOpen(false)}
+        />
+      )}
     </div>
   );
 }

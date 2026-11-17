@@ -61,6 +61,9 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
+const blocked = vi.hoisted(() => ({ keys: [] as string[] }));
+vi.mock('@/hooks/useBlockedViews', () => ({ useBlockedViews: () => ({ isBlocked: (k: string) => blocked.keys.includes(k) }) }));
+
 vi.mock('@/hooks/useGoalsProgress', () => ({
   useGoalsProgress: (...args: unknown[]) => mockUseGoalsProgress(...args),
   translateObjective: (k?: string) => k ?? 'Seu Objetivo',
@@ -141,6 +144,29 @@ describe('BDD: Dashboard usa endpoints v2', () => {
     await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/campaigns')).toBe(true), { timeout: 5000 });
     const urls = mockApiGet.mock.calls.map((c) => c[0]);
     expect(urls.some((u) => u === '/metrics/campaigns')).toBe(false);
+  });
+
+  it('Cenário: plano sem campanhas esconde o card e não consulta campanhas', async () => {
+    blocked.keys = ['campaigns'];
+    try {
+      render(<Dashboard />, { wrapper });
+      await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/metrics/daily')).toBe(true), { timeout: 5000 });
+      expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/campaigns')).toBe(false);
+      expect(screen.queryByText('Campanhas ativas')).not.toBeInTheDocument();
+    } finally {
+      blocked.keys = [];
+    }
+  });
+
+  it('Cenário: plano sem criar campanha tira o link "Criar campanha" do card vazio', async () => {
+    blocked.keys = ['campaigns.create'];
+    try {
+      render(<Dashboard />, { wrapper });
+      expect(await screen.findByText('Nenhuma campanha ativa agora', {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Criar campanha' })).not.toBeInTheDocument();
+    } finally {
+      blocked.keys = [];
+    }
   });
 
   it('Cenário: conta demo sem insights mostra estados vazios compreensíveis', async () => {

@@ -1,0 +1,2 @@
+# PDF fixtures retain their exact xref bytes and are not text patches.
+apps/web/e2e-mock/fixtures/chat-media/*.pdf binary

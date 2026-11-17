@@ -33,7 +33,7 @@ test('trial preserva sessão ao navegar, abrir outra aba e reiniciar o navegador
     context = await startBrowser();
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${app}/trial/acesso#token=${'a'.repeat(64)}`);
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/chat$/);
     await expect.poll(() => page.evaluate(() => localStorage.getItem('refreshToken'))).toBe('trial-refresh');
     await page.goto(`${app}/configuracoes`);
     await expect(page).toHaveURL(/\/configuracoes/);

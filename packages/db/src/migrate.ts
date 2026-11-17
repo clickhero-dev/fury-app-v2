@@ -167,8 +167,25 @@ const STEPS: MigrationStep[] = [
   { tag: '0055_trial_plan_technical_key' },
   { tag: '0058_public_trial_signup' },
   { tag: '0059_public_trial_signup_limits' },
+  { tag: '0059_creative_asset_ratings' },
   { tag: '0061_public_trial_first_access' },
   { tag: '0062_public_trial_link_uses' },
+  { tag: '0059_chat' },
+  { tag: '0060_chat_approvals' },
+  { tag: '0061_chat_memory' },
+  { tag: '0062_chat_approval_result' },
+  { tag: '0063_chat_approval_display' },
+  { tag: '0064_chat_approval_failed' },
+  { tag: '0065_brand_kit_whatsapp' },
+  { tag: '0066_chat_response_runs' },
+  { tag: '0067_chat_approval_unknown' },
+  { tag: '0068_video_job_fencing' },
+  { tag: '0069_chat_title_source' },
+  { tag: '0070_chat_attachments' },
+  { tag: '0071_chat_plans' },
+  { tag: '0072_chat_concurrent_runs' },
+  { tag: '0073_chat_plan_run_fencing' },
+  { tag: '0074_chat_response_messages' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
@@ -177,6 +194,7 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0056_demo_tenant' },
+  { tag: '0063_ady_rbac_plan_views_blocked' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -186,6 +204,7 @@ export const REQUIRED_TABLES = [
   'meta_connections',
   'campaigns',
   'creative_assets',
+  'creative_asset_ratings',
   'client_goals',
   'fury_insights',
   'automation_rules',

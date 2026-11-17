@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState } from "react";
 import { KeyRound } from "lucide-react";
 import api from "@/lib/api";
@@ -78,7 +79,7 @@ export function IntegrationsPanel({ url, readOnly = false }: { url: string; read
         >
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-text-secondary">Nova chave</span>
-            <input type="password" autoComplete="off" required placeholder="sk-or-..." className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} />
+            <PasswordInput visibilityLabel="chave" autoComplete="off" required placeholder="sk-or-..." className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} />
           </label>
           <div className="flex gap-2">
             <button type="submit" className={btnCls} disabled={busy || !key.trim()}>{busy ? "Testando..." : "Salvar"}</button>

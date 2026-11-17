@@ -7,6 +7,7 @@ export interface PartnerSummary {
   maxTenants: number;
   usedTenants: number;
   accountEmail: string | null;
+  accountUserId: string | null;
   keyLast4: string | null;
   createdAt: Date;
 }
@@ -32,6 +33,7 @@ export class PartnerRepository {
         // vagas: clientes do parceiro não excluídos
         usedTenants: sql<number>`(SELECT count(*)::int FROM tenants t WHERE t.partner_id = "ady_partners"."id" AND t.deleted_at IS NULL)`.mapWith(Number),
         accountEmail: sql<string | null>`(SELECT u.email FROM users u WHERE u.partner_id = "ady_partners"."id" AND u.platform_role = 'admin_partner' AND u.deleted_at IS NULL ORDER BY u.created_at LIMIT 1)`,
+        accountUserId: sql<string | null>`(SELECT u.id FROM users u WHERE u.partner_id = "ady_partners"."id" AND u.platform_role = 'admin_partner' AND u.deleted_at IS NULL ORDER BY u.created_at LIMIT 1)`,
       })
       .from(adyPartners)
       .where(isNull(adyPartners.deletedAt))

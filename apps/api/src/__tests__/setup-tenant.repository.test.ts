@@ -14,6 +14,8 @@
  *   Então o erro original permanece observável para o handler
  */
 import { describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { SuperAdminRepository } from '../repository/superadmin.repository.js';
 
 const input = {
@@ -63,6 +65,16 @@ describe('SuperAdminRepository.createTenantWithUser', () => {
     expect(result.status).toBe('created');
     expect(result.tenant.id).toBe('tenant-1');
     expect(result.user.id).toBe('user-1');
+  });
+
+  it('trial buscado só entre planos da ady (partner_id nulo)', async () => {
+    const tx = txForCreatedRows();
+    const repo = new SuperAdminRepository('', makeDb({ transaction: vi.fn(async (fn) => fn(tx)) }));
+    await repo.createTenantWithUser(input);
+    const { where } = tx.query.plans.findFirst.mock.calls[0]![0] as { where: SQL };
+    const { sql: text, params } = new PgDialect().sqlToQuery(where);
+    expect(text).toContain('"partner_id" is null');
+    expect(params).toContain('public_trial_signup');
   });
 
   it('não conclui o setup se o plano trial estiver ausente', async () => {

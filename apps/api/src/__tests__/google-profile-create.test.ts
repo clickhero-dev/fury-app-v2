@@ -41,6 +41,7 @@ const {
   mockListAccounts: vi.fn(),
 }));
 
+vi.mock('../middleware/integrationManager.middleware.js', () => ({ integrationManagerMiddleware: (_req: unknown, _res: unknown, next: () => void) => next() }));
 vi.mock('@fury/db', () => ({
   db: dbMock,
   googleConnections: {},

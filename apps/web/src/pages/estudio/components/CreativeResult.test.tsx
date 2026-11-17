@@ -333,3 +333,19 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('CreativeResult — funcionalidades do plano', () => {
+  it('sem gerador e sem criar campanha: some regenerar e publicar', async () => {
+    mockApiPost.mockResolvedValue({ data: {} });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CreativeResult result={BASE_RESULT} onBack={() => {}} onNewCreative={() => {}} onPublish={() => {}} canRegenerate={false} canPublish={false} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('button', { name: /salvar na biblioteca/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /regenerar com ajuste/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /publicar no meta/i })).toBeNull();
+  });
+});

@@ -83,6 +83,15 @@ describe('ClickUpTicketsClient', () => {
     vi.unstubAllGlobals();
   });
 
+  it('aceita CLICKUP_API_KEY como credencial legada para listar status', async () => {
+    delete process.env.CLICKUP_API_TOKEN;
+    process.env.CLICKUP_API_KEY = 'clickup-legacy-key';
+    const fetchMock = mockFetchOnce(200, { statuses: [{ status: 'triagem', type: 'custom' }] });
+
+    await expect(new ClickUpTicketsClient().listStatuses()).resolves.toEqual([{ value: 'triagem', label: 'triagem', type: 'custom' }]);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: 'clickup-legacy-key' });
+  });
+
   it('cria a tarefa na lista Chamados com e-mail, nível e prioridade', async () => {
     const fetchMock = mockFetchOnce(200, {
       id: 'task-123',
@@ -259,7 +268,7 @@ describe('ClickUpTicketsClient', () => {
       { value: 'triagem', label: 'triagem', type: 'open', color: '#00aaff' },
       { value: 'concluído', label: 'concluído', type: 'closed', color: '#6bc950' },
     ]);
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/status');
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435');
   });
 
   it('relê a tarefa e envia somente o novo status', async () => {

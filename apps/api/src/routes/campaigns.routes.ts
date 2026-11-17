@@ -27,6 +27,7 @@ router.get('/create-wizard-diag', campaigns.createWizardCampaignDiag);
 router.post('/upload-creative', creativeUpload.single('file'), campaigns.uploadWizardCreative);
 // Note: /meta-locations and /meta-interests are defined in index.ts with custom middleware
 router.post('/suggest-text', campaigns.suggestText);
+router.get('/chat-account/:id', campaigns.chatAdAccount);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first
 router.patch('/:id/pause', campaigns.pauseCampaign);
@@ -34,6 +35,15 @@ router.patch('/:id/resume', campaigns.resumeCampaign);
 router.patch('/:id/status', campaigns.updateCampaignStatus);
 router.patch('/:id/budget', campaigns.updateBudget);
 router.get('/:id/insights', campaigns.getCampaignInsights);
+router.get('/:id/chat-ads', campaigns.getChatCampaignAds);
+router.get('/:id/chat-ad-assets', campaigns.getChatAdAssets);
+router.get('/:id/chat-available-ad-assets', campaigns.getChatAvailableAdAssets);
+router.get('/:id/chat-ads/:adId', campaigns.chatAdSnapshot);
+router.patch('/:id/chat-ads/:adId', campaigns.chatAdUpdate);
+router.get('/:id/chat-ads-create/snapshot', campaigns.chatAdCreationSnapshot);
+router.post('/:id/chat-ads-create', campaigns.chatAdCreate);
+router.get('/:id/chat-snapshot', campaigns.chatSnapshot);
+router.patch('/:id/chat-update', campaigns.chatUpdate);
 router.get('/:id/leads', campaigns.getCampaignLeads);
 // Filtro da página de Leads: campanhas OUTCOME_LEADS direto da Meta (antes de /:id genérico)
 router.get('/lead-campaigns', campaigns.getLeadCampaigns);

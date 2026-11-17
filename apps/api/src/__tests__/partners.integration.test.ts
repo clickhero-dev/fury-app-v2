@@ -110,4 +110,26 @@ describe('Parceiros (super_admin) — integração', () => {
     const detail = await request(app).get(`/api/admin/partners/${partnerId}`).set(asSuper());
     expect(detail.body.data).toMatchObject({ name: `Parceira ${id} B`, maxTenants: 3, usedTenants: 3 });
   });
+
+  it('super_admin troca a senha da conta do parceiro; parceiro não troca a própria por aqui', async () => {
+    const detail = await request(app).get(`/api/admin/partners/${partnerId}`).set(asSuper());
+    const accountUserId = detail.body.data.accountUserId as string;
+    const [account] = await db.select().from(schema.users).where(eq(schema.users.id, accountUserId));
+    expect(account?.email).toBe(`pt-acc-${id}@test.com`);
+
+    // conta admin_partner fica fora do alcance do parceiro
+    const self = await request(app).post(`/api/admin/users/${accountUserId}/password`).set(asPartner()).send({ password: 'OutraSenha#2' });
+    expect(self.status).toBe(404);
+
+    const res = await request(app).post(`/api/admin/users/${accountUserId}/password`).set(asSuper()).send({ password: 'NovaSenha#1' });
+    expect(res.status).toBe(200);
+    expect((await login(`pt-acc-${id}@test.com`)).status).toBe(401);
+    expect((await request(app).post('/api/auth/login').send({ email: `pt-acc-${id}@test.com`, password: 'NovaSenha#1' })).status).toBe(200);
+
+    // log grava o parceiro mesmo com o cliente próprio sem partner_id
+    const logs = await db.select().from(schema.adyRbacAuditLog).where(eq(schema.adyRbacAuditLog.entityKey, accountUserId));
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ action: 'user_password_reset', partnerId });
+    await db.delete(schema.adyRbacAuditLog).where(eq(schema.adyRbacAuditLog.entityKey, accountUserId));
+  });
 });

@@ -12,6 +12,7 @@ Então nenhuma notificação de vídeo pronto é criada
 */
 import { describe, it, expect, vi } from 'vitest';
 import { StudioVideoService, buildVideoPrompt, parseScenes, resolveVideoLimits } from '../services/studio/studio-video.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { DEFAULT_AD_VIDEO_MODEL } from '../services/studio/studio-model-catalog.js';
 
 const TENANT = 'tenant-1';
@@ -28,6 +29,24 @@ function makeJobRepo() {
     [...jobs.values()].filter((j) => ['pending', 'running', 'done'].includes(j.status) && !j.metadata?.rootAssetId).length;
   return {
     jobs,
+    markPendingVideoEnqueueFailed: vi.fn(async (id: string) => {
+      const job=jobs.get(id);
+      if (!job || job.status !== 'pending') return false;
+      job.status='error';job.error='Não foi possível iniciar a geração.';return true;
+    }),
+    claimVideoJob: vi.fn(async (id: string) => {
+      const job = jobs.get(id);
+      if (!job || job.status !== 'pending') return null;
+      job.status = 'running';
+      return { ...job };
+    }),
+    claimResumableVideoJob: vi.fn(async () => null),
+    patchOwnedVideoJob: vi.fn(async (id: string, _token: string, patch: any) => { jobs.set(id, { ...jobs.get(id), ...patch }); return true; }),
+    failOwnedVideoJob: vi.fn(async (id: string, _token: string, error: string, metadata: any, _refund: boolean) => { jobs.set(id, { ...jobs.get(id), status:'error', error, metadata }); return true; }),
+    reserveVideoAdjustment: vi.fn(async (_input: any, _limit: number): Promise<'created'|'exists'|'active_limit'|'quota'|'approval_inactive'> => 'created'),
+    activateVideoAdjustment: vi.fn(async (id: string, tenantId: string, metadata: any) => { jobs.set(id,{...jobs.get(id),tenantId,workflow:'studio-video',status:'pending',currentStage:'queued',metadata}); return true; }),
+    cancelVideoAdjustment: vi.fn(async (_id: string, _tenant: string) => true),
+    completeOwnedVideoJob: vi.fn(async (id: string, _token: string, asset: any, metadata: any) => { jobs.set(id, { ...jobs.get(id), status:'done', currentStage:'done', metadata, artifacts:{assetId:'asset-new',videoUrl:asset.url} }); return { id:'asset-new', ...asset }; }),
     createTenantJobIfUnderLimit: vi.fn(async (d: any, limit: number, _stale: Date, period?: { limit: number }) => {
       const active = [...jobs.values()].filter((j) => j.tenantId === d.tenantId && ['pending', 'running'].includes(j.status));
       if (active.length >= limit) return 'active_limit';
@@ -67,6 +86,9 @@ function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?:
     assertCreditsAvailable: vi.fn(async () => undefined),
   };
   const modQuota = { consume: vi.fn(async () => undefined), refund: vi.fn(async () => undefined) };
+  jobRepo.failOwnedVideoJob.mockImplementation(async (id, _token, error, metadata, refund) => { jobRepo.jobs.set(id,{...jobRepo.jobs.get(id),status:'error',error,metadata}); if (metadata.rootAssetId && refund) await modQuota.refund(metadata.rootAssetId); return true; });
+  jobRepo.reserveVideoAdjustment.mockImplementation(async (input) => { try {await modQuota.consume(input.rootAssetId);} catch {return 'quota';} jobRepo.jobs.set(input.id,{id:input.id,tenantId:input.tenantId,workflow:'studio-video',status:'awaiting_images',metadata:{rootAssetId:input.rootAssetId}});return 'created'; });
+  jobRepo.cancelVideoAdjustment.mockImplementation(async (id) => {const job=jobRepo.jobs.get(id);if (!job || !['pending','awaiting_images'].includes(job.status)) return false; job.status='error';await modQuota.refund(job.metadata.rootAssetId);return true;});
   const enqueue = vi.fn(async () => undefined);
   const svc = new StudioVideoService({
     video: video as any,
@@ -206,10 +228,10 @@ describe('StudioVideoService', () => {
     });
 
     it('vídeo novo nasce com o teto de mudanças do plano', async () => {
-      const { svc, studioRepo } = build({ limits: { videosPerMonth: 5, modificationsPerVideo: 2 } });
+      const { svc, jobRepo } = build({ limits: { videosPerMonth: 5, modificationsPerVideo: 2 } });
       const { jobId } = await svc.createJob(TENANT, baseInput);
       await svc.processJob(jobId);
-      expect(studioRepo.createAsset.mock.calls[0][0].modificationsRemaining).toBe(2);
+      expect(jobRepo.completeOwnedVideoJob.mock.calls[0][2].modificationsRemaining).toBe(2);
     });
 
     it('sem limite (null): não passa período pro repositório', async () => {
@@ -220,7 +242,7 @@ describe('StudioVideoService', () => {
   });
 
   it('processJob envia, acompanha e salva o asset com custo, sem debug no asset', async () => {
-    const { svc, video, studioRepo } = build({
+    const { svc, video, jobRepo } = build({
       states: [
         { status: 'pending', costUsd: null, error: null, unsignedUrls: [] },
         { status: 'in_progress', costUsd: null, error: null, unsignedUrls: [] },
@@ -231,7 +253,7 @@ describe('StudioVideoService', () => {
     await svc.processJob(jobId);
 
     expect(video.submit.mock.calls[0][0]).toMatchObject({ duration: 15, aspect_ratio: '9:16', generate_audio: true, referenceImageUrls: [`https://r2/${PHOTO_ID}.png`] });
-    const asset = studioRepo.createAsset.mock.calls[0][0];
+    const asset = jobRepo.completeOwnedVideoJob.mock.calls[0][2];
     expect(asset.type).toBe('video');
     expect(asset.costUsd).toBe(1.5);
     const notes = JSON.parse(asset.complianceNotes);
@@ -241,6 +263,53 @@ describe('StudioVideoService', () => {
     const status = await svc.getJob(TENANT, jobId);
     expect(status).toMatchObject({ status: 'done', assetId: 'asset-new' });
     expect((status as any).debug).toBeUndefined();
+  });
+
+  it('retoma job pago órfão consultando o provedor sem novo envio', async () => {
+    const { svc, jobRepo, video } = build();
+    const { jobId } = await svc.createJob(TENANT, baseInput);
+    const job=jobRepo.jobs.get(jobId);
+    job.status='running'; job.metadata={...job.metadata,openrouterJobId:'existing-provider-id'};
+    jobRepo.claimResumableVideoJob.mockImplementationOnce(async () => ({ ...job }));
+    await svc.processJob(jobId);
+    expect(video.submit).not.toHaveBeenCalled();
+    expect(video.getJob).toHaveBeenCalledWith('existing-provider-id');
+    expect(jobRepo.completeOwnedVideoJob).toHaveBeenCalledOnce();
+    expect(jobRepo.jobs.get(jobId).status).toBe('done');
+  });
+
+  it('consulta o resultado pago ao menos uma vez mesmo após timeout', async () => {
+    const {svc,jobRepo,video}=build();
+    const {jobId}=await svc.createJob(TENANT,baseInput);
+    const job=jobRepo.jobs.get(jobId);
+    job.status='running';job.metadata={...job.metadata,openrouterJobId:'old-provider-id',startedAt:new Date(0).toISOString()};
+    jobRepo.claimResumableVideoJob.mockImplementationOnce(async () => ({...job}));
+    await svc.processJob(jobId);
+    expect(video.submit).not.toHaveBeenCalled();
+    expect(video.getJob).toHaveBeenCalledWith('old-provider-id');
+    expect(jobRepo.jobs.get(jobId).status).toBe('done');
+  });
+
+  it('worker que perdeu posse não conclui nem estorna cota', async () => {
+    const {svc,jobRepo,video,modQuota}=build({states:[{status:'failed',error:'failed'}]});
+    const {jobId}=await svc.createJob(TENANT,baseInput);
+    const job=jobRepo.jobs.get(jobId);
+    job.status='running';job.metadata={...job.metadata,rootAssetId:'root',openrouterJobId:'existing'};
+    jobRepo.claimResumableVideoJob.mockImplementationOnce(async () => ({...job}));
+    jobRepo.patchOwnedVideoJob.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await svc.processJob(jobId);
+    expect(video.submit).not.toHaveBeenCalled();
+    expect(jobRepo.completeOwnedVideoJob).not.toHaveBeenCalled();
+    expect(modQuota.refund).not.toHaveBeenCalled();
+  });
+
+  it('falha transacional não converte estorno devido em cobrança incerta', async () => {
+    const {svc,jobRepo}=build({states:[{status:'failed',error:'failed'}]});
+    const {jobId}=await svc.createJob(TENANT,baseInput);
+    jobRepo.failOwnedVideoJob.mockRejectedValueOnce(Error('database down'));
+    await expect(svc.processJob(jobId)).rejects.toThrow();
+    expect(jobRepo.failOwnedVideoJob).toHaveBeenCalledOnce();
+    expect(jobRepo.jobs.get(jobId).status).toBe('running');
   });
 
   it('notifica o usuário iniciador uma única vez quando o vídeo fica pronto', async () => {
@@ -286,21 +355,22 @@ describe('StudioVideoService', () => {
   });
 
   it('falhas seguidas ao consultar o status desistem em vez de rodar 20 min', async () => {
-    const { svc, video } = build();
+    const { svc, video, jobRepo } = build();
     video.getJob.mockRejectedValue(new Error('401'));
     const { jobId } = await svc.createJob(TENANT, baseInput);
     await svc.processJob(jobId);
     expect((await svc.getJob(TENANT, jobId)).status).toBe('error');
     expect(video.getJob).toHaveBeenCalledTimes(6);
+    expect(jobRepo.jobs.get(jobId).metadata.billingUncertain).toBe(true);
   });
 
   it('vídeo já pago: tenta baixar de novo antes de falhar', async () => {
-    const { svc, video, studioRepo } = build();
+    const { svc, video, jobRepo } = build();
     video.download.mockRejectedValueOnce(new Error('timeout'));
     const { jobId } = await svc.createJob(TENANT, baseInput);
     await svc.processJob(jobId);
     expect(video.download).toHaveBeenCalledTimes(2);
-    expect(studioRepo.createAsset).toHaveBeenCalledTimes(1);
+    expect(jobRepo.completeOwnedVideoJob).toHaveBeenCalledTimes(1);
     expect((await svc.getJob(TENANT, jobId)).status).toBe('done');
   });
 
@@ -312,6 +382,49 @@ describe('StudioVideoService', () => {
     await svc.processJob(jobId);
     expect(video.submit).not.toHaveBeenCalled();
     expect(video.getJob).toHaveBeenCalledWith('or-existing');
+  });
+
+  it('não falha nem estorna quota se worker já iniciou quando enqueue perde resposta', async () => {
+    const {svc,jobRepo,enqueue,modQuota}=build({asset:adjustableAsset});
+    enqueue.mockImplementationOnce(async id=>{jobRepo.jobs.get(id).status='running';throw new Error('resposta perdida');});
+    const {jobId}=await svc.adjustVideo(TENANT,'asset-v2','mude o fundo',USER_ID);
+    expect(jobRepo.jobs.get(jobId).status).toBe('running');expect(modQuota.refund).not.toHaveBeenCalled();
+  });
+
+  it('marca erro e estorna somente quando job ainda não foi reclamado', async () => {
+    const {svc,jobRepo,enqueue,modQuota}=build({asset:adjustableAsset});
+    enqueue.mockRejectedValueOnce(new Error('fila indisponível'));
+    await expect(svc.adjustVideo(TENANT,'asset-v2','mude o fundo',USER_ID)).rejects.toThrow();
+    expect([...jobRepo.jobs.values()][0].status).toBe('error');expect(modQuota.refund).toHaveBeenCalledWith('asset-root');
+  });
+
+  it('não estorna quando não é possível verificar se worker reclamou o job', async () => {
+    const {svc,jobRepo,enqueue,modQuota}=build({asset:adjustableAsset});
+    enqueue.mockRejectedValueOnce(new Error('resposta perdida'));
+    jobRepo.cancelVideoAdjustment.mockRejectedValueOnce(new Error('banco indisponível'));
+    await expect(svc.adjustVideo(TENANT,'asset-v2','mude o fundo',USER_ID)).rejects.toMatchObject({statusCode:503,details:undefined});
+    expect(modQuota.refund).not.toHaveBeenCalled();
+  });
+
+  it('não estorna nem sugere repetição quando envio pago tem resultado desconhecido', async () => {
+    const { svc, jobRepo, video, modQuota } = build();
+    const { jobId } = await svc.createJob(TENANT, baseInput);
+    jobRepo.jobs.get(jobId).metadata = { ...jobRepo.jobs.get(jobId).metadata, rootAssetId: 'asset-root' };
+    video.submit.mockRejectedValueOnce(new Error('timeout'));
+    await svc.processJob(jobId);
+    expect(modQuota.refund).not.toHaveBeenCalled();
+    expect(jobRepo.jobs.get(jobId).error).toContain('Verifique');
+    expect(jobRepo.jobs.get(jobId).metadata.billingUncertain).toBe(true);
+  });
+
+  it('não contabiliza falha comprovada antes do envio ao provedor', async () => {
+    const { svc, jobRepo, video, modQuota } = build();
+    const { jobId } = await svc.createJob(TENANT, baseInput);
+    jobRepo.jobs.get(jobId).metadata = { ...jobRepo.jobs.get(jobId).metadata, rootAssetId: 'asset-root' };
+    video.submit.mockRejectedValueOnce(new AppError(503, 'OPENROUTER_VIDEO_KEY_UNAVAILABLE', 'Chave indisponível', {notSubmitted:true}));
+    await svc.processJob(jobId);
+    expect(modQuota.refund).toHaveBeenCalledWith('asset-root');
+    expect(jobRepo.jobs.get(jobId).metadata.billingUncertain).toBeUndefined();
   });
 
   it('getJob de outro tenant dá 404', async () => {
@@ -330,15 +443,14 @@ describe('StudioVideoService', () => {
       expect(jobRepo.jobs.get(jobId).metadata).toMatchObject({ rootAssetId: 'asset-root', aspectRatio: '16:9', model: 'bytedance/seedance-2.0' });
 
       await svc.processJob(jobId);
-      expect(studioRepo.createAsset.mock.calls[0][0].rootAssetId).toBe('asset-root');
-      expect(studioRepo.setActiveAsset).toHaveBeenCalledWith('asset-root', 'asset-new');
+      expect(jobRepo.completeOwnedVideoJob.mock.calls[0][2].rootAssetId).toBe('asset-root');
       expect(modQuota.refund).not.toHaveBeenCalled();
     });
 
     it('ajuste não conta na cota mensal de vídeos', async () => {
       const { svc, jobRepo } = build({ asset: adjustableAsset, limits: { videosPerMonth: 1, modificationsPerVideo: 3 } });
       await svc.adjustVideo(TENANT, 'asset-v2', 'mudar a cor do fundo');
-      expect(jobRepo.createTenantJobIfUnderLimit.mock.calls[0][3]).toBeUndefined();
+      expect(jobRepo.reserveVideoAdjustment).toHaveBeenCalledOnce();
     });
 
     it('sem mudanças restantes: erro da cota e nada é gerado', async () => {

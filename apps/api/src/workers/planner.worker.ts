@@ -2,6 +2,8 @@ import { Worker, Queue } from 'bullmq';
 import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { getRedis } from '../lib/redis.js';
 import { runPlannerWorkflow } from '../planner-workflow-runner.js';
+import { planSkipsTenant } from '../lib/plan-skip.js';
+import { plannerStore } from '../planner-store.js';
 
 export interface PlannerJobData {
   jobId: string;
@@ -43,6 +45,11 @@ export async function startPlannerWorker(): Promise<void> {
     QUEUE_NAME,
     async (job) => {
       const { jobId, tenantId, postsCount = 8 } = job.data;
+      // plano sem planejador: descarta o job
+      if (await planSkipsTenant(tenantId, ['planner'], 'planner')) {
+        await plannerStore.markFailed(jobId, 'plan-blocked', 'Planejador não incluso no plano');
+        return;
+      }
       await runPlannerWorkflow(jobId, tenantId, postsCount);
     },
     {

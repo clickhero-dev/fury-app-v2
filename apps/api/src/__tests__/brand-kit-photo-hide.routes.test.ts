@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { BrandKitPhotoController } from '../controllers/brand-kit-photo.controller.js';
 
 const svc = vi.hoisted(() => ({ hideFromReferencePanel: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../di.js', () => ({ controllers: { brandKit: { get: vi.fn(), upsert: vi.fn(), uploadLogo: vi.fn(), uploadPhotos: vi.fn(), deletePhoto: vi.fn() }, brandKitPhotos: new BrandKitPhotoController(svc as never) } }));
+vi.mock('../di.js', () => ({ controllers: { brandKit: { get: vi.fn(), chatSnapshot: vi.fn(), chatUpdate: vi.fn(), upsert: vi.fn(), uploadLogo: vi.fn(), uploadPhotos: vi.fn(), deletePhoto: vi.fn() }, brandKitPhotos: new BrandKitPhotoController(svc as never) } }));
 import routes from '../routes/brand-kit.routes.js';
 const app = express();
 app.use('/brand-kit', routes);

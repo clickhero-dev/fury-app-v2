@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, Plus, X } from "lucide-react";
@@ -143,7 +144,7 @@ export function ClientesPage() {
               <span className="text-xs font-medium text-text-secondary">Nome da empresa</span>
               <input required className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
-            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Dono do cliente</div>
+            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Usuário titular</div>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-text-secondary">Nome</span>
               <input required className={inputCls} value={form.userName} onChange={(e) => setForm({ ...form, userName: e.target.value })} />
@@ -154,7 +155,7 @@ export function ClientesPage() {
             </label>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-text-secondary">Senha inicial (mínimo 8 caracteres)</span>
-              <input required type="password" minLength={8} className={inputCls} value={form.userPassword}
+              <PasswordInput required minLength={8} className={inputCls} value={form.userPassword}
                 onChange={(e) => setForm({ ...form, userPassword: e.target.value })} />
             </label>
             <label className="block space-y-1.5">

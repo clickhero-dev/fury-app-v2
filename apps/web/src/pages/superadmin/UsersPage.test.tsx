@@ -39,8 +39,8 @@ function renderPage() {
 }
 
 async function fillForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Novo Cliente' }));
-  await user.type(screen.getByLabelText('Nome do Tenant'), 'Cliente novo');
+  await user.click(await screen.findByRole('button', { name: 'Novo cliente ady' }));
+  await user.type(screen.getByLabelText('Nome do cliente'), 'Cliente novo');
   await user.type(screen.getByLabelText('Nome do Usuário'), 'Owner');
   await user.type(screen.getByLabelText('Email'), 'owner@example.com');
   await user.type(screen.getByLabelText('Senha'), 'SenhaSegura1!');
@@ -65,7 +65,9 @@ describe('UsersPage — setup tenant', () => {
     await user.click(screen.getByRole('button', { name: 'Criar' }));
 
     expect(await screen.findByText(/Já existe um cliente com este identificador/)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Novo Cliente' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Novo cliente ady' })).toBeTruthy();
+    expect(screen.getByText(/Cria um cliente e um usuário da ady/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'O que cada cargo faz' })).toBeTruthy();
   });
 
   it('Cenário: falha inesperada mostra a mensagem genérica', async () => {
@@ -88,4 +90,14 @@ describe('UsersPage — setup tenant', () => {
     expect(screen.getByRole('button', { name: 'Criando...' })).toHaveProperty('disabled', true);
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
+});
+
+it('Dado um novo cliente, quando revelo sua senha, então o formulário não é enviado', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await fillForm(user);
+  await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+  expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
+  expect(screen.getByLabelText('Senha')).toHaveValue('SenhaSegura1!');
+  expect(mockPost).not.toHaveBeenCalled();
 });

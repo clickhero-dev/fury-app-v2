@@ -4,6 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { CookieConsentBanner } from './CookieConsentBanner';
 import { PRIVACY_URL } from '../lib/cookieConsent';
 
+/*
+ * Funcionalidade: contraste acessível no banner de cookies
+ * Cenário: o botão primário mantém contraste e foco visível
+ * Dado o banner visível em qualquer tema
+ * Quando o usuário localiza o botão “Aceitar todos”
+ * Então o botão usa os estilos de contraste e foco definidos para a ação primária
+ */
+
 const consent = vi.hoisted(() => ({ needsConsent: vi.fn(), setConsent: vi.fn() }));
 
 vi.mock('../lib/cookieConsent', async (orig) => ({
@@ -49,6 +57,26 @@ describe('CookieConsentBanner', () => {
         expect(btn.className).toContain(cls);
       }
     }
+  });
+
+  it('mantém contraste acessível nos estados do botão primário e foco visível', async () => {
+    consent.needsConsent.mockReturnValue(true);
+    render(<CookieConsentBanner />);
+
+    const acceptButton = screen.getByRole('button', { name: 'Aceitar todos' });
+    expect(acceptButton.className).toContain('cookie-consent-primary');
+    expect(acceptButton.className).toContain('bg-[#17708A]');
+    expect(acceptButton.className).toContain('text-white');
+    expect(acceptButton.className).toContain('hover:bg-[#12596E]');
+    expect(acceptButton.className).toContain('active:bg-[#0D4658]');
+    expect(acceptButton.className).toContain('focus-visible:outline-[#17708A]');
+    expect(acceptButton.className).toContain('focus-visible:outline-2');
+
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(acceptButton).toHaveFocus();
   });
 
   it('link da política abre em nova aba com rel noopener', () => {

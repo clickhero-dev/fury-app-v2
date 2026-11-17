@@ -4,6 +4,7 @@ import { PUBLISH_DUE_QUEUE_NAME } from '../lib/queue.js';
 import { publishDuePosts } from '../services/planner/planner.service.js';
 import { db, tenants } from '@fury/db';
 import { isNull } from 'drizzle-orm';
+import { planSkipsTenant } from '../lib/plan-skip.js';
 
 interface PublishDueJobData {
   timestamp: string;
@@ -19,6 +20,8 @@ export async function startPublishDueWorker(): Promise<Worker<PublishDueJobData>
       const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
       let total = 0;
       for (const tenant of allTenants) {
+        // plano sem planejador e sem calendário: não publica
+        if (await planSkipsTenant(tenant.id, ['planner', 'calendar'], 'publish-due')) continue;
         try {
           const result = await publishDuePosts(tenant.id);
           total += result.published;

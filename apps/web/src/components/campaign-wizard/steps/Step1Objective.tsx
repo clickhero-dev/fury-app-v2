@@ -23,14 +23,20 @@ const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
   {
     value: 'whatsapp',
     emoji: '📲',
-    title: 'Gerar Conversas',
+    title: 'Atrair Clientes no Direct do Instagram',
     description: 'Receba mensagens de clientes interessados no Facebook Messenger ou Instagram.',
   },
   {
     value: 'leads',
     emoji: '📋',
-    title: 'Formulário de captação',
+    title: 'Atrair Clientes para seu Whatsapp',
     description: 'Colete nome, e-mail e telefone dos interessados e leve eles pro seu WhatsApp.',
+  },
+  {
+    value: 'followers',
+    emoji: '📈',
+    title: 'Aumentar Seguidores do Instagram',
+    description: 'Deixe o ady escolher seu melhor post e impulsione-o para aumentar o seu Instagram',
   },
 ];
 
@@ -88,6 +94,12 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
 
       {value === 'leads' && whatsapp && onWhatsappChange && (
         <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} mode="whatsapp_only" />
+      )}
+
+      {value === 'followers' && (
+        <p className="rounded-xl border border-brand/20 bg-brand/5 p-4 text-sm text-text-secondary">
+          Na próxima etapa, o ady vai analisar seus posts e Reels e recomendar o conteúdo com maior potencial para atrair seguidores.
+        </p>
       )}
     </div>
   );

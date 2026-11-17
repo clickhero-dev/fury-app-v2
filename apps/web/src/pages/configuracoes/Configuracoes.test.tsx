@@ -193,3 +193,18 @@ describe('Configuracoes — Página de destino (aba Geral)', () => {
     expect(await screen.findByText(/já existe um negócio com esse nome/i)).toBeInTheDocument();
   });
 });
+
+it('Dada a troca de senha, quando revelo a nova senha, então os demais campos continuam ocultos', async () => {
+  mockApi();
+  render(<Configuracoes />, { wrapper: makeWrapper('/configuracoes?tab=seguranca') });
+  fireEvent.click(await screen.findByRole('button', { name: 'Alterar' }));
+  const current = screen.getByLabelText('Senha Atual');
+  const next = screen.getByLabelText('Nova Senha');
+  const confirmation = screen.getByLabelText('Confirmar Nova Senha');
+  fireEvent.change(next, { target: { value: 'NovaSenha123' } });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Mostrar senha' })[1]);
+  expect(next).toHaveAttribute('type', 'text');
+  expect(next).toHaveValue('NovaSenha123');
+  expect(current).toHaveAttribute('type', 'password');
+  expect(confirmation).toHaveAttribute('type', 'password');
+});

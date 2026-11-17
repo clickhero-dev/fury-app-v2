@@ -1,3 +1,4 @@
+import { InitialDestinationPage } from './pages/auth/InitialDestinationPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -25,6 +26,7 @@ import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
 // CreativeStudio (rota órfã duplicada do Estúdio) — import removido após canonicalização para /estudio
+import { ChatPage } from './pages/chat/ChatPage';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
@@ -38,7 +40,6 @@ import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
-import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { RoadmapPage } from './pages/roadmap/RoadmapPage';
 import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
@@ -53,6 +54,7 @@ import { ClientesPage } from './pages/superadmin/ClientesPage';
 import { MyIntegrationsPage } from './pages/superadmin/IntegrationsPanel';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
+import { CampanhasClientesPage } from './pages/superadmin/CampanhasClientesPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
 import { TicketsPage } from './pages/superadmin/TicketsPage';
 import { HealthchecksPage } from './pages/superadmin/HealthchecksPage';
@@ -93,6 +95,7 @@ export const router = createBrowserRouter([
     element: <ResetPasswordSuccessPage />,
   },
   { path: '/trial/acesso', element: <TrialAccessPage /> },
+  { path: '/inicio', element: <InitialDestinationPage /> },
   {
     path: '/onboarding/conectar-meta',
     element: <ConectarMetaPage />,
@@ -171,6 +174,7 @@ export const router = createBrowserRouter([
       // /estudio-criativo é rota órfã (tela duplicada do Estúdio) — canonicaliza p/ /estudio
       { path: '/estudio-criativo', element: <Navigate to="/estudio" replace /> },
       { path: '/estudio', element: <EstudioHome /> },
+      { path: '/chat', element: <ChatPage /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
       { path: '/planejador', element: <PlanejadorPage /> },
       { path: '/calendario', element: <CalendarioPage /> },
@@ -181,7 +185,7 @@ export const router = createBrowserRouter([
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
-      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
+      // Orçamento Smart fora do ar até ser finalizado (rbac-views da API: budget disabled)
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },
@@ -221,6 +225,7 @@ export const router = createBrowserRouter([
       { path: 'users', element: <UsersPage /> },
       { path: 'tenants/:id', element: <TenantDetailPage /> },
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
+      { path: 'campanhas', element: <CampanhasClientesPage /> },
       { path: 'planos', element: <PlansPage /> },
       { path: 'parceiros', element: <PartnersPage /> },
       { path: 'parceiros/padrao', element: <DefaultPermissionsPage /> },

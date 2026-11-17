@@ -120,6 +120,8 @@ vi.mock('../repository/meta-sync.repository.js', () => {
   return { MetaSyncRepository: MetaSyncRepositoryMock };
 });
 
+// plano liberado: o bloqueio por plano tem teste próprio
+vi.mock('../lib/plan-skip.js', () => ({ planSkipsTenant: vi.fn(async () => false) }));
 vi.mock('../lib/analytics.js', () => ({
   captureServerEvent: mockCaptureEvent,
 }));

@@ -1,14 +1,17 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
-import { getStoredPlatformRole } from "@/lib/platform-role";
+import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
+import { RoleHelp } from "./RoleHelp";
 
 interface User {
   id: string;
   name: string | null;
   email: string;
   role: string;
+  platformRole?: string | null;
   tenantId: string;
   tenantName: string | null;
   createdAt: string;
@@ -80,7 +83,7 @@ export function UsersPage() {
 
   // Validators
   function validateTenantName(v: string) {
-    if (!v.trim()) return "Nome do tenant é obrigatório";
+    if (!v.trim()) return "Nome do cliente é obrigatório";
     return "";
   }
 
@@ -98,10 +101,6 @@ export function UsersPage() {
   function validatePassword(v: string) {
     if (!v) return "Senha é obrigatória";
     if (v.length < 8) return "Mínimo 8 caracteres";
-    if (!/[A-Z]/.test(v)) return "Precisa de letra maiúscula";
-    if (!/[a-z]/.test(v)) return "Precisa de letra minúscula";
-    if (!/[0-9]/.test(v)) return "Precisa de número";
-    if (!/[^A-Za-z0-9]/.test(v)) return "Precisa de caractere especial";
     return "";
   }
 
@@ -173,10 +172,6 @@ export function UsersPage() {
   const passwordChecks = form.userPassword
     ? [
         form.userPassword.length >= 8,
-        /[A-Z]/.test(form.userPassword),
-        /[a-z]/.test(form.userPassword),
-        /[0-9]/.test(form.userPassword),
-        /[^A-Za-z0-9]/.test(form.userPassword),
       ]
     : null;
 
@@ -259,7 +254,7 @@ export function UsersPage() {
             }}
             className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2"
           >
-            <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
+            <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo cliente ady
           </button>
           )}
           <div className="relative">
@@ -269,7 +264,7 @@ export function UsersPage() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar por nome, email ou tenant..."
+                placeholder="Buscar por nome, e-mail ou cliente..."
                 className="w-80 bg-surface border border-border rounded-full pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 transition-colors"
               />
             </form>
@@ -287,10 +282,10 @@ export function UsersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-text-tertiary text-xs uppercase tracking-wider font-medium">
-                  <th className="px-5 py-4">Tenant</th>
+                  <th className="px-5 py-4">Cliente</th>
                   <th className="px-5 py-4">Nome</th>
                   <th className="px-5 py-4">Email</th>
-                  <th className="px-5 py-4">Perfil</th>
+                  <th className="px-5 py-4">Cargo</th>
                   <th className="px-5 py-4">Criado em</th>
                 </tr>
               </thead>
@@ -307,12 +302,7 @@ export function UsersPage() {
                     <td className="px-5 py-4 text-text-secondary">{u.name ?? "—"}</td>
                     <td className="px-5 py-4 text-text-tertiary">{u.email}</td>
                     <td className="px-5 py-4">
-                      <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                        u.role === "owner" ? "bg-spark/15 text-[#B55F02] dark:text-spark"
-                          : u.role === "admin" ? "bg-spark/10 text-[#B55F02] dark:text-spark"
-                          : u.role === "superadmin" ? "bg-brand/15 text-[#17708A] dark:text-[#1E88A8]"
-                            : "bg-success/10 text-text-secondary"
-                      }`}>{u.role}</div>
+                      <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${roleBadgeClass(u)}`}>{roleLabel(u)}</div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs text-text-tertiary">
                       {new Date(u.createdAt).toLocaleDateString("pt-BR")}
@@ -354,10 +344,15 @@ export function UsersPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
           <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-text-primary">
-                Novo Cliente
-              </h2>
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">
+                  Novo cliente ady
+                </h2>
+                <div className="text-sm text-text-secondary mt-1">
+                  Cria um cliente e um usuário da ady, sem vínculo com parceiro. Para cadastrar um parceiro, use Parceiros → Novo parceiro.
+                </div>
+              </div>
               <button
                 onClick={() => setShowModal(false)}
                 className="ady-btn text-text-tertiary hover:text-text-primary transition-colors"
@@ -370,7 +365,7 @@ export function UsersPage() {
               {/* Tenant Name */}
               <div>
                 <label htmlFor="setup-tenant-name" className="block text-xs font-medium text-admin-text-muted mb-1.5">
-                  Nome do Tenant
+                  Nome do cliente
                 </label>
                 <input
                   id="setup-tenant-name"
@@ -455,7 +450,7 @@ export function UsersPage() {
                 <label htmlFor="setup-user-password" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Senha
                 </label>
-                <input
+                <PasswordInput
                   id="setup-user-password"
                   value={form.userPassword}
                   onChange={(e) => {
@@ -464,7 +459,6 @@ export function UsersPage() {
                   }}
                   onBlur={() => handleBlur("userPassword")}
                   placeholder="Mínimo 8 caracteres"
-                  type="password"
                   className={
                     touched.userPassword && errors.userPassword
                       ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"
@@ -490,17 +484,21 @@ export function UsersPage() {
 
               {/* Role */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
-                  Perfil
-                </label>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label htmlFor="new-user-role" className="text-xs font-medium text-admin-text-muted">
+                    Cargo
+                  </label>
+                  <RoleHelp />
+                </div>
                 <select
+                  id="new-user-role"
                   value={form.userRole}
                   onChange={(e) => setForm({ ...form, userRole: e.target.value })}
                   className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                 >
-                  <option value="owner">Owner</option>
-                  <option value="admin">Admin</option>
-                  <option value="member">Membro</option>
+                  <option value="owner">Usuário Titular</option>
+                  <option value="admin">Administrador</option>
+                  <option value="member">Usuário</option>
                 </select>
               </div>
 

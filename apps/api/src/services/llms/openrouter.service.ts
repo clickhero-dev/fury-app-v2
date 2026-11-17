@@ -1,3 +1,4 @@
+import { externalFetch } from '../../lib/http-client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
 import { resolveAiKey } from '../../lib/ai-key-context.js';
@@ -123,25 +124,30 @@ export const openrouterService = {
     options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' }; timeoutMs?: number } = {},
   ): Promise<string> {
     const apiKey = await getClient();
-    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: options.model ?? 'deepseek/deepseek-chat',
-        messages,
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.max_tokens ?? 1500,
-        ...(options.response_format ? { response_format: options.response_format } : {}),
-      }),
-    }, options.timeoutMs);
-    if (!response.ok) {
-      const err = await response.text();
-      // detalhe do provedor só no log; o cliente recebe mensagem neutra
-      console.error('[openrouter] chat error', response.status, err.slice(0, 500));
-      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
-    }
-    const data = (await response.json()) as any;
-    return data.choices?.[0]?.message?.content ?? '';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 180_000);
+    try {
+      const response = await externalFetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: options.model ?? 'deepseek/deepseek-chat',
+          messages,
+          temperature: options.temperature ?? 0.7,
+          max_tokens: options.max_tokens ?? 1500,
+          ...(options.response_format ? { response_format: options.response_format } : {}),
+        }),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        console.error('[openrouter] chat error', response.status);
+        throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
+      }
+      // Timer remains active through body consumption, not only response headers.
+      const data = (await response.json()) as any;
+      return data.choices?.[0]?.message?.content ?? '';
+    } finally { clearTimeout(timer); }
   },
 
   /** Estado atual do saldo OpenRouter, com cache em memória (TTL). */

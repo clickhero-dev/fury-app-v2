@@ -31,7 +31,7 @@ interface Step2CreativeProps {
 }
 
 export function Step2Creative({ value, onChange, objective, instagramUserId }: Step2CreativeProps) {
-  const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>('gallery');
+  const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>(objective === 'followers' ? 'instagram' : 'gallery');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +47,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   latestValueRef.current = value;
   latestCopyRef.current = copy;
 
-  const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads';
+  const canUseInstagramPost = objective === 'followers' || objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads';
 
   const uploadMutation = useUploadCreative();
 
@@ -211,7 +211,9 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           )}
         </div>
         <p className="text-sm text-text-secondary mt-1">
-          O texto abaixo vale para todas as imagens escolhidas.
+          {objective === 'followers'
+            ? 'Aceite a recomendação do ady para usar o melhor post ou Reel no anúncio.'
+            : 'O texto abaixo vale para todas as imagens escolhidas.'}
         </p>
         <p className="mt-1 text-xs text-text-tertiary">Considere usar pelo menos 16 criativos para oferecer mais variações.</p>
       </div>
@@ -349,6 +351,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
               onToggle={handleToggleInstagramPost}
               objective={objective}
               instagramUserId={instagramUserId}
+              onRejectRecommendation={objective === 'followers' ? () => setTab('gallery') : undefined}
             />
           </TabsContent>
         )}

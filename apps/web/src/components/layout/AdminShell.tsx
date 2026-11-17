@@ -20,13 +20,14 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { path: '/admin/clientes', label: 'Clientes', icon: Building2 },
+  { path: '/admin/tenants', label: 'Clientes', icon: Building2 },
   { path: '/admin/users', label: 'Usuários', icon: Users },
   { path: '/admin/planos', label: 'Planos', icon: Clock },
   { path: '/admin/tickets', label: 'Tickets', icon: Ticket },
   { path: '/admin/healthchecks', label: 'Healthchecks', icon: Activity },
   { path: '/admin/faqs', label: 'FAQs', icon: CircleHelp },
   { path: '/admin/avisos', label: 'Avisos', icon: Megaphone },
-  { path: '/admin/tenants', label: 'Campanhas', icon: Zap },
+  { path: '/admin/campanhas', label: 'Campanhas', icon: Zap },
   { path: '/admin/parceiros', label: 'Parceiros', icon: Briefcase },
   { path: '/admin/integracoes', label: 'Integrações', icon: KeyRound },
 ];
@@ -51,12 +52,13 @@ export function AdminShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const { isBlocked } = useBlockedViews();
   const viewKey = viewKeyForPath(location.pathname);
   const isSuperAdmin = getStoredPlatformRole() === 'super_admin';
   const isPartner = getStoredPlatformRole() === 'admin_partner';
   const isVisible = (item: NavItem) => {
+    // lista completa de clientes (excluir/restaurar): só super
+    if (item.path === '/admin/tenants' && !isSuperAdmin) return false;
     if (!isSuperAdmin && isSuperAdminOnly(item.path)) return false;
     if (!isPartner && isPartnerOnly(item.path)) return false;
     const key = viewKeyForPath(item.path);
@@ -74,17 +76,6 @@ export function AdminShell() {
     logout();
   };
 
-  const handleCampanhasClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (tenantId) {
-      navigate(`/admin/tenants/${tenantId}/campaigns`);
-    } else {
-      setToastMessage('Selecione um cliente primeiro para ver suas campanhas');
-      setTimeout(() => setToastMessage(null), 3000);
-      navigate('/admin/tenants');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background text-text-primary flex font-sans">
       <SnackHost />
@@ -97,13 +88,6 @@ export function AdminShell() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Toast */}
-      {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-[#17708A] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
-          {toastMessage}
-        </div>
-      )}
-
       {/* Sidebar */}
       <aside className="w-56 bg-sidebar border-r border-border flex flex-col shrink-0 select-none">
         {/* Header */}
@@ -130,34 +114,15 @@ export function AdminShell() {
 
         <nav className="px-2.5 py-3 space-y-0.5">
   {navItems.filter(isVisible).map((item) => {
-    // Identifica se estamos exatamente na listagem /admin/tenants (sem ID na URL)
-    const isExactTenantsList = location.pathname === '/admin/tenants' || location.pathname === '/admin/tenants/';
-
-    // 1. Lógica do botão Campanhas
-    if (item.label === 'Campanhas') {
-      const isCampanhasActive = location.pathname.includes('/campaigns') || isExactTenantsList;
-
-      return (
-        <button
-          key={item.label}
-          onClick={handleCampanhasClick}
-          className={`ady-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
-            isCampanhasActive
-              ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold'
-              : 'text-text-secondary hover:bg-sidebar-hover hover:text-text-primary'
-          }`}
-        >
-          <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
-          <span>{item.label}</span>
-        </button>
-      );
-    }
-
-    // 2. Lógica do botão Usuários
-    const isUserActive =
-      item.path === '/admin/users' &&
-      (location.pathname.startsWith('/admin/users') ||
-        (location.pathname.startsWith('/admin/tenants') && !isExactTenantsList && !location.pathname.includes('/campaigns')));
+    const path = location.pathname;
+    const inCampaigns = path.startsWith('/admin/campanhas') || path.includes('/campaigns');
+    // detalhe do cliente marca "Clientes"; campanhas marcam "Campanhas"
+    const inTenantDetail = path.startsWith('/admin/tenants/') && !inCampaigns;
+    const isClientes = item.path === '/admin/tenants' || item.path === '/admin/clientes';
+    const active =
+      item.path === '/admin/campanhas' ? inCampaigns
+      : isClientes ? ((path === item.path || path.startsWith(item.path + '/')) && !inCampaigns) || inTenantDetail
+      : null;
 
     return (
       <NavLink
@@ -166,7 +131,7 @@ export function AdminShell() {
         end={item.end}
         className={({ isActive }) =>
           `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-            isActive || isUserActive
+            (active ?? isActive)
               ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold'
               : 'text-text-secondary hover:bg-sidebar-hover hover:text-text-primary'
           }`

@@ -35,7 +35,7 @@ export class PublicTrialRepository {
         role: 'owner',
         emailVerified: true,
       }).returning();
-      const plan = await tx.query.plans.findFirst({ where: eq(plans.technicalKey, PUBLIC_TRIAL_PLAN_KEY) });
+      const plan = await tx.query.plans.findFirst({ where: and(eq(plans.technicalKey, PUBLIC_TRIAL_PLAN_KEY), isNull(plans.partnerId)) });
       if (!plan) throw new Error('public_trial_signup plan is not configured');
       await tx.insert(subscriptions).values({
         tenantId: tenant.id,

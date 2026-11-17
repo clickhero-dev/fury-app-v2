@@ -22,7 +22,7 @@ import { captureEvent } from '@/lib/posthog';
 import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
 import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { viewKeyForPath } from '@/lib/rbac-views';
-import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '@/lib/platform-role';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath, isIntegrationsPath, isMemberAccount } from '@/lib/platform-role';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SidebarProps {
@@ -158,6 +158,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const lifetime = hasLifetimeAccess();
   const isVisible = (item: NavItem) => {
     if (lifetime && isBillingPath(item.to)) return false;
+    if (isMemberAccount() && isIntegrationsPath(item.to)) return false;
     const key = viewKeyForPath(item.to);
     return !key || !isBlocked(key);
   };

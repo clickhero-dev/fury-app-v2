@@ -530,7 +530,7 @@ export class MetaSyncService {
         const mediaList = await this.deps.metaApi.getInstagramMedia(ctx.instagramUserId, ctx.accessToken);
         const mediaUpserts = [];
         for (const media of mediaList) {
-          let insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
+          let insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0, follows: 0 };
           try {
             insights = await this.deps.metaApi.getInstagramMediaInsights(
               media.id,

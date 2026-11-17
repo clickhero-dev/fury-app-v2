@@ -7,6 +7,11 @@ import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/sup
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
 import { slugify } from "./partner.controller.js";
+import { passwordSchema } from "../lib/shared.js";
+import { revokeRefreshToken } from "../services/core/auth.service.js";
+import { RbacRepository } from "../repository/rbac.repository.js";
+import { expandBlocked } from "../lib/rbac-views.js";
+import { configurablePlanViews, describePlanViews, validatePlanViews } from "../lib/plan-views.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -15,6 +20,8 @@ const createUserSchema = z.object({
   password: z.string().min(8).max(255),
   role: z.enum(["owner", "admin", "member"]).default("member"),
 });
+
+const resetUserPasswordSchema = z.object({ password: passwordSchema });
 
 const setupTenantSchema = z.object({
   name: z.string().min(1).max(255),
@@ -106,6 +113,7 @@ const createPlanSchema = z.object({
   features: z.record(z.boolean()).default({}),
   limits: planLimitsSchema.default({}),
   isActive: z.boolean().default(true),
+  blockedViews: z.array(z.string().max(100)).max(20).default([]),
 }).superRefine((value, ctx) => {
   if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
@@ -120,11 +128,21 @@ const updatePlanSchema = z.object({
   features: z.record(z.boolean()).optional(),
   limits: planLimitsSchema.optional(),
   isActive: z.boolean().optional(),
+  blockedViews: z.array(z.string().max(100)).max(20).optional(),
 }).superRefine((value, ctx) => {
   if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
   }
 });
+
+const MAX_PARTNER_CLIENT_MEMBERS = 2;
+
+// chave técnica (ex.: trial) é só da ady
+function rejectPartnerTechnicalKey(req: Request) {
+  if (partnerOf(req) && req.body?.technicalKey != null) {
+    throw new AppError(403, "TECHNICAL_KEY_FORBIDDEN", "Parceiro não pode definir chave técnica do plano.");
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -148,11 +166,11 @@ function partnerOf(req: Request): string | null {
   return req.adminScope.partnerId;
 }
 
-// cargo Admin (libera sem assinatura): só o super_admin dá ou tira
-function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
-  if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
-  if (newRole === "admin" || currentRole === "admin")
-    throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
+// dentro do cliente só nasce Membro e o cargo não muda (super_admin incluso)
+function assertRoleAllowed(newRole?: string, currentRole?: string) {
+  if (newRole === undefined || newRole === currentRole) return;
+  if (currentRole !== undefined || newRole !== "member")
+    throw new AppError(403, "ROLE_FORBIDDEN", "Dentro do cliente só é possível criar Usuários, sem troca de cargo");
 }
 
 // só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
@@ -339,22 +357,27 @@ export class SuperAdminController {
       const repo = this.repo;
       const body = createUserSchema.parse(req.body);
       const tenant = await this.tenantInScope(req, body.tenantId);
-      assertRoleAllowed(req, body.role);
+      assertRoleAllowed(body.role);
 
       const existing = await repo.findUserByEmail(body.email);
       if (existing)
         throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.password, 10);
-      const user = await repo.createUser({
+      const values = {
         tenantId: body.tenantId,
         name: body.name,
         email: body.email,
         passwordHash,
         role: body.role,
         // cliente de parceiro → usuário do parceiro
-        ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
-      });
+        ...(tenant.partnerId ? { platformRole: "user_partner" as const } : {}),
+      };
+      const user = partnerOf(req)
+        ? await repo.createMemberWithinLimit(values, MAX_PARTNER_CLIENT_MEMBERS)
+        : await repo.createUser(values);
+      if (!user)
+        throw new AppError(409, "MEMBER_LIMIT", `Limite de ${MAX_PARTNER_CLIENT_MEMBERS} usuários por cliente atingido`);
 
       res
         .status(201)
@@ -468,7 +491,7 @@ export class SuperAdminController {
       const body = updateUserSchema.parse(req.body);
 
       const existing = await this.userInScope(req, req.params.id);
-      assertRoleAllowed(req, body.role, existing.role);
+      assertRoleAllowed(body.role, existing.role);
       // e-mail não é editável, nem pelo super_admin
       if (body.email !== undefined && body.email !== existing.email)
         throw new AppError(400, "EMAIL_NOT_EDITABLE", "O e-mail não pode ser alterado");
@@ -493,10 +516,32 @@ export class SuperAdminController {
     }
   };
 
+  // suporte troca a senha; sessões abertas caem
+  resetUserPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = resetUserPasswordSchema.parse(req.body);
+      const user = await this.userInScope(req, req.params.id);
+      const passwordHash = await bcrypt.hash(body.password, 10);
+      await this.repo.resetUserPassword(user, passwordHash, { userId: req.user!.userId, partnerId: partnerOf(req) });
+      await revokeRefreshToken(user.id);
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   deleteUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
       const user = await this.userInScope(req, req.params.id);
+
+      // parceiro removendo o titular: sai o cliente inteiro e a vaga libera
+      if (partnerOf(req) && user.role === "owner") {
+        await repo.deleteTenant(user.tenantId);
+        await rbacService.bumpVersion();
+        res.json({ success: true, data: { tenantRemoved: true }, timestamp: new Date().toISOString() });
+        return;
+      }
 
       if (await repo.countUsersByTenant(user.tenantId) <= 1 && await repo.hasAccessibleSubscription(user.tenantId)) {
         throw new AppError(
@@ -622,6 +667,8 @@ export class SuperAdminController {
           await repo.updateSubscription(sub.id, updates);
         }
       }
+      // plano pode ter mudado: recalcula o que o cliente vê
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,
@@ -766,7 +813,7 @@ export class SuperAdminController {
         throw new AppError(
           404,
           "NO_OWNER",
-          "Nenhum usuário encontrado neste tenant",
+          "Nenhum usuário encontrado neste cliente",
         );
 
       const { businessContext, ...audienceOnly } = req.body;
@@ -825,11 +872,29 @@ export class SuperAdminController {
     }
   };
 
+  // funcionalidades que o parceiro já não tem (super_admin: nenhuma)
+  private async actorBlockedViews(req: Request): Promise<string[]> {
+    const partnerId = partnerOf(req);
+    if (!partnerId) return [];
+    return expandBlocked(await new RbacRepository().listBlockedViewKeys("user_partner", partnerId));
+  }
+
+  configurablePlanViews = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const configurable = configurablePlanViews(await this.actorBlockedViews(req));
+      res.json({ success: true, data: { views: describePlanViews(configurable) }, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createPlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const body = createPlanSchema.parse(req.body);
+      rejectPartnerTechnicalKey(req);
+      const { blockedViews, ...body } = createPlanSchema.parse(req.body);
+      const views = validatePlanViews(blockedViews, configurablePlanViews(await this.actorBlockedViews(req)));
       // dono vem do escopo, nunca do body
-      const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
+      const plan = await this.repo.createPlanWithViews({ ...body, partnerId: partnerOf(req) }, views, req.user!.userId);
       res
         .status(201)
         .json({ success: true, data: plan, timestamp: new Date().toISOString() });
@@ -841,10 +906,17 @@ export class SuperAdminController {
   updatePlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const body = updatePlanSchema.parse(req.body);
+      rejectPartnerTechnicalKey(req);
+      const { blockedViews, ...body } = updatePlanSchema.parse(req.body);
       await this.planInScope(req.params.id, partnerOf(req));
 
-      await repo.updatePlan(req.params.id, body);
+      let views: string[] | undefined;
+      if (blockedViews !== undefined) {
+        const current = (await repo.listPlanBlockedViews([req.params.id])).get(req.params.id) ?? [];
+        views = validatePlanViews(blockedViews, configurablePlanViews(await this.actorBlockedViews(req)), current);
+      }
+      await repo.updatePlanWithViews(req.params.id, body, views, req.user!.userId);
+      if (views !== undefined) await rbacService.bumpVersion();
       res.json({
         success: true,
         data: null,
@@ -883,6 +955,7 @@ export class SuperAdminController {
       }
 
       await repo.deletePlan(id);
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,

@@ -36,7 +36,10 @@ const { setBasePath, registeredQueueNames, adapterOptions, boardRegistrations, m
   historyProviders: [] as any[],
 }));
 
-vi.mock('../di.js', () => ({ controllers: new Proxy({}, { get: () => new Proxy({}, { get: () => vi.fn() }) }) }));
+vi.mock('../di.js', () => ({
+  controllers: new Proxy({}, { get: () => new Proxy({}, { get: () => vi.fn() }) }),
+  chatPlanRuntime: { controller: new Proxy({}, { get: (_target, key) => key === 'action' ? () => vi.fn() : vi.fn() }) },
+}));
 vi.mock('../lib/queue.js', () => ({ getRedisConnection: vi.fn(async () => ({})) }));
 // papel vem do platform_role no banco (superadminMiddleware); aqui o id do token diz o papel
 vi.mock('../services/core/rbac.service.js', () => ({
@@ -145,6 +148,7 @@ describe('Bull Board routes', () => {
     expect(registeredQueueNames.sort()).toEqual([
       'billing-renewal',
       'budget-optimize',
+      'chat-plan-execution',
       'fury-engine',
       'google-sync',
       'lead-status',
@@ -157,11 +161,12 @@ describe('Bull Board routes', () => {
       'studio-compliance-sweeper',
       'studio-generate-image',
       'studio-video',
+      'studio-video-recovery',
     ]);
-    expect(adapterOptions).toHaveLength(14);
+    expect(adapterOptions).toHaveLength(16);
     expect(adapterOptions.every(({ options }) => options?.delimiter === '.')).toBe(true);
     expect(adapterOptions.every(({ options }) => options?.displayName && options?.description)).toBe(true);
-    expect(new Set(adapterOptions.map(({ options }) => options.displayName)).size).toBe(14);
+    expect(new Set(adapterOptions.map(({ options }) => options.displayName)).size).toBe(16);
     expect(boardRegistrations.at(-1)?.options?.uiConfig?.overview?.groupByDelimiter).toBe(true);
     expect(boardRegistrations.at(-1)?.options?.uiConfig?.showMetrics).toBe(true);
     expect(boardRegistrations.at(-1)?.options?.historyProvider).toBe(historyProviders.at(-1));
@@ -171,7 +176,7 @@ describe('Bull Board routes', () => {
       retentionDays: 90,
       snapshotIntervalMs: 60_000,
     });
-    expect(metricRecorders.at(-1)?.options.queues).toHaveLength(14);
+    expect(metricRecorders.at(-1)?.options.queues).toHaveLength(16);
     expect(adapterOptions.find(({ queueName }) => queueName === 'meta-sync')?.options).toEqual({
       prefix: 'meta.',
       delimiter: '.',
@@ -183,6 +188,7 @@ describe('Bull Board routes', () => {
     const expectedGroups: Record<string, string> = {
       'billing-renewal': 'ady.',
       'budget-optimize': 'ady.',
+      'chat-plan-execution': 'ady.',
       'fury-engine': 'ady.',
       'rule-engine': 'ady.',
       'meta-sync': 'meta.',
@@ -195,6 +201,7 @@ describe('Bull Board routes', () => {
       'studio-compliance-check': 'studio.',
       'studio-generate-image': 'studio.',
       'studio-video': 'studio.',
+      'studio-video-recovery': 'studio.',
     };
     for (const [queueName, prefix] of Object.entries(expectedGroups)) {
       expect(adapterOptions.find((adapter) => adapter.queueName === queueName)?.options.prefix).toBe(prefix);
