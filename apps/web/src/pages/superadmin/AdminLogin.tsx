@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -92,8 +93,7 @@ export function AdminLogin() {
 
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-slate-700 dark:text-zinc-300">Senha</span>
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

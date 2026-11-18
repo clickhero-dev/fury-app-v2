@@ -103,6 +103,27 @@ def test_long_context_native_tokens():
 # Quando estima o contexto
 # Então ativa compressão antes de ultrapassar 50 mil tokens
 
+def test_request_budget_preserves_agno_function_and_callable_schemas():
+    import json
+    from agno.tools import Function
+    from memory import estimate_request_tokens
+
+    def ordinary_tool(query: str) -> str:
+        """Search using a query."""
+        return query
+
+    plan_tool = Function(name='make_plan', description='Create a plan', parameters={
+        'type': 'object', 'properties': {'steps': {'type': 'array', 'items': {'type': 'string'}}},
+        'required': ['steps'],
+    })
+    captured = []
+    result = estimate_request_tokens(['hello'], [{'role': 'user', 'content': 'test'}],
+        [plan_tool, ordinary_tool], counter=lambda text: captured.append(text) or len(text))
+    payload = json.loads(captured[0])
+    assert payload['tools'] == [plan_tool.to_dict(), Function.from_callable(ordinary_tool).to_dict()]
+    assert result == len(captured[0]) + 4096 + 16 * 4
+
+
 def test_request_budget_includes_schema_and_response_reserve():
     from memory import estimate_request_tokens, requires_compression
     from tools import ImageProposal

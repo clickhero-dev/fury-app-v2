@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 /*
 Funcionalidade: conversar em um espaço legível sem obstáculos
@@ -10,10 +11,10 @@ Cenário: falha ao iniciar uma conversa
 Dado que o serviço não consegue criar a conversa
 Quando o usuário envia a primeira mensagem
 Então o rascunho é preservado e ele pode tentar novamente
-Cenário: usar sugestão sem enviar automaticamente
+Cenário: iniciar fluxo específico sem enviar automaticamente
 Dado que a tela inicial está aberta
-Quando o usuário escolhe criar uma imagem
-Então o campo recebe foco e a sugestão, sem enviar dados
+Quando o usuário escolhe criar um post
+Então uma etapa específica abre sem enviar dados
 Cenário: acessar histórico no celular
 Dado que existem conversas anteriores
 Quando o usuário abre o histórico e pressiona Escape
@@ -71,7 +72,7 @@ for (const viewport of [
       const counts = await isolateChat(page, theme);
       const input = page.getByRole('textbox', { name: 'Mensagem', exact: true });
       await expect(input).toBeEnabled();
-      await expect(page.getByText('Assistente de IA', { exact: true })).toBeVisible();
+      await expect(page.getByText('Assistente do Ady', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Postar', exact: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-${theme}-empty.png`), fullPage: true });
       await input.fill('Preciso de ideias para minha marca');
@@ -102,13 +103,13 @@ test('preserva rascunho quando não consegue iniciar a conversa', async ({ page 
   expect(counts).toEqual({ creates: 1, sends: 0 });
 });
 
-test('sugestão preenche e foca o campo sem enviar', async ({ page }) => {
+test('atalho prepara diretamente sem briefing nem preencher compositor', async ({ page }) => {
   const counts = await isolateChat(page, 'light');
-  await page.getByRole('button', { name: /Criar imagem/i }).click();
-  const input = page.getByRole('textbox', { name: 'Mensagem', exact: true });
-  await expect(input).toBeFocused();
-  await expect(input).toHaveValue(/imagem/i);
   expect(counts).toEqual({ creates: 0, sends: 0 });
+  await page.getByRole('button', { name: 'Não sei o que postar', exact: true }).click();
+  await expect.poll(() => counts.sends).toBe(1);
+  await expect(page.getByRole('textbox', { name: 'Mensagem', exact: true })).toHaveValue('');
+  expect(counts).toEqual({ creates: 1, sends: 1 });
 });
 
 test('histórico móvel fecha com Escape e devolve foco', async ({ page }, testInfo) => {
@@ -152,6 +153,40 @@ test('preserva leitura antiga e permite voltar à resposta recente', async ({ pa
   await expect.poll(() => messages.evaluate(element => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop))).toBeLessThan(2);
   await expect(latest).toHaveCount(0);
 });
+
+for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+  test(`controles do vídeo não são cobertos por mensagens recentes — ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await isolateChat(page, 'light');
+    await page.route('https://example.test/video.mp4', async route => route.fulfill({ contentType:'video/mp4', body:await readFile('e2e-mock/fixtures/chat-media/cena.mp4') }));
+    await page.route('http://127.0.0.1:3100/api/chat/conversations', route => route.fulfill({json:[{id:'c1',title:'Vídeo'}]}));
+    await page.route('http://127.0.0.1:3100/api/chat/conversations/c1', route => route.fulfill({json:{
+      messages:Array.from({length:30}, (_, index) => ({id:`m${index}`, role:'assistant', content:`Trecho ${index}`, created_at:new Date(Date.UTC(2026,0,1,0,index)).toISOString()})),
+      approvals:[{id:'v',action:'Criar vídeo',parameters:{},status:'completed',created_at:'2026-01-01T00:10:00Z',result:{videoUrl:'https://example.test/video.mp4'}}],
+    }}));
+    await page.reload();
+    await page.getByRole('button',{name:'Mostrar conversas'}).click();
+    await page.getByRole('button',{name:'Vídeo',exact:true}).click();
+    const video = page.getByLabel('Vídeo gerado');
+    await expect(video).toBeVisible();
+    const scroller = page.locator('.ady-chat-messages');
+    await scroller.evaluate((element) => { const video = element.querySelector('video')!; element.scrollTop += video.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom; });
+    const latest = page.getByRole('button',{name:'Mensagens recentes'});
+    await expect(latest).toBeVisible();
+    await scroller.evaluate((element) => { const video = element.querySelector('video')!; element.scrollTop += video.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom; });
+    const hit = await video.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const target = document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 15);
+      return target === element || element.contains(target);
+    });
+    expect(hit).toBe(true);
+    await page.screenshot({path:testInfo.outputPath(`video-controls-${viewport.width}.png`)});
+    const rect = (await video.boundingBox())!;
+    await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height - 15);
+    await latest.click();
+    await expect(latest).toHaveCount(0);
+  });
+}
 
 /*
 Funcionalidade: mostrar uma conversa familiar sem inventar informações
@@ -343,3 +378,13 @@ for (const viewport of [{ width: 1287, height: 652 }, { width: 375, height: 812 
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   });
 }
+
+// Quando criar a conversa falha, os atalhos voltam a ficar disponíveis.
+test('falha no início do pedido direto permite tentar novamente', async ({page}) => {
+  const counts = await isolateChat(page, 'light', true);
+  await page.getByRole('button',{name:'Não sei o que postar',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Não foi possível iniciar a conversa');
+  await expect(page.getByRole('button',{name:'Não sei o que postar',exact:true})).toBeEnabled();
+  await expect(page.getByRole('group',{name:'Ações para começar'})).toBeVisible();
+  expect(counts).toEqual({creates:1,sends:0});
+});

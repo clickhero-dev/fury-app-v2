@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
@@ -100,10 +101,6 @@ export function UsersPage() {
   function validatePassword(v: string) {
     if (!v) return "Senha é obrigatória";
     if (v.length < 8) return "Mínimo 8 caracteres";
-    if (!/[A-Z]/.test(v)) return "Precisa de letra maiúscula";
-    if (!/[a-z]/.test(v)) return "Precisa de letra minúscula";
-    if (!/[0-9]/.test(v)) return "Precisa de número";
-    if (!/[^A-Za-z0-9]/.test(v)) return "Precisa de caractere especial";
     return "";
   }
 
@@ -175,10 +172,6 @@ export function UsersPage() {
   const passwordChecks = form.userPassword
     ? [
         form.userPassword.length >= 8,
-        /[A-Z]/.test(form.userPassword),
-        /[a-z]/.test(form.userPassword),
-        /[0-9]/.test(form.userPassword),
-        /[^A-Za-z0-9]/.test(form.userPassword),
       ]
     : null;
 
@@ -457,7 +450,7 @@ export function UsersPage() {
                 <label htmlFor="setup-user-password" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Senha
                 </label>
-                <input
+                <PasswordInput
                   id="setup-user-password"
                   value={form.userPassword}
                   onChange={(e) => {
@@ -466,7 +459,6 @@ export function UsersPage() {
                   }}
                   onBlur={() => handleBlur("userPassword")}
                   placeholder="Mínimo 8 caracteres"
-                  type="password"
                   className={
                     touched.userPassword && errors.userPassword
                       ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"

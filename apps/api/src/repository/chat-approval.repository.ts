@@ -1,10 +1,24 @@
 import { sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import type { ChatAction } from '../services/core/chat-approval.service.js';
+import { encodeChatOutcome } from '../services/core/chat-outcome-payload.js';
 
 export class ChatApprovalRepository extends TenantScopedRepository {
+  async completeResult(approvalId: string, userId: string, result: unknown): Promise<boolean> {
+    const encoded = encodeChatOutcome(result);
+    const saved = await this.db.execute(sql`UPDATE chat_approvals
+      SET status='completed', result=${encoded}::jsonb
+      WHERE id=${approvalId}::uuid AND tenant_id=${this.tenantId}::uuid AND user_id=${userId}::uuid
+        AND status IN ('executing','unknown','completed')
+        AND (result IS NULL OR result='null'::jsonb OR result=${encoded}::jsonb
+          OR result='{"error":"Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente."}'::jsonb
+          OR result='{"error":"Não foi possível confirmar o resultado. Confira a ação antes de tentar novamente."}'::jsonb
+          OR (result->>'code'='CHAT_OUTCOME_UNCONFIRMED' AND result-'code'-'error'='{}'::jsonb))
+      RETURNING id`);
+    return saved.length === 1;
+  }
   async unknown(approvalId: string, userId: string): Promise<void> {
-    await this.db.execute(sql`UPDATE chat_approvals SET status='unknown', result='{"error":"Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente."}'::jsonb
+    await this.db.execute(sql`UPDATE chat_approvals SET status='unknown', result='{"code":"CHAT_OUTCOME_UNCONFIRMED","error":"Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente."}'::jsonb
       WHERE id=${approvalId}::uuid AND tenant_id=${this.tenantId}::uuid AND user_id=${userId}::uuid AND status='executing'`);
   }
   async fail(approvalId: string, userId: string): Promise<void> {
@@ -13,7 +27,10 @@ export class ChatApprovalRepository extends TenantScopedRepository {
   }
   async complete(approvalId: string, userId: string): Promise<void> {
     await this.db.execute(sql`UPDATE chat_approvals SET status = 'completed',
-      result = CASE WHEN status='unknown' AND result='{"error":"Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente."}'::jsonb THEN NULL ELSE result END
+      result = CASE WHEN status='unknown' AND (
+        result='{"error":"Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente."}'::jsonb
+        OR (result->>'code'='CHAT_OUTCOME_UNCONFIRMED' AND result-'code'-'error'='{}'::jsonb)
+      ) THEN NULL ELSE result END
       WHERE id = ${approvalId}::uuid AND tenant_id = ${this.tenantId}::uuid
         AND user_id = ${userId}::uuid AND status IN ('executing','unknown')`);
   }

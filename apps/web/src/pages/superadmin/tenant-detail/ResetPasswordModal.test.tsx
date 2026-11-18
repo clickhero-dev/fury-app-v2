@@ -11,15 +11,12 @@ function setup(props: Partial<Parameters<typeof ResetPasswordModal>[0]> = {}) {
 }
 
 describe('ResetPasswordModal', () => {
-  it('regras iguais à política da API', () => {
-    const strong = 'Abcdef1!';
-    expect(PASSWORD_CHECKS.every((c) => c.test(strong))).toBe(true);
-    ['abcdef1!', 'ABCDEF1!', 'Abcdefg!', 'Abcdefg1', 'Ab1!'].forEach((weak) => {
-      expect(PASSWORD_CHECKS.every((c) => c.test(weak))).toBe(false);
-    });
+  it('regras iguais à política da API: só 8+ caracteres', () => {
+    ['abcdefgh', '12345678', 'Abcdef1!'].forEach((ok) => expect(PASSWORD_CHECKS.every((c) => c.test(ok))).toBe(true));
+    expect(PASSWORD_CHECKS.every((c) => c.test('abcdefg'))).toBe(false);
   });
 
-  it('só libera com senha forte e confirmação igual', async () => {
+  it('só libera com 8+ caracteres e confirmação igual', async () => {
     const { onSubmit, submit } = setup();
     expect(submit()).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Nova senha'), 'fraca');

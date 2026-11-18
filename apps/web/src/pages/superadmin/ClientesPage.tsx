@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, Plus, X } from "lucide-react";
@@ -154,7 +155,7 @@ export function ClientesPage() {
             </label>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-text-secondary">Senha inicial (mínimo 8 caracteres)</span>
-              <input required type="password" minLength={8} className={inputCls} value={form.userPassword}
+              <PasswordInput required minLength={8} className={inputCls} value={form.userPassword}
                 onChange={(e) => setForm({ ...form, userPassword: e.target.value })} />
             </label>
             <label className="block space-y-1.5">

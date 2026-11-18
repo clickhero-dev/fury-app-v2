@@ -6,7 +6,13 @@ export interface ChatAction {
   path: string;
   body: unknown;
 }
-export interface ChatApprovalPort { consume(action: ChatAction): Promise<boolean>; complete?(approvalId: string, userId: string): Promise<void>; fail?(approvalId: string, userId: string): Promise<void>; unknown?(approvalId: string, userId: string): Promise<void> }
+export interface ChatApprovalPort {
+  consume(action: ChatAction): Promise<boolean>;
+  complete?(approvalId: string, userId: string): Promise<void>;
+  completeResult?(approvalId: string, userId: string, result: unknown): Promise<boolean>;
+  fail?(approvalId: string, userId: string): Promise<void>;
+  unknown?(approvalId: string, userId: string): Promise<void>;
+}
 export async function authorizeChatAction(action: ChatAction, repository: ChatApprovalPort): Promise<boolean> {
   return repository.consume(action);
 }

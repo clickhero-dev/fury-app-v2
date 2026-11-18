@@ -21,6 +21,10 @@ pytestmark = pytest.mark.skipif(not URL, reason='CHAT_TEST_DATABASE_URL ausente'
 async def setup():
     conn = await asyncpg.connect(URL)
     await conn.execute('CREATE TEMP TABLE chat_messages (id uuid primary key, conversation_id uuid, role text, content text, created_at timestamptz)')
+    await conn.execute('CREATE TEMP TABLE chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
+    await conn.execute('CREATE TEMP TABLE chat_response_runs (id uuid, conversation_id uuid, user_message_id uuid, assistant_message_id uuid, status text, lease_id uuid, lease_until timestamptz)')
+    await conn.execute('CREATE TEMP TABLE chat_response_messages (run_id uuid, message_id uuid, position integer)')
+    await conn.execute('CREATE TEMP TABLE chat_clarifications (conversation_id uuid, message_id uuid, question text, choices jsonb, selected_index integer, answer_message_id uuid, dismissed_at timestamptz)')
     await conn.execute("CREATE TEMP TABLE chat_memories (conversation_id uuid primary key, facts jsonb, updated_at timestamptz default now())")
     cid = uuid.uuid4()
     for i in range(10):
@@ -65,7 +69,7 @@ def test_compression_failure_preserves_memory():
         conn, cid, pool = await setup()
         tenant, user = uuid.uuid4(), uuid.uuid4()
         try:
-            await conn.execute('CREATE TEMP TABLE chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
+            await conn.execute('CREATE TEMP TABLE IF NOT EXISTS chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
             await conn.execute('INSERT INTO chat_conversations VALUES($1,$2,$3)', cid, tenant, user)
             await conn.execute('INSERT INTO chat_memories(conversation_id,facts) VALUES($1,$2::jsonb)', cid, '[{"topic":"x","text":"detalhe"}]')
             async def invalid(facts): return 'invalid'
@@ -74,12 +78,12 @@ def test_compression_failure_preserves_memory():
         finally: await conn.close()
     asyncio.run(run())
 
-# Cenário: falhas de geração anteriores não bloqueiam consolidação
-# Dado cinco respostas concluídas e mensagens de tentativas anteriores sem resposta
-# Quando o resumo é salvo
-# Então todas as mensagens anteriores à quinta resposta são consolidadas
+# Cenário: mensagens sem resposta não são descartadas pela compactação
+# Dado cinco respostas concluídas e mensagens anteriores sem resposta
+# Quando não há um prefixo completamente pareado
+# Então o histórico permanece intacto e o resumidor não é chamado
 
-def test_consolidation_handles_unanswered_messages():
+def test_consolidation_preserves_unanswered_messages():
     async def run():
         from datetime import datetime, timezone, timedelta
         conn, cid, pool = await setup()
@@ -90,9 +94,10 @@ def test_consolidation_handles_unanswered_messages():
             async def summary(previous, messages):
                 captured.extend(messages)
                 return '{"facts":[{"topic":"marca","text":"café"}]}'
-            assert await consolidate(pool, cid, summary)
-            assert len(captured) == 12
-            assert await conn.fetchval('SELECT count(*) FROM chat_messages') == 0
+            assert not await consolidate(pool, cid, summary)
+            assert captured == []
+            assert await conn.fetchval('SELECT count(*) FROM chat_messages') == 12
+            assert await conn.fetchval('SELECT count(*) FROM chat_memories') == 0
         finally: await conn.close()
     asyncio.run(run())
 
@@ -146,7 +151,7 @@ def test_compression_does_not_hold_db_transaction():
         conn, cid, pool = await setup()
         tenant, user = uuid.uuid4(), uuid.uuid4()
         try:
-            await conn.execute('CREATE TEMP TABLE chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
+            await conn.execute('CREATE TEMP TABLE IF NOT EXISTS chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
             await conn.execute('INSERT INTO chat_conversations VALUES($1,$2,$3)', cid, tenant, user)
             await conn.execute('INSERT INTO chat_memories(conversation_id,facts) VALUES($1,$2::jsonb)', cid, '[{"topic":"marca","text":"Uma descrição longa da marca"}]')
             async def summary(facts):
@@ -171,7 +176,7 @@ def test_compression_rejects_stale_facts():
         conn, cid, pool = await setup()
         tenant, user = uuid.uuid4(), uuid.uuid4()
         try:
-            await conn.execute('CREATE TEMP TABLE chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
+            await conn.execute('CREATE TEMP TABLE IF NOT EXISTS chat_conversations (id uuid primary key, tenant_id uuid, user_id uuid)')
             await conn.execute('INSERT INTO chat_conversations VALUES($1,$2,$3)', cid, tenant, user)
             await conn.execute('INSERT INTO chat_memories(conversation_id,facts) VALUES($1,$2::jsonb)', cid, '[{"topic":"marca","text":"descrição comprida inicial"}]')
             async def summary(facts):

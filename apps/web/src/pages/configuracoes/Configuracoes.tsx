@@ -1,3 +1,4 @@
+import { PasswordInput } from '@/components/ui/password-input';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -460,9 +461,10 @@ export function Configuracoes() {
                 <div className="space-y-4 my-2">
                   {!isSettingInitialPassword && (
                     <div>
-                      <label className="block text-xs font-semibold text-text-tertiary mb-2">Senha Atual</label>
-                      <input
-                        type="password"
+                      <label htmlFor="current-password" className="block text-xs font-semibold text-text-tertiary mb-2">Senha Atual</label>
+                      <PasswordInput
+                        id="current-password"
+                        autoComplete="current-password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         className={INPUT_STYLE}
@@ -470,9 +472,10 @@ export function Configuracoes() {
                     </div>
                   )}
                   <div>
-                    <label className="block text-xs font-semibold text-text-tertiary mb-2">Nova Senha</label>
-                    <input
-                      type="password"
+                    <label htmlFor="new-password" className="block text-xs font-semibold text-text-tertiary mb-2">Nova Senha</label>
+                    <PasswordInput
+                      id="new-password"
+                      autoComplete="new-password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Mínimo 8 caracteres"
@@ -480,9 +483,10 @@ export function Configuracoes() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-text-tertiary mb-2">Confirmar Nova Senha</label>
-                    <input
-                      type="password"
+                    <label htmlFor="confirm-password" className="block text-xs font-semibold text-text-tertiary mb-2">Confirmar Nova Senha</label>
+                    <PasswordInput
+                      id="confirm-password"
+                      autoComplete="new-password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Repita a nova senha"

@@ -117,6 +117,7 @@
 .ady-chat-quick { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .ady-chat-quick button { border-radius: 24px; font-size: .8125rem; background: var(--bg-surface); }
 .ady-chat-quick svg { color: var(--color-brand); }
+.ady-chat-quick .ady-chat-quick-primary { flex-basis: 100%; justify-content: flex-start; border-color: var(--color-brand); font-weight: 650; }
 .ady-chat-message { max-width: min(88%, 720px); min-width: 0; width: fit-content; padding: .6rem .85rem; border: 1px solid var(--border-main); overflow-wrap: anywhere; box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
 .ady-chat-message > strong { display: block; margin-bottom: .2rem; font-size: .6875rem; color: var(--text-secondary); font-weight: 600; }
 .ady-chat-message[data-role=user] { align-self: flex-end; border-color: color-mix(in srgb, var(--color-brand) 22%, var(--border-main)); border-radius: 14px 4px 14px 14px; background: color-mix(in srgb, var(--color-brand) 16%, var(--bg-surface)); }
@@ -173,7 +174,7 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 .ady-chat-draft-attachments { display: flex; flex-direction: column; gap: .4rem; list-style: none; margin: 0 0 .6rem; padding: .15rem; max-height: min(240px, 30dvh); overflow-y: auto; overscroll-behavior: contain; }
 .ady-chat-draft-file { display: flex; align-items: center; flex: 0 0 auto; gap: .65rem; min-width: 0; padding: .45rem; border: 1px solid var(--border-main); border-radius: 12px; background: var(--bg-surface); }
 .ady-chat-file-thumbnail { display: flex; align-items: center; justify-content: center; flex: 0 0 52px; height: 52px; border-radius: 8px; overflow: hidden; background: var(--bg-surface-secondary); color: var(--text-secondary); }
-.ady-chat-file-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.ady-chat-file-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
 .ady-chat-file-thumbnail:has(video) { flex-basis: 96px; height: 64px; }
 .ady-chat-file-thumbnail video { width: 100%; height: 100%; object-fit: contain; }
 .ady-chat-file-copy { flex: 1; min-width: 0; }
@@ -198,7 +199,7 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 .ady-chat-saved-attachment > a { display: inline-flex; align-items: center; gap: .4rem; min-height: 44px; color: var(--text-primary); font-size: .8125rem; text-decoration: underline; text-underline-offset: 3px; }
 .ady-chat .ady-chat-saved-attachment > button { min-height: 44px; font-size: .8125rem; }
 .ady-chat-composer-hint { margin: .4rem 0 0; text-align: center; font-size: .6875rem; color: var(--text-secondary); }
-.ady-chat .ady-chat-latest { position: absolute; bottom: calc(100% + .5rem); left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--bg-surface); border-radius: 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .12); font-size: .8rem; }
+.ady-chat .ady-chat-latest { display: flex; width: fit-content; margin: 0 auto .5rem; white-space: nowrap; background: var(--bg-surface); border-radius: 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .12); font-size: .8rem; }
 .ady-chat-overlay { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .5); }
 .ady-chat-drawer { position: fixed; z-index: 61; inset: 0 auto 0 0; width: min(92vw, 360px); display: flex; flex-direction: column; min-height: 0; padding: 1rem .75rem max(.75rem, env(safe-area-inset-bottom)); background: var(--bg-surface); border-right: 1px solid var(--border-main); box-shadow: 12px 0 40px rgb(0 0 0 / .15); }
 .ady-chat-drawer-heading { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; padding-left: .5rem; }
@@ -221,9 +222,17 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   .ady-chat-desktop-history { display: none; }
   .ady-chat .ady-chat-history-toggle { display: inline-flex; font-size: 0; width: 44px; height: 44px; padding: 0; justify-content: center; flex-shrink: 0; border-color: transparent; border-radius: 50%; }
 }
-@media (max-width: 700px) {
-  .ady-chat { height: calc(100dvh - 1rem); margin: .5rem; border-radius: 14px; }
-  .ady-chat-header { padding: .65rem 3.5rem .65rem .5rem; gap: .4rem; min-height: 76px; }
+@media (max-width: 1023px) {
+  .ady-chat {
+    position: fixed;
+    margin: 0;
+    left: calc(var(--chat-viewport-left, 0px) + max(.5rem, env(safe-area-inset-left)));
+    top: calc(var(--chat-viewport-top, 0px) + max(.5rem, env(safe-area-inset-top)));
+    width: calc(var(--chat-viewport-width, 100%) - max(.5rem, env(safe-area-inset-left)) - max(.5rem, env(safe-area-inset-right)));
+    height: calc(var(--chat-viewport-height, 100dvh) - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom)));
+    border-radius: 14px;
+  }
+  .ady-chat-header { padding: .65rem 3.5rem .65rem .5rem; gap: .4rem; min-height: 112px; }
   .ady-chat-header > .ady-chat-avatar { flex-basis: 36px; width: 36px; height: 36px; }
   .ady-chat-identity { gap: 0 .35rem; }
   .ady-chat-identity > span { font-size: .6875rem; }
@@ -232,11 +241,17 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   .ady-chat-message { max-width: 94%; padding: .6rem .75rem; }
   .ady-chat-intro { padding: .85rem; }
   .ady-chat-quick button { padding: .6rem .7rem; font-size: .8rem; }
+  .ady-chat-approval :is(img, video),
+  .ady-chat-markdown :is(img, video),
+  .ady-chat-saved-attachment :is(img, video) { max-width: min(100%, 240px); max-height: 220px; object-fit: contain; }
   .ady-chat-composer-area { padding: .65rem .65rem max(.5rem, env(safe-area-inset-bottom)); }
   .ady-chat-composer { gap: .5rem; }
   .ady-chat-composer-hint { font-size: .625rem; }
 }
 @media (max-height: 450px) {
+  .ady-chat-approval :is(img, video),
+  .ady-chat-markdown :is(img, video),
+  .ady-chat-saved-attachment :is(img, video) { max-width: min(100%, 240px); max-height: 150px; object-fit: contain; }
   .ady-chat-draft-attachments { max-height: 86px; }
   .ady-chat-composer-hint { display: none; }
   .ady-chat-header { min-height: 64px; padding-top: .35rem; padding-bottom: .35rem; }
@@ -246,4 +261,56 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 }
 @media (forced-colors: active) {
   .ady-chat-input-shell:focus-within { outline: 2px solid Highlight; outline-offset: 2px; }
+}
+
+/* The shell controls belong above the message scrollport on small chat screens. */
+@media (max-width: 1023px) {
+  body:has(.ady-chat) .ady-notification-controls { flex-direction: column; }
+  body:has(.ady-chat) .ady-notification-controls > button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  body:has(.ady-chat) .ady-notification-controls > [role=dialog] { top: 100%; }
+}
+
+.ady-chat-action-start { display: grid; gap: .6rem; max-width: 100%; margin-top: .75rem; padding: .85rem; border: 1px solid var(--border-main); border-radius: 14px; background: var(--bg-surface); }
+.ady-chat-action-start h2 { font-size: 1rem; line-height: 1.4; font-weight: 650; }
+.ady-chat-action-suggestions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.ady-chat-action-start .ady-chat-action-suggestions { display: grid; }
+.ady-chat-action-start p { font-size: .8rem; color: var(--text-secondary); }
+.ady-chat-action-start > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ady-chat-more-ideas { align-self: flex-start; max-width: 100%; white-space: normal; }
+.ady-chat-welcome { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+.ady-chat-quick button { max-width: 100%; }
+.ady-chat-quick svg { flex-shrink: 0; }
+
+/* One mobile toolbar, not a decorative masthead. Keep every action at least 44px. */
+@media (max-width: 767px), (max-width: 1023px) and (max-height: 450px) {
+  .ady-chat { font-size: 1rem; }
+  .ady-chat-header {
+    min-height: 52px;
+    padding: .2rem 7rem .2rem .5rem;
+    gap: .25rem;
+  }
+  .ady-chat-header > .ady-chat-avatar,
+  .ady-chat-header p { display: none; }
+  .ady-chat-header h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ady-chat-identity { display: block; }
+  .ady-chat-messages { padding: .625rem .5rem; gap: .5rem; }
+  .ady-chat-message { max-width: 100%; padding: .5rem .625rem; }
+  .ady-chat-markdown { line-height: 1.55; }
+  .ady-chat-markdown p { margin-bottom: .5rem; }
+  .ady-chat-markdown > :last-child { margin-bottom: 0; }
+  .ady-chat-approval { padding: .625rem .75rem; }
+  .ady-chat-approval > p { margin: .5rem 0; }
+  .ady-chat-details { margin: .5rem 0; gap: .375rem; font-size: 1rem; }
+  .ady-chat-details dd { margin-top: .125rem; }
+  /* The frame already reserves the bottom safe area; don't reserve it twice. */
+  .ady-chat-composer-area { padding: .375rem .5rem; }
+  .ady-chat-composer { gap: .375rem; }
+  .ady-chat-composer-hint { display: none; }
+  .ady-chat textarea::placeholder { white-space: nowrap; }
+  /* Scoped to chat: shell controls share the toolbar instead of covering messages. */
+  body:has(.ady-chat) .ady-notification-controls {
+    flex-direction: row;
+    top: calc(max(.5rem, env(safe-area-inset-top)) + .25rem);
+    right: calc(max(.5rem, env(safe-area-inset-right)) + .5rem);
+  }
 }

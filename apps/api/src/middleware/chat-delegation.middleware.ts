@@ -3,6 +3,8 @@ import { verifyChatDelegation, isChatToolPath } from '../lib/chat-delegation.js'
 import { AppError } from './errorHandler.js';
 import { ChatApprovalRepository } from '../repository/chat-approval.repository.js';
 import type { ChatApprovalPort } from '../services/core/chat-approval.service.js';
+import { encodeChatOutcome } from '../services/core/chat-outcome-payload.js';
+import { withOutcomeDeadline } from '../services/core/chat-outcome-deadline.js';
 
 type User = NonNullable<Request['user']>;
 const identities = new WeakMap<Request, User>();
@@ -66,7 +68,28 @@ export function createDelegationGuard(options: { secret: string; repository: (te
         // Express never emits finish, but a controller's successful JSON response
         // still proves that the operation returned successfully.
         const originalJson = res.json.bind(res);
+        let resultStarted = false;
         res.json = (body) => {
+          if (res.statusCode < 400 && repository.completeResult) {
+            if (resultStarted) return res;
+            resultStarted = true;
+            const persistResult = repository.completeResult.bind(repository);
+            // Persist the authoritative response with completion BEFORE exposing
+            // success. A lost Python response can then be reconciled by ID.
+            void (async () => {
+              const outcome = JSON.parse(encodeChatOutcome(body));
+              const saved = await withOutcomeDeadline(persistResult(approvalId, user.userId, outcome));
+              if (!saved) throw new Error('journal conflict');
+              originalJson(outcome);
+            })().catch(() => {
+              markUnknown();
+              if (!res.headersSent && !res.destroyed) {
+                res.status(503);
+                originalJson({ error: { code: 'CHAT_OUTCOME_UNCONFIRMED', message: 'Não foi possível confirmar o resultado. Confira a ação antes de tentar novamente.' } });
+              }
+            });
+            return res;
+          }
           if (res.statusCode < 400) markComplete();
           return originalJson(body);
         };
