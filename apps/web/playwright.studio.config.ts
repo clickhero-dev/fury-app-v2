@@ -4,11 +4,11 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: 'n1-studio-reference-photos.spec.ts',
   timeout: 30_000,
-  use: { baseURL: 'http://127.0.0.1:5175', ...devices['Desktop Chrome'] },
+  use: { baseURL: 'http://127.0.0.1:5176', ...devices['Desktop Chrome'] },
   webServer: {
-    command: 'VITE_API_URL=http://127.0.0.1:5175/api node_modules/.bin/vite --host 127.0.0.1 --port 5175 --strictPort',
-    url: 'http://127.0.0.1:5175',
+    command: 'VITE_API_URL=http://127.0.0.1:5176/api node_modules/.bin/vite --host 127.0.0.1 --port 5176 --strictPort',
+    url: 'http://127.0.0.1:5176',
     timeout: 45_000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
 });

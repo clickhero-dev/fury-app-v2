@@ -21,7 +21,8 @@ def transient_failure(error):
             return True
         # ProviderRunError is emitted by the sanitized SSE adapter.
         from streaming import ProviderRunError
-        if isinstance(error, ProviderRunError):
+        from multi_provider_core import ProviderFailure
+        if isinstance(error, (ProviderRunError, ProviderFailure)):
             return error.kind in ('timeout','transient')
         error = getattr(error, '__cause__', None) or getattr(error, '__context__', None)
     return False
