@@ -30,10 +30,10 @@ function LocationProbe() {
   );
 }
 
-function renderFab(entry = '/dashboard') {
+function renderFab(entry = '/dashboard', hiddenOnMobile = false) {
   return render(
     <MemoryRouter initialEntries={[entry]}>
-      <FabActions />
+      <FabActions hiddenOnMobile={hiddenOnMobile} />
       <LocationProbe />
     </MemoryRouter>,
   );
@@ -43,6 +43,11 @@ describe('FabActions — ações flutuantes de criação', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     blocked.keys = [];
+  });
+
+  it('Dado criação mobile, quando o shell recolhe os atalhos, então preserva acesso no desktop', () => {
+    renderFab('/estudio', true);
+    expect(screen.getByRole('button', { name: 'Criar campanha' }).parentElement).toHaveClass('hidden', 'md:flex');
   });
 
   it('esconde o atalho de funcionalidade bloqueada pelo plano', () => {

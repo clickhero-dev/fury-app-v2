@@ -27,6 +27,7 @@ import {
  */
 export type ShellContext = {
   setMobileOpen: (open: boolean) => void;
+  setMobileFabHidden?: (hidden: boolean) => void;
 };
 
 /**
@@ -53,6 +54,7 @@ interface PolicyCurrentData {
  */
 export function AuthenticatedShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileFabHidden, setMobileFabHidden] = useState(false);
   const token = localStorage.getItem('token');
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -213,12 +215,12 @@ export function AuthenticatedShell() {
       <AnnouncementsModal enabled={!isOnboarding} />
       {/* Ações flutuantes de criação (fora das rotas: sobrevivem à navegação).
           FabActions retorna null em telas onde não fazem sentido. */}
-      <FabActions />
+      <FabActions hiddenOnMobile={mobileFabHidden} />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
       {(viewKey && isBlocked(viewKey)) || (hasLifetimeAccess() && isBillingPath(location.pathname)) || (isMemberAccount() && isIntegrationsPath(location.pathname)) ? (
         <div className="flex-1"><NotFoundPage /></div>
       ) : (
-        <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+        <Outlet context={{ setMobileOpen, setMobileFabHidden } satisfies ShellContext} />
       )}
     </div>
   );

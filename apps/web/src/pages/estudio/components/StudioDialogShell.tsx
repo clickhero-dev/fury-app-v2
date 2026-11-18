@@ -20,7 +20,7 @@ export function StudioDialogShell({ open, onClose, className = 'max-w-lg', child
       <DialogPrimitive.Portal>
         <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50 p-4">
           <DialogPrimitive.Content
-            className={`relative grid max-h-[calc(100vh-2rem)] w-full gap-4 overflow-y-auto rounded-2xl border border-border bg-surface p-6 text-text-primary shadow-2xl ${className}`}
+            className={`studio-creation relative grid max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto rounded-2xl border border-border bg-surface p-4 sm:p-6 text-text-primary shadow-2xl ${className}`}
           >
             {children}
             <DialogPrimitive.Close
