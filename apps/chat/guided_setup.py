@@ -112,7 +112,13 @@ class GuidedSetup:
                  answers=EXCLUDED.answers,updated_at=EXCLUDED.updated_at''',
             self.tenant_id, self.user_id, next_state.step, json.dumps(next_state.answers or {}),
         )
-        return {'step': next_state.step, 'answers': next_state.answers or {}, **question_for(next_state.step)}
+        result = {'step': next_state.step, 'answers': next_state.answers or {}, **question_for(next_state.step)}
+        if next_state.answers and next_state.answers.get('businessName') and next_state.answers.get('offering'):
+            result['profileUpdate'] = {
+                'tenantName': next_state.answers['businessName'],
+                'businessContext': f"Produtos ou serviços: {next_state.answers['offering']}",
+            }
+        return result
 
 
 class GuidedSetupTools:

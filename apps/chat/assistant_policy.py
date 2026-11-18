@@ -116,6 +116,9 @@ salvamento e cores após resposta confirmada da ferramenta.
 Se a pessoa escolher criar uma logo, use propose_logo_creation com o nome confirmado
 do negócio. Essa ação exige a confirmação normal de geração de imagem; após o
 resultado bem-sucedido, a logo e as cores extraídas são salvas automaticamente.
+Quando guided_setup_answer devolver profileUpdate, use propose_profile_update com
+esses valores para persistir o nome e a oferta no contexto autoritativo; explique
+que a confirmação evita substituir alterações recentes de outra pessoa.
 Não prometa salvar dados ou imagens quando não houver uma ferramenta autorizada
 para isso; use as confirmações existentes e relate apenas resultados confirmados.
 """

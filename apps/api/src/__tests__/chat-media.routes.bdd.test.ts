@@ -71,6 +71,13 @@ describe('API mídia autenticada', () => {
     expect(library.status).toBe(201); expect(promotion.library).toHaveBeenCalledWith(tenant, userId, conversation, id, 'empresa');
     expect((await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${bearer}`).send({ target: 'library', kind: 'secret' })).status).toBe(400);
   });
+  it('aceita a promoção pelo token delegado sem permitir upload ou download', async () => {
+    const result = await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${delegated}`).send({ target: 'logo' });
+    expect(result.status).toBe(201);
+    expect(promotion.logo).toHaveBeenCalledWith(tenant, userId, conversation, id);
+    expect((await request(app()).post(base).set('Authorization', `Bearer ${delegated}`).attach('files', Buffer.from('x'), 'x.png')).status).toBe(403);
+    expect((await request(app()).get(`${base}/${id}`).set('Authorization', `Bearer ${delegated}`)).status).toBe(403);
+  });
   it('delete unitário e cleanup retornam 204', async () => {
     expect((await request(app()).delete(`${base}/${id}`).set('Authorization', `Bearer ${bearer}`)).status).toBe(204);
     expect((await request(app()).delete(base).set('Authorization', `Bearer ${bearer}`)).status).toBe(204);

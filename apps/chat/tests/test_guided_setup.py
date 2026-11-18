@@ -56,6 +56,27 @@ def test_questions_are_ordinary_language_and_photo_categories_are_separate():
     assert 'serviço ou produto' in question_for(PRODUCT_PHOTOS)['question'].lower()
 
 
+def test_offering_returns_the_versioned_profile_update_for_authoritative_context():
+    import asyncio
+    class Db:
+        row = None
+        async def fetchrow(self, *_args): return self.row
+        async def execute(self, _sql, _tenant, _user, step, answers):
+            import json
+            self.row = {'step': step, 'answers': json.loads(answers)}
+    async def exercise():
+        setup = GuidedSetup(Db(), 'tenant', 'user')
+        await setup.save_answer('Sim')
+        await setup.save_answer('Loja da Ana')
+        await setup.save_answer('Pular por enquanto')
+        result = await setup.save_answer('Flores e presentes')
+        assert result['profileUpdate'] == {
+            'tenantName': 'Loja da Ana',
+            'businessContext': 'Produtos ou serviços: Flores e presentes',
+        }
+    asyncio.run(exercise())
+
+
 def test_persistence_is_scoped_to_tenant_and_user_and_keeps_progress():
     class Db:
         def __init__(self):

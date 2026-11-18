@@ -22,7 +22,8 @@ export function createDelegationGuard(options: { secret: string; repository: (te
     // Exact method/path pairs only; delegated callers cannot upload, transcribe or download bytes.
     const mediaRead = req.method === 'POST' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/read\/?$/i.test(path);
     const mediaCleanup = req.method === 'DELETE' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/?$/i.test(path);
-    if (mediaRead || mediaCleanup) {
+    const mediaPromotion = req.method === 'POST' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/[0-9a-f-]{36}\/promote\/?$/i.test(path);
+    if (mediaRead || mediaCleanup || mediaPromotion) {
       identities.set(req, { userId: claims.userId, tenantId: claims.tenantId, role: claims.role, email: claims.email });
       return next();
     }

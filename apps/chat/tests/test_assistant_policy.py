@@ -44,6 +44,7 @@ def test_guided_help_respects_user_choice_and_tool_capabilities():
         'guided_setup_status',
         'guided_setup_answer',
         'promote_attachment',
+        'propose_profile_update',
         'não prometa salvar',
     ):
         assert phrase in policy
