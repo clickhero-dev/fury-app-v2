@@ -54,3 +54,11 @@ Revisão do checkout local no Chromium, 360×800, com API simulada e sem chamada
 ## Automação sem geração paga
 
 O workflow `qa-jornada-real.yml` fazia campanha e geração real em toda PR. Para cumprir a restrição de custo deste trabalho, essa jornada foi preservada integralmente e passou a `workflow_dispatch` (execução manual explícita na branch escolhida). O CI automático mantém builds, API, suíte web, rating e chatbot isolados e acrescenta o gate responsivo do Estúdio com rede externa bloqueada. Não há alteração de assertions, cotas ou bloqueios para tornar a jornada paga verde. Essa mudança de gatilho é parte explícita da PR; a jornada paga não foi executada.
+
+## Revalidação independente — 2026-11-18
+
+- Card consultado pela API existente após limite diário do conector ClickUp. A restrição de não realizar geração paga foi mantida.
+- No HEAD `f5e92b81`, Playwright executou 12/12 cenários isolados em 360×800, 390×844 e 1440×1000; Vitest focado passou 68/68. As capturas foram geradas localmente e a tela de vídeo em 360px foi inspecionada visualmente. Chamadas de geração foram simuladas e rede externa bloqueada.
+- CI do chatbot falhou em recuperação de `draft_text`. Reproduzido com PostgreSQL e Redis descartáveis: 2/3 passaram e o teste esperava `failed`, mas recebeu `completed`. A implementação de `hmg` já considera `draft_text` seguro para repetir até duas tentativas. O teste de integração foi alinhado ao contrato atual e ampliado para verificar sucesso na segunda tentativa e falha sem repetição após esgotar o limite; workers são fechados antes de preparar o fixture. Após a alteração: 4/4 passaram. Não houve alteração da lógica de produção.
+- O checkout compartilhado tinha alterações preexistentes; a revalidação e a correção foram realizadas no worktree isolado da PR. Os links de dependências locais estavam quebrados; o Playwright foi invocado pelo pacote correspondente ao import e um link local de `zod` foi usado para o teste da API.
+- A PR altera o gatilho da jornada real paga para execução manual em todas as PRs; o gate automático adicionado usa API simulada. Isso reduz a cobertura automática de integração real e deve ser considerado na política de CI do projeto.
