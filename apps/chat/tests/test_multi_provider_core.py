@@ -70,7 +70,11 @@ def test_missing_keys_and_empty_config():
     run(scenario())
 
 
-def test_tool_effect_is_never_replayed_after_provider_failure():
+@pytest.mark.parametrize('env,host', [
+    (ENV, 'api.openai.com'),
+    ({'OPENROUTER_API_KEY': 'router-test'}, 'openrouter.ai'),
+])
+def test_tool_effect_is_never_replayed_after_provider_failure(env, host):
     async def scenario():
         requests=[]; effects=[]
         async def action():
@@ -86,10 +90,10 @@ def test_tool_effect_is_never_replayed_after_provider_failure():
             return httpx.Response(200, headers={'content-type':'text/event-stream'}, content='data: '+json.dumps(chunk)+'\n\ndata: [DONE]\n\n')
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             with pytest.raises(ProviderFailure):
-                _ = [e async for e in stream_agent('hello', env=ENV, http_client=client, agent_options={'tools':[action]})]
+                _ = [e async for e in stream_agent('hello', env=env, http_client=client, agent_options={'tools':[action]})]
         assert effects == [1]
         assert len(requests) == 2
-        assert all(r.url.host == 'api.openai.com' for r in requests)
+        assert all(r.url.host == host for r in requests)
     run(scenario())
 
 
@@ -156,6 +160,42 @@ def test_anthropic_real_stream_and_usage():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             events = [e async for e in stream_agent('context',env={'ANTHROPIC_API_KEY':'test'},http_client=client)]
         assert any(getattr(e,'content',None) == 'olá' for e in events)
+    run(scenario())
+
+
+def test_anthropic_tool_effect_never_replayed_on_followup_failure():
+    async def scenario():
+        calls, effects = [], []
+        async def action():
+            """Record one effect."""
+            effects.append(1)
+            return 'done'
+        def event(name, data):
+            return 'event: ' + name + '\ndata: ' + json.dumps(data) + '\n\n'
+        def handler(request):
+            calls.append(request.url.host)
+            if len(calls) == 1:
+                return httpx.Response(503)
+            if len(calls) > 2:
+                return httpx.Response(503)
+            body = event('message_start', {'type':'message_start','message':{
+                'id':'m1','type':'message','role':'assistant','model':'claude-sonnet-5-5',
+                'content':[],'stop_reason':None,'usage':{'input_tokens':7,'output_tokens':0}}})
+            body += event('content_block_start', {'type':'content_block_start','index':0,
+                'content_block':{'type':'tool_use','id':'t1','name':'action','input':{}}})
+            body += event('content_block_delta', {'type':'content_block_delta','index':0,
+                'delta':{'type':'input_json_delta','partial_json':'{}'}})
+            body += event('content_block_stop', {'type':'content_block_stop','index':0})
+            body += event('message_delta', {'type':'message_delta','delta':{
+                'stop_reason':'tool_use','stop_sequence':None},'usage':{'output_tokens':3}})
+            body += event('message_stop', {'type':'message_stop'})
+            return httpx.Response(200, headers={'content-type':'text/event-stream'}, content=body)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with pytest.raises(ProviderFailure):
+                _ = [e async for e in stream_agent('act', env=ENV, http_client=client,
+                                                  agent_options={'tools': [action]})]
+        assert calls == ['api.openai.com', 'api.anthropic.com', 'api.anthropic.com']
+        assert effects == [1]
     run(scenario())
 
 
