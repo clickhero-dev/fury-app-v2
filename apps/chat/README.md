@@ -2,11 +2,78 @@
 
 Crie um ambiente Python 3.12 e instale `requirements.txt` (ou `requirements-dev.txt` para executar testes). Configure no ambiente ou em `apps/chat/.env` as variáveis `DATABASE_URL`, `CHAT_DELEGATION_SECRET`, `ADY_API_URL`, `OPENROUTER_API_KEY` e `MODEL_CHATBOT`. `POSTHOG_API_KEY` e `POSTHOG_HOST` são opcionais para telemetria sanitizada. O segredo de delegação deve ser o mesmo da API e ter pelo menos 32 caracteres. Inicie em `apps/chat` com `uvicorn app:app --port 8000`; o serviço deve permanecer acessível apenas pela API principal.
 
-Execute os testes com `PYTHONPATH=apps/chat pytest apps/chat/tests`. Para testes PostgreSQL, forneça `CHAT_TEST_DATABASE_URL` apontando a um banco isolado. As migrações são gerenciadas por `packages/db`.
+Execute os testes com `PYTHONPATH=apps/chat pytest apps/chat/tests`. O gate completo
+usa PostgreSQL **descartável** em loopback, banco com sufixo `_isolated`, nunca
+banco de cliente. Configure `CHAT_MEDIA_TEST_DATABASE_URL` e
+`CHAT_OUTCOME_TEST_DATABASE_URL`; esta última é obrigatória para as regressões de
+confirmação com journal real. Para cobrir também os testes legados globais, aplique
+as migrations nesse banco e configure `CHAT_TEST_DATABASE_URL` e
+`CHAT_TITLE_TEST_DATABASE_URL`. O gate `scripts/ci/chatbot-gate.py` prepara esse
+ambiente automaticamente. Use `PYTHON_DOTENV_DISABLED=1` para não carregar segredos locais.
+
+### Refinamento proativo e recuperação
+
+Spec de produto e limites: [`specs/ady-proativo-resiliente/spec.md`](../../specs/ady-proativo-resiliente/spec.md).
+O Ady prepara ideias, legendas e organização em rascunho sem exigir briefing de
+marketing. A política e as quatro skills editoriais ficam em `assistant_policy.py`;
+a versão da política integra os checkpoints. A confirmação de custo/publicação
+permanece no backend. Instruções ao modelo não garantem qualidade editorial:
+homologação com negócios reais continua necessária.
+
+Aplique as migrations `0080`, `0081` e `0082` com o runner **antes** de
+subir esta versão. Contexto efetivo é salvo antes do agente; retomadas podem usar
+o snapshot mesmo depois da compactação da conversa. Consultas estáveis confirmadas
+são reutilizadas apenas no mesmo turno original, após consultar novamente a
+rota original para revalidar autorização e acesso ao recurso. Sem essa confirmação,
+o cache não é devolvido. Cotas e jobs continuam sendo consultados ao vivo.
+Dados em cache não substituem a revalidação de acesso,
+snapshot do recurso e confirmação exigida para executar uma ação.
+
+Snapshots não contêm tokens/headers e estão isolados por conversa e proprietário,
+com lease/fencing; são removidos com a conversa. Limites: 1 MiB de contexto e
+128 KiB por resultado de ferramenta. O runtime omite padrões de credenciais do
+histórico antes de enviá-lo ao modelo/snapshot; mensagens brutas continuam no
+histórico privado existente. O repositório recusa credenciais não sanitizadas.
+Payload incompatível ou erro de persistência interrompe a resposta de forma segura,
+sem alegar sucesso.
+Não há gravação de tokens parciais nem replay automático de mutações. Retomada
+continua somente leitura; conversas legadas compactadas sem snapshot permanecem
+protegidas pelo erro `retry_compacted`. Um snapshot não recria mensagens/runs que
+já tenham sido removidos pelas políticas de compactação existentes.
+
+Fallback de modelo é opt-in, configurável e limitado às mesmas três tentativas
+totais por requisição, sem replay após saída/ferramentas. Consulte
+[`docs/operations/chat-provider-fallback.md`](../../docs/operations/chat-provider-fallback.md).
+Sem homologação explícita, mantém-se o modelo principal. Falha do próprio
+OpenRouter não é resolvida por trocar o modelo no mesmo gateway.
+
+O worker de turnos na API recupera respostas após reinício a partir do banco,
+com delegação JIT e limites globais persistidos. A interface acompanha o estado
+mesmo sem stream aberto. Cancelamento impede próximas etapas, não desfaz efeito
+externo. Confirmação individual/lote compartilham claims e resultado duráveis;
+exigem `humanIntent` assinado pelo proxy, nunca fornecido pelo modelo ou body.
+Planos aceitam referências tipadas entre resultados, com revalidação da mídia
+no tenant atual. Aprovar plano continua sem autorizar custo ou publicação.
+
+Detalhes e rollout:
+- [`docs/operations/ady-recovery-and-approvals.md`](../../docs/operations/ady-recovery-and-approvals.md)
+- [`docs/operations/ady-editorial-evaluation.md`](../../docs/operations/ady-editorial-evaluation.md)
+
+Ainda dependem de operação real: homologação editorial com empresários, coleta
+de latência/custo reais dos modelos e rollout controlado. O CLI de avaliação não
+faz chamadas pagas nem aprova modelos a partir de amostras sintéticas.
 
 Para executar o chat em container local, defina `CHAT_DELEGATION_SECRET` (igual ao da API) e `OPENROUTER_API_KEY` no ambiente, inicie a API na porta 3000 e execute `docker compose -f infra/docker-compose.yml --profile chat up --build chat`. O serviço fica acessível apenas em `127.0.0.1:8000`. Se necessário, configure `CHAT_DATABASE_URL` e `ADY_API_URL` para apontar ao banco e à API acessíveis pelo container; aplique as migrações antes de usá-lo.
 
-Este serviço ainda não está pronto para produção: o fluxo experimental cobre consultas de campanhas, anúncios, calendário, marca e mídias; propostas com confirmação para criar e editar imagem e vídeo, criar ou alterar campanha, criar anúncio com conjunto e criativo existentes, pausar, renomear ou duplicar anúncio, agendar e cancelar postagem no Instagram e atualizar perfil, negócio e marca. Após reinício, uma resposta interrompida pode ser retomada explicitamente pelo usuário; a retomada é somente leitura e preserva propostas anteriores. Jobs de criação e ajuste de vídeo são consultados ao reabrir a conversa. A compressão estima memória, histórico, instruções e schemas Agno com tokenizer nativo DeepSeek V4 Pro, margem de 16 tokens por item e reserva de 4.096 tokens para resposta; outros modelos usam limite conservador por bytes. A formatação final do provedor pode diferir da estimativa.
+Antes de produção, concluir a homologação e o checklist de rollout. O fluxo cobre
+consultas de campanhas, anúncios, calendário, marca e mídias; propostas confirmadas
+para imagens, vídeos, campanhas, anúncios, postagens e atualizações do negócio.
+A retomada automática é somente leitura e preserva propostas anteriores, sem
+reexecutar efeitos incertos. Jobs de vídeo são reconciliados ao consultar a conversa.
+A compressão considera memória, histórico, instruções e schemas Agno com tokenizer
+nativo DeepSeek V4 Pro, margem por item e reserva de 4.096 tokens para resposta;
+outros modelos usam limite conservador por bytes. A formatação final do provedor
+pode diferir da estimativa.
 
 O tokenizer em `tokenizer/` é do repositório oficial DeepSeek-V4-Pro, revisão `b5968e9190ef611bbf34a7229255be88a0e937c1`, distribuído sob a licença incluída.
 
@@ -80,7 +147,19 @@ remove somente os objetos e **não readquire esse row lock nem remove metadados*
 Upload e remoção de rascunhos do Node usam o mesmo row lock para serializar com a
 exclusão. Cleanup humano permanece sob lock e recusa qualquer anexo associado com
 `409 CHAT_ATTACHMENT_BOUND`, mesmo se o cliente tentar simular delegação via headers.
-Run ativo retorna 409; falha/timeout de cleanup retorna 502 pelo FastAPI preservando
+A exclusão com qualquer run ativo retorna 409; o envio simultâneo de mensagens é permitido.
+O GET da conversa fornece `response_runs` com `id`, `user_message_id`,
+`assistant_message_id` e `status`; `response_run` permanece para clientes antigos.
+O SSE começa com `run` e encerra com `done`, ambos identificando `run_id` e
+`user_message_id`. Para retentar uma resposta específica, use `POST .../retry?run_id=<id>`;
+a retomada continua somente de leitura. **Rollout sem versões mistas:** interrompa novos
+requests e drene todos os workers antigos (inclusive runs em andamento) antes de aplicar
+`0072`; em seguida inicie apenas workers novos e reabra o tráfego. O worker antigo não
+salva `assistant_message_id` e não é compatível com envios concorrentes; não faça
+rolling deploy misturando versões nem rollback para ele após habilitar concorrência.
+A migration associa apenas respostas legadas com vínculo temporal inequívoco; vínculos
+ambíguos ficam ausentes do contexto causal, inclusive anexos. A compactação não altera histórico durante runs ativos e
+só resume turnos intercalados com vínculos completos. Falha/timeout de cleanup retorna 502 pelo FastAPI preservando
 as rows. Conversas sem anexos não chamam storage. Não há liberação antecipada do
 lock Python nem intervalo para nova associação antes da exclusão final.
 
@@ -124,3 +203,26 @@ simulados no transporte. Esses testes não comprovam capacidade multimodal do pr
 o smoke externo e o build Docker pertencem ao gate de integração. Para a suíte legada,
 `CHAT_TEST_DATABASE_URL` deve apontar a um banco descartável com migrations aplicadas;
 `CHAT_TITLE_TEST_DATABASE_URL` habilita também o teste real dos títulos.
+
+### Continuidade e falhas do provedor (#452)
+
+O transporte OpenRouter repete somente a requisição atual, no máximo três tentativas,
+antes de qualquer saída ou ferramenta observada no turno. Timeout/conexão, 429 e 5xx
+usam backoff exponencial com jitter; `Retry-After` aceita segundos ou data HTTP. O
+orçamento acumulado de espera é 20 segundos e o de retry da requisição é 200 segundos.
+Uma espera indicada maior que o orçamento encerra sem antecipar o retry. Erros de
+requisição, autenticação, cobrança e contexto não são repetidos automaticamente.
+
+O agente e suas ferramentas têm prazo total de 240 segundos. EOF sem término SSE,
+`finish_reason: error`, saída truncada por limite ou filtro geram erro recuperável pelo
+tratamento de run existente. Não se reinicia automaticamente o agente depois de
+conteúdo parcial ou ferramenta: o usuário usa **Retomar resposta**, somente leitura,
+com o `user_message_id` original e propostas preservadas. O deadline cobre a execução
+do agente; preparação/compressão de contexto mantém seus limites HTTP existentes.
+
+Logs `provider_attempt` correlacionam request UUID local, run UUID, modelo validado,
+tentativa, status e fases `initial_failure`, `retry`, `recovered`, `final_failure`.
+Não incluem corpo, credencial nem conteúdo de conversa. `recovered` indica aceitação
+do transporte após retry; falha posterior do stream segue a telemetria de falha de run.
+A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
+operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.

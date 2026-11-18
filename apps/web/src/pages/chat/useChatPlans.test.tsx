@@ -158,6 +158,23 @@ describe('Planos persistidos', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('reconsulta aprovação pendente após falha temporária sem apagar progresso confirmado', async () => {
+    vi.useFakeTimers();
+    const waiting = plan({ status: 'waiting_approval', version: 2, tasks: [task({ status: 'waiting_approval', approvalId: 'approval-1' })] });
+    const done = plan({ status: 'completed', version: 3, tasks: [task({ status: 'completed' })] });
+    fetchMock.mockResolvedValueOnce(response({ plans: [waiting] }))
+      .mockResolvedValueOnce(response({}, 500))
+      .mockResolvedValueOnce(response({ plans: [done] }));
+    const { result } = renderHook(() => useChatPlans('conversation-1', true));
+    await act(async () => {});
+    await act(async () => { await vi.advanceTimersByTimeAsync(CHAT_PLANS_POLL_MS); });
+    expect(result.current.plans).toEqual([waiting]);
+    expect(result.current.error).toContain('Não foi possível carregar');
+    await act(async () => { await vi.advanceTimersByTimeAsync(CHAT_PLANS_POLL_MS); });
+    expect(result.current.plans).toEqual([done]);
+    expect(result.current.error).toBeNull();
+  });
+
   it('aborta e ignora consulta da conversa anterior mesmo quando o transporte ignora aborto', async () => {
     const old = deferred<Response>();
     fetchMock.mockImplementationOnce(() => old.promise).mockResolvedValueOnce(response({ plans: [plan({ id: 'plan-2', conversationId: 'conversation-2', title: 'Outro plano' })] }));

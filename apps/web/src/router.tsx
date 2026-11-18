@@ -1,3 +1,4 @@
+import { InitialDestinationPage } from './pages/auth/InitialDestinationPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -94,6 +95,7 @@ export const router = createBrowserRouter([
     element: <ResetPasswordSuccessPage />,
   },
   { path: '/trial/acesso', element: <TrialAccessPage /> },
+  { path: '/inicio', element: <InitialDestinationPage /> },
   {
     path: '/onboarding/conectar-meta',
     element: <ConectarMetaPage />,

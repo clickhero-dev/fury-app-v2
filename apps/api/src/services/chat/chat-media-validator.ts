@@ -95,6 +95,19 @@ export class ChatMediaValidator {
     return { buffer: wav(pcm), format: 'wav', silent, durationSeconds };
   }
 
+  /** Áudio de vídeo próprio, com os mesmos limites e sandbox dos anexos. */
+  async videoAudio(file: MediaInput): Promise<Buffer | null> {
+    const container = mediaContainer(file.buffer);
+    if (container !== 'mov' && container !== 'matroska') throw invalidMedia();
+    const media = await this.video(file, container);
+    if (!media.metadata.hasAudio) return null;
+    const pcm = await nativeMedia('ffmpeg', file.buffer, container, ['-t', '120.1', '-map', '0:a:0', '-ac', '1', '-ar', '16000', '-f', 's16le', 'pipe:1'], 4 * MiB);
+    if (!pcm.length || pcm.length / 32000 > 120) throw mediaLimit();
+    let squares = 0;
+    for (let i = 0; i < pcm.length - 1; i += 2) squares += pcm.readInt16LE(i) ** 2;
+    return Math.sqrt(squares / (pcm.length / 2)) < 32 ? null : wav(pcm);
+  }
+
   private async pdf(file: MediaInput): Promise<ValidatedMedia> {
     if (file.buffer.length > 20 * MiB) throw mediaLimit();
     const directory = await mkdtemp(path.join(tmpdir(), 'chat-pdf-'));

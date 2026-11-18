@@ -41,7 +41,9 @@ export class PlannerController {
       const body = z.object({
         context: z.string().trim().min(1).max(5000).optional(),
         imageUrl: z.string().url().refine((url) => url.startsWith('https://'), 'imageUrl precisa usar HTTPS').optional(),
-      }).strict().refine((value) => value.context || value.imageUrl, 'Informe um tema ou uma imagem').parse(req.body);
+        videoUrl: z.string().url().refine((url) => url.startsWith('https://'), 'videoUrl precisa usar HTTPS').optional(),
+      }).strict().refine((value) => value.context || value.imageUrl || value.videoUrl, 'Informe um tema ou uma mídia')
+        .refine((value) => !(value.imageUrl && value.videoUrl), 'Informe somente uma mídia').parse(req.body);
       if (!this.captionSuggestionService) throw new AppError(503, 'CAPTION_SUGGESTION_UNAVAILABLE', 'Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.');
       const result = await this.captionSuggestionService.suggest(req.tenant!.tenantId, body);
       res.json({ success: true, data: result, timestamp: new Date().toISOString() });

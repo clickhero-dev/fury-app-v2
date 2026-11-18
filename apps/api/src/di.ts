@@ -1,3 +1,5 @@
+import { PlannerVideoTranscription } from './services/planner/planner-video-transcription.js';
+import { readPlannerVideoAsset } from './services/storage/storage.service.js';
 import { DatabaseMetricsProvider } from './lib/providers/db-metrics.provider.js';
 import { MockMetricsProvider } from './lib/providers/mock-metrics.provider.js';
 import type { IMetricsProvider } from './lib/providers/metrics.provider.js';
@@ -103,7 +105,7 @@ import { ChatAttachmentService } from './services/chat/chat-attachment.service.j
 import { ChatAttachmentReader } from './services/chat/chat-attachment-reader.js';
 import { OpenRouterChatMediaClient } from './services/chat/openrouter-chat-media.client.js';
 import { ChatAttachmentRepository } from './repository/chat-attachment.repository.js';
-import { createChatPrivateStorage } from './services/storage/chat-private-storage.js';
+import { createChatStudioStorage } from './services/storage/chat-studio-storage.js';
 import { createChatPlanRuntime } from './services/chat/chat-plan-runtime.js';
 import { getChatPlanQueue } from './workers/chat-plan.worker.js';
 
@@ -189,6 +191,7 @@ export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
+  new PlannerVideoTranscription(readPlannerVideoAsset, new ChatMediaValidator(), new OpenRouterChatMediaClient({ timeoutMs: 20_000 })),
 );
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -208,7 +211,7 @@ const chatMediaProvider = new OpenRouterChatMediaClient();
 export const chatTranscriptionService = new ChatTranscriptionService(chatMediaValidator, chatMediaProvider);
 export const chatAttachmentService = new ChatAttachmentService(
   (tenantId, userId) => new ChatAttachmentRepository(tenantId, userId),
-  createChatPrivateStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
+  createChatStudioStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
 );
 export const chatPlanRuntime = createChatPlanRuntime({
   baseUrl: process.env.INTERNAL_NODE_API_ORIGIN ?? `http://127.0.0.1:${process.env.PORT || '3000'}`,
