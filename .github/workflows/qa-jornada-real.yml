@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: '22'
       - name: Validate exact QA campaign pause
-        run: node --test scripts/ci/qa-pause-campaign.test.mjs
+        run: node --test scripts/ci/qa-pause-campaign.node-test.mjs
       - name: Pause exact QA campaign without creating new actions
         env:
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
