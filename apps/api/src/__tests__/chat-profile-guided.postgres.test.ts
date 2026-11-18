@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 vi.mock('@fury/db', () => ({ db: {} }));
 vi.mock('../lib/analytics.js', () => ({ captureServerException: vi.fn() }));
 import { ChatProfileRepository } from '../repository/chat-profile.repository.js';
@@ -159,7 +160,7 @@ suite('guided profile transaction in PostgreSQL', () => {
   });
   it('exposes the real controller through the cross-service process harness', async () => {
     const fence = await turn(), secret = 'isolated-secret-for-delegation-123456789';
-    const child = spawn(process.execPath, ['--import','tsx','src/__tests__/guided-profile-real-server.ts'], {
+    const child = spawn(process.execPath, ['--import','tsx',fileURLToPath(new URL('./guided-profile-real-server.ts', import.meta.url))], {
       cwd: process.cwd(), env: { ...process.env, CHAT_MEDIA_TEST_DATABASE_URL:url!, CHAT_CROSS_SERVICE_SCHEMA:schema, CHAT_DELEGATION_SECRET:secret, DATABASE_URL:url! },
       stdio: ['ignore','pipe','inherit'],
     });
