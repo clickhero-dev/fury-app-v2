@@ -323,6 +323,12 @@ def create_app():
             provider_active = False
             async def report(error):
                 await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error))
+            async def report_retry(attempt, max_attempts, retry_in_ms):
+                await emit('event: retrying\ndata: ' + json.dumps({
+                    'attempt': attempt,
+                    'maxAttempts': max_attempts,
+                    'retryInMs': retry_in_ms,
+                }) + '\n\n')
             try:
                 await observe('started')
                 await emit('event: run\ndata: ' + json.dumps({'run_id': str(run_id), 'user_message_id': str(user_message_id), 'client_key': str(client_key) if client_key else None}) + '\n\n')
@@ -386,7 +392,7 @@ def create_app():
                     nonlocal provider_active
                     summary_agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), instructions=['Resuma fatos úteis em JSON: {"facts":[{"topic":"...","text":"..."}]}. Preserve fatos anteriores e não invente informações.'])
                     payload = redact_checkpoint_data({'previous': previous, 'messages': [{'role': m['role'], 'content': m['content']} for m in messages]})
-                    with provider_retry_scope(run_id):
+                    with provider_retry_scope(run_id, on_retry=report_retry):
                         provider_active = True
                         result = await summary_agent.arun(json.dumps(payload, ensure_ascii=False))
                         provider_active = False
@@ -420,7 +426,7 @@ def create_app():
                     async def compress(facts):
                         nonlocal provider_active
                         compact_agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), instructions=['Condense os fatos em JSON estrito {"facts":[{"topic":"...","text":"..."}]}, preservando informações relevantes. Não invente fatos.'])
-                        with provider_retry_scope(run_id):
+                        with provider_retry_scope(run_id, on_retry=report_retry):
                             provider_active = True
                             result = await compact_agent.arun(json.dumps(redact_checkpoint_data(facts), ensure_ascii=False))
                             provider_active = False
@@ -460,7 +466,7 @@ def create_app():
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
                 provider_active = True
-                with provider_retry_scope(run_id) as provider_state:
+                with provider_retry_scope(run_id, on_retry=report_retry) as provider_state:
                     async for event in checked_agent_events(agent.arun(conversation_context(agent_history()), stream=True), provider_state):
                         if tool_checkpoint_failed:
                             raise RuntimeError('Não foi possível preservar o trabalho desta resposta.')
