@@ -78,7 +78,7 @@ it('exibe aprovação nova de worker sem recarregar a página', async () => {
 it('não sobrepõe os limites responsivos de imagem com estilo inline', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/conversations')
     ? json([{id:'b',title:'Conversa B'}])
-    : json({messages:[],approvals:[{id:'im',action:'Imagem',parameters:{},status:'completed',result:{imageUrl:'https://example.com/image.png', videoUrl:'https://example.com/video.mp4', job:{videoUrl:'https://example.com/job.mp4'}}}]})));
+    : json({messages:[],approvals:[{id:'im',action:'Imagem',parameters:{},status:'completed',result:{imageUrl:'https://example.com/image.png', videoUrl:'https://example.com/video.mp4', job:{status:'done',videoUrl:'https://example.com/job.mp4'}}}]})));
   render(<ChatPage/>);
   fireEvent.click(await screen.findByRole('button',{name:'Conversa B'}));
   const image = await screen.findByAltText('Imagem gerada');
