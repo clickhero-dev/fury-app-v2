@@ -6,6 +6,8 @@ PR avaliada: [#488](https://github.com/clickhero-dev/fury-app-v2/pull/488)
 
 Head avaliado: `cd65cf010059a23586fcfcf6331f32104c9fb755`
 
+Reconciliado com a base atual `hmg` `4b684f24b6d50b5f023c6f1b6d49ffcec8e03271` no commit `11aad619b58a2f9324e9a73db7a969aa270197d3`.
+
 Base remota antes da reconciliação: `1cc22c51565211662beef0300bc830a2f43f4e49`.
 
 ## Escopo e resultado
@@ -28,7 +30,9 @@ RUN_REDIS_RECOVERY_E2E=1 npx vitest run \
 
 Resultado: **6 arquivos, 36 testes aprovados**, incluindo a integração Redis/BullMQ.
 
-Os checks remotos existentes no head antes desta reconciliação: CI monorepo e jornada real passaram; Chatbot falhou. O artefato do Chatbot indicou que o E2E real esperava HTTP 404 para uma aprovação expirada, mas a API respondeu 409. A `hmg` atual já contém a expectativa correta de 409. O mock E2E concluiu 96/96 testes. Após a integração, a suíte precisa rodar novamente no novo SHA.
+No head anterior, CI monorepo e jornada real passaram; Chatbot falhou. O artefato do Chatbot indicou que o E2E real esperava HTTP 404 para uma aprovação expirada, mas a API respondeu 409. A `hmg` atual contém a expectativa correta de 409, preservada no merge. O mock E2E concluiu 96/96 testes.
+
+Após a integração, os três workflows foram executados novamente no SHA `11aad619b58a2f9324e9a73db7a969aa270197d3`: **CI monorepo: success; Chatbot: success; jornada real: success**. O CI monorepo confirmou o teste BullMQ/Redis com sucesso; builds API/web, unit tests e coverage também passaram. A PR voltou a `mergeable: true` e não há conflito pendente.
 
 ## Conflito reconciliado
 
@@ -39,6 +43,7 @@ A PR estava `mergeable: false` porque `hmg` avançou após a base da branch, cri
 - Não há acesso operacional comprovado nesta execução para consultar `REDIS_URL`, conectividade, topologia, logs ou política de restart em HMG/produção.
 - Não foi executada sincronização Meta real após recuperação.
 - A nova integração com `hmg` precisa de CI completo no SHA de merge; em particular, o E2E com banco real que falhou no head anterior.
+- A PR permanece em rascunho enquanto a validação operacional acima não puder ser feita.
 - Não se demonstra exactly-once nem durabilidade em falha abrupta; deduplicação e retomada do consumidor foram exercitadas.
 
 Nenhum deploy ou alteração de configuração de ambiente foi realizado.
