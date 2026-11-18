@@ -16,8 +16,10 @@ describe('ambiente nas exceções backend', () => {
     [undefined, undefined, 'unknown'],
   ])('Dado APP_ENV=%s e NODE_ENV=%s, então identifica %s', async (appEnv, nodeEnv, expected) => {
     vi.stubEnv('POSTHOG_API_KEY', 'phc_test');
-    vi.stubEnv('APP_ENV', appEnv);
-    vi.stubEnv('NODE_ENV', nodeEnv);
+    if (appEnv === undefined) delete process.env.APP_ENV;
+    else vi.stubEnv('APP_ENV', appEnv);
+    if (nodeEnv === undefined) delete process.env.NODE_ENV;
+    else vi.stubEnv('NODE_ENV', nodeEnv);
     const { captureServerException } = await import('../lib/analytics.js');
     captureServerException(new Error('failed access_token=secret'), { method: 'PUT', path: '/api/studio/assets/test/rating', statusCode: 500 });
     expect(captureException).toHaveBeenCalledWith(expect.any(Error), 'server', expect.objectContaining({ environment: expected, source: 'server', statusCode: 500 }));

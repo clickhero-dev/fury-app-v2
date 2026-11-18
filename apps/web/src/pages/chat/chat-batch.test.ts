@@ -12,6 +12,19 @@ const response = {
   ],
 };
 describe('Adapter de revisão em lote', () => {
+  it('soma consumo estruturado autoritativo por unidade e conta desconhecidos sem inferir de frases',async()=>{
+    const ids=['a','b','c','d'];
+    const items=[
+      {...response.items[0],quota:{known:true,value:{unit:'image',amount:1}}},
+      {...response.items[1],path:'/api/studio/video/jobs',quota:{known:true,value:{unit:'video',amount:1}}},
+      {...response.items[0],id:'c',quota:{known:true,value:{unit:'image',amount:1}}},
+      {...response.items[1],id:'d',quota:{known:true,value:'999 imagens restantes'}},
+    ];
+    vi.mocked(chatRequest).mockResolvedValueOnce(new Response(JSON.stringify({...response,approvalIds:ids,items})));
+    const review=await reviewBatch('conv',ids);
+    expect(review.consumptionSummary).toEqual({image:2,video:1,unknownItems:1});
+    expect(JSON.parse(review.token).approvalIds).toEqual(ids);
+  });
   it('preserva exatamente campos de confirmação e não exibe parâmetros privados nem inventa custo', async () => {
     vi.mocked(chatRequest).mockResolvedValueOnce(new Response(JSON.stringify(response)));
     const review = await reviewBatch('conv', ['a', 'b']);

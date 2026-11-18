@@ -5,6 +5,7 @@ import type { BatchMedia } from './batch-presentation';
 export type BatchCandidate = { id: string; revision: string; title: string; details: string };
 export type BatchReview = {
   token: string;
+  consumptionSummary?: {image:number;video:number;unknownItems:number};
   items: { id: string; title: string; details: string; effect: string; quota: string | null; advancedDetails?: string; media?: BatchMedia[] }[];
 };
 export type BatchItemResult = {
@@ -39,6 +40,11 @@ export function ReviewBatch({ items, disabled = false, onReview, onConfirm }: Re
     return () => { currentFingerprint.current = null; };
   }, [fingerprint]);
   const validReview = review?.fingerprint === fingerprint ? review.snapshot : null;
+  const consumption = validReview?.consumptionSummary;
+  const knownConsumption = consumption ? [
+    consumption.image ? `${consumption.image} ${consumption.image === 1 ? 'imagem' : 'imagens'}` : '',
+    consumption.video ? `${consumption.video} ${consumption.video === 1 ? 'vídeo' : 'vídeos'}` : '',
+  ].filter(Boolean).join(' e ') : '';
   const locked = new Set(results.map(result => result.id));
   const eligible = !disabled && selectedItems.length > 0 && selectedItems.length <= 10
     && selectedItems.length === selected.length && selected.every(id => !locked.has(id));
@@ -102,6 +108,10 @@ export function ReviewBatch({ items, disabled = false, onReview, onConfirm }: Re
     {invalidated && <p role="status">Os itens mudaram; revise novamente antes de confirmar.</p>}
     {error && <p role="alert">{error}</p>}
     {validReview && <div aria-label="Snapshot revisado">
+      {consumption && <div aria-label="Consumo do lote">
+        <p>Consumo total conhecido: {knownConsumption || 'não informado'}.</p>
+        {consumption.unknownItems > 0 && <p>Há {consumption.unknownItems} {consumption.unknownItems === 1 ? 'item' : 'itens'} com consumo não informado.</p>}
+      </div>}
       {validReview.items.map(item => <article key={item.id}>
         <h4>{item.title}</h4><p>{item.details}</p><p>{item.effect}</p><p>{item.quota ?? 'Cota não informada'}</p>
         {item.media?.map((media,index) => media.kind === 'image'

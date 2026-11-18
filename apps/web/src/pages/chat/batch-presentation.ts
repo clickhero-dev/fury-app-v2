@@ -97,8 +97,10 @@ function httpsUrl(value: unknown): string | null {
   } catch { return null; }
 }
 export function batchMedia(parameters: Record<string,unknown>): BatchMedia[] {
+  const format=parameters.postType ?? parameters.post_type;
+  const singleKind:BatchMedia['kind']=typeof format==='string' && ['REEL','REELS'].includes(format.toUpperCase())?'video':'image';
   const values: {kind:BatchMedia['kind'];value:unknown}[] = [
-    ...['imageUrl','image_url'].map(key => ({kind:'image' as const,value:parameters[key]})),
+    ...['imageUrl','image_url'].map(key => ({kind:singleKind,value:parameters[key]})),
     ...['image_urls','imageUrls'].flatMap(key => Array.isArray(parameters[key])
       ? (parameters[key] as unknown[]).map(value => ({kind:'image' as const,value})) : []),
     ...['videoUrl','video_url'].map(key => ({kind:'video' as const,value:parameters[key]})),

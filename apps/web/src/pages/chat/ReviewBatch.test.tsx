@@ -22,6 +22,15 @@ function select() {
   fireEvent.click(screen.getByRole('checkbox', { name: 'Publicar post' }));
 }
 describe('Revisão consolidada', () => {
+  it('resume consumo total conhecido e desconhecidos antes do botão sem inventar saldo',async()=>{
+    const review:BatchReview={...snapshot,consumptionSummary:{image:1,video:0,unknownItems:1}};
+    render(<ReviewBatch {...props({onReview:vi.fn().mockResolvedValue(review)})}/>);
+    select();fireEvent.click(screen.getByRole('button',{name:'Revisar selecionados'}));
+    expect(await screen.findByText('Consumo total conhecido: 1 imagem.')).toBeVisible();
+    expect(screen.getByText('Há 1 item com consumo não informado.')).toBeVisible();
+    expect(screen.queryByText(/restante|saldo/i)).toBeNull();
+    expect(screen.getByRole('button',{name:'Confirmar 2 ações revisadas'})).toBeVisible();
+  });
   it('mostra prévia acessível e mantém informações técnicas recolhidas sem mudar snapshot',async()=>{
     const review:BatchReview={...snapshot,items:snapshot.items.map((item,index)=>index?item:{...item,advancedDetails:'Modelo: model-uuid',media:[{kind:'image',url:'https://example.test/proposta.png'},{kind:'video',url:'https://example.test/proposta.mp4'}]})};
     const input=props({onReview:vi.fn().mockResolvedValue(review)});

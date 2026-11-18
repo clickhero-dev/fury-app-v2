@@ -52,6 +52,13 @@ describe('Revisão financeira e escopo em linguagem simples', () => {
 });
 
 describe('Prévia segura da mídia revisada', () => {
+  it.each(['post_type','postType'])('formato Reel explícito em %s usa vídeo mesmo no campo image_url/imageUrl',key=>{
+    expect(batchMedia({[key]:'reel',image_url:'https://example.test/reel.mp4'})).toEqual([{kind:'video',url:'https://example.test/reel.mp4'}]);
+    expect(batchMedia({[key]:'REELS',imageUrl:'https://example.test/reel.mp4'})).toEqual([{kind:'video',url:'https://example.test/reel.mp4'}]);
+    expect(batchMedia({[key]:'carousel',image_urls:['https://example.test/a.png','https://example.test/b.png']})).toEqual([
+      {kind:'image',url:'https://example.test/a.png'},{kind:'image',url:'https://example.test/b.png'},
+    ]);
+  });
   it('extrai, deduplica e não altera imageUrl/image_urls/videoUrl', () => {
     const images=Object.freeze(['https://example.test/a.png','https://example.test/b.png']);
     const parameters=Object.freeze({imageUrl:images[0],image_urls:images,videoUrl:'https://example.test/v.mp4'});

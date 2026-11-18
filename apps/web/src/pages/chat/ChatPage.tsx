@@ -16,6 +16,7 @@ import { reviewBatch, confirmBatch } from './chat-batch';
 import { cancelChatRun, isRecoveryPending, recoveryState } from './chat-recovery';
 import { RecoveryStatus } from './RecoveryStatus';
 import { ChatQuickActions } from './ChatQuickActions';
+import { useQuickActionContext } from './useQuickActionContext';
 import { isChatPlanActive } from './chat-plans';
 import { ChatComposer } from './ChatComposer';
 import { MessageAttachments } from './MessageAttachments';
@@ -217,6 +218,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   const [titleError, setTitleError] = useState('');
   const [current, setCurrent] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [contextEnabled, setContextEnabled] = useState(false);
+  const quickActionContext = useQuickActionContext(contextEnabled);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [responseRun, setResponseRun] = useState<string | null>(null);
@@ -711,7 +714,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
 <h1>Vamos preparar seu próximo post?</h1>
 <p>Você não precisa saber de marketing. Escolha por onde começar e eu preparo com o que já sei do seu negócio. Você revisa antes de publicar.</p>
 </div>
-<ChatQuickActions onSelect={prompt => { void submitMessage(prompt); }} disabled={composerDisabled}/>
+<ChatQuickActions key={current || 'new'} onSelect={submitMessage} context={quickActionContext}
+  onExplore={() => setContextEnabled(true)} disabled={composerDisabled || media.blocked || dictation.active}/>
 </div>}
 {latestRuns(responseRuns).map(run => {
   const status = recoveryState(run.recovery);
@@ -720,7 +724,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     <RecoveryStatus status={status} onCancel={() => cancelRun(run)} onRedirect={() => setSuggestionsFor(run.id)}/>
     {suggestionsFor === run.id && status === 'cancelled' && <div role="group" aria-label="Outra direção">
       <p>Escolha outro pedido. Seu histórico será mantido.</p>
-      <ChatQuickActions disabled={composerDisabled} onSelect={prompt => { setSuggestionsFor(null); void submitMessage(prompt); }}/>
+      <ChatQuickActions disabled={composerDisabled || media.blocked || dictation.active} context={quickActionContext}
+        onExplore={() => setContextEnabled(true)} onSelect={async prompt => { setSuggestionsFor(null); await submitMessage(prompt); }}/>
     </div>}
   </Fragment>;
 })}

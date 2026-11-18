@@ -6,6 +6,7 @@ import { batchDetails, batchAdvancedDetails, batchMedia } from './batch-presenta
 export { batchDetails } from './batch-presentation';
 
 const impactSchema = z.object({ known: z.boolean(), value: z.unknown() });
+const quotaUnitsSchema = z.object({ unit: z.enum(['image', 'video']), amount: z.literal(1) });
 const reviewSchema = z.object({
   reviewToken: z.string().uuid(), version: z.number().int().positive(), digest: z.string().regex(/^[a-f0-9]{64}$/),
   approvalIds: z.array(z.string()).min(1).max(10), expiresAt: z.string().datetime({ offset: true }),
@@ -46,7 +47,7 @@ export function batchActionLabel(method: string, path: string): [string, string]
   return null;
 }
 function impactText(label: string, impact: z.infer<typeof impactSchema>) {
-  const units = z.object({ unit: z.enum(['image', 'video']), amount: z.literal(1) }).safeParse(impact.value);
+  const units = quotaUnitsSchema.safeParse(impact.value);
   if (label === 'Cota' && impact.known && units.success) return `Consome 1 ${units.data.unit === 'image' ? 'imagem' : 'vídeo'}`;
   const known = impact.known && ['string', 'number'].includes(typeof impact.value);
   return known ? `${label}: ${String(impact.value)}` : `${label} não informado`;
@@ -71,6 +72,12 @@ export async function reviewBatch(conversationId: string, approvalIds: string[])
   const { reviewToken, version, digest, expiresAt } = data;
   return {
     token: JSON.stringify({ approvalIds, reviewToken, version, digest, expiresAt, conversationId }),
+    consumptionSummary: data.items.reduce((summary,item) => {
+      const units=quotaUnitsSchema.safeParse(item.quota.value);
+      return item.quota.known && units.success
+        ? {...summary,[units.data.unit]:summary[units.data.unit] + units.data.amount}
+        : {...summary,unknownItems:summary.unknownItems + 1};
+    },{image:0,video:0,unknownItems:0}),
     items: data.items.map(item => {
       const label = batchActionLabel(item.method, item.path);
       if (!label) throw new Error('Unsupported reviewed action');

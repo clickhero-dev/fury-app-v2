@@ -65,7 +65,8 @@ export class TicketsController {
 
   listStatuses = async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const statuses = await this.ticketService.listStatuses();
+      const requestId = res.getHeader?.('x-request-id');
+      const statuses = await this.ticketService.listStatuses(typeof requestId === 'string' ? requestId : undefined);
       res.json({ success: true, data: statuses, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
