@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { buildDirectQuickActionPrompt, contextualQuickActions, directQuickActions, type QuickActionContext } from './quick-actions';
+import { buildDirectQuickActionPrompt, contextualQuickActions, directQuickActions, guidedSetupPrompt, type QuickActionContext } from './quick-actions';
 
 export function ChatQuickActions({onSelect,context = {},onExplore,disabled = false}: {
   onSelect:(prompt:string)=>void | Promise<void>; context?:QuickActionContext; onExplore?:()=>void; disabled?:boolean;
@@ -24,6 +24,10 @@ export function ChatQuickActions({onSelect,context = {},onExplore,disabled = fal
         <action.icon size={18} aria-hidden="true"/> {action.label}
       </button>)}
     </div>
+    <button type="button" className="ady-chat-more-ideas" disabled={disabled || pending}
+      onClick={()=>{void select(guidedSetupPrompt(context));}}>
+      Configurar meu negócio
+    </button>
     <button type="button" className="ady-chat-more-ideas" aria-expanded={expanded} aria-controls={panelId}
       disabled={disabled || pending} onClick={()=>{if(!expanded)onExplore?.();setExpanded(value=>!value);}}>
       {expanded?'Ocultar outras ideias':'Outras ideias para meu negócio'}

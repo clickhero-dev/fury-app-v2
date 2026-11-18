@@ -21,6 +21,7 @@ const generateImageSchema = z.object({
   // biblioteca nova: ids resolvidos no servidor, filtrando pelo tenant
   template_photo_id: z.string().uuid().optional(),
   photo_ids: z.array(z.string().uuid()).max(2).optional(),
+  save_as_logo: z.boolean().optional().default(false),
 }).refine((b) => !(b.reference_image_urls?.length && b.photo_ids?.length), {
   message: 'Use reference_image_urls ou photo_ids, não os dois.',
   path: ['photo_ids'],

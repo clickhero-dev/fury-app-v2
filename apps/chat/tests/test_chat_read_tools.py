@@ -1,6 +1,31 @@
 import asyncio
 import httpx
+import json
+from uuid import uuid4
 from chat_read_tools import ChatReadTools
+
+
+def test_promote_attachment_uses_only_the_owned_private_attachment_path():
+    async def run():
+        conversation, attachment = str(uuid4()), str(uuid4())
+        async def backend(request):
+            assert request.method == 'POST'
+            assert request.url.path == f'/api/chat/conversations/{conversation}/attachments/{attachment}/promote'
+            assert request.headers['authorization'] == 'Bearer delegated'
+            assert json.loads(request.content) == {'target': 'library', 'kind': 'empresa'}
+            return httpx.Response(201, json={'data': {'kind': 'library', 'photos': [{'id': 'p'}]}})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            result = await ChatReadTools('https://ady.test', 'delegated', client).promote_attachment(conversation, attachment, 'library', 'empresa')
+            assert result == {'kind': 'library', 'photos': [{'id': 'p'}]}
+    asyncio.run(run())
+
+
+def test_promote_attachment_rejects_invalid_ids_or_kind_without_http():
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: (_ for _ in ()).throw(AssertionError()))) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client)
+            assert 'error' in await tool.promote_attachment('not-id', 'not-id', 'library', 'secret')
+    asyncio.run(run())
 
 def test_quota_only_returns_contract_and_delegated_identity():
     async def run():
