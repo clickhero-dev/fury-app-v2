@@ -183,9 +183,9 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }
     await page.screenshot({path:testInfo.outputPath(`video-controls-${viewport.width}.png`)});
     const rect = (await video.boundingBox())!;
     await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height - 15);
-    const dialog = page.getByRole('dialog', { name: 'Visualização de Vídeo gerado' });
-    await expect(dialog.locator('video[controls]')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Fechar visualização' }).click();
+    const viewer = page.getByRole('dialog', { name: 'Visualização de Vídeo gerado' });
+    await expect(viewer.locator('video[controls]')).toBeVisible();
+    await viewer.getByRole('button', { name: 'Fechar visualização' }).click();
     await latest.click();
     await expect(latest).toHaveCount(0);
   });

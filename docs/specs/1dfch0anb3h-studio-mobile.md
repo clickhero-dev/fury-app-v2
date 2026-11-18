@@ -70,3 +70,7 @@ O workflow `qa-jornada-real.yml` fazia campanha e geração real em toda PR. Par
 - No commit `4da5d7a5`, os 12 E2E do Estúdio passaram nos dois tamanhos mobile e desktop, com API simulada e rede externa bloqueada; os 68 testes Vitest focados passaram. Capturas dos modos imagem e vídeo em 360px foram inspecionadas. Não foi executada geração paga ou integração real com provedores.
 - O artefato do CI Chatbot 44280945530 mostrou sete falhas E2E: duas procuravam o botão antigo de visualização de anexo, e cinco usavam seletor ambíguo de vídeo após a integração do visualizador. Atualizados os seletores e a jornada para conferir a imagem no modal e os controles de vídeo no modal antes de fechá-lo. A primeira tentativa revelou que o modal bloqueava o clique seguinte; o teste agora fecha o modal explicitamente. Os sete cenários passaram localmente. Nenhuma lógica de produção foi alterada nesta correção.
 - A jornada real paga permanece manual conforme documentado acima; o gate simulado não comprova integração com provedores. O resultado final dos checks deve ser conferido no GitHub no commit publicado.
+
+## Integração com hmg atual
+
+A base atual executa em PR uma consulta sem mutações e exige opt-in manual para operações reais. A integração preserva integralmente esse workflow e mantém o E2E simulado do Estúdio no CI. Os relatos anteriores de jornada exclusivamente manual descrevem o estado da PR antes desta integração.

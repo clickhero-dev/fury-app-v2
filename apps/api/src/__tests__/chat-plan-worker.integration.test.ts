@@ -1,7 +1,7 @@
 /* Funcionalidade: executor BullMQ + Postgres isolados sobrevivem a restart.
  * Cenário: Dado dois workers e dois jobs, quando executam, então só há um efeito por etapa.
  * Cenário: Dado plano aprovado sem enqueue, quando recovery roda após restart, então retoma do DB.
- * Cenário: Dado draft_text interrompido, recovery respeita o limite de duas tentativas.
+ * Cenário: Dado rascunho interno interrompido, recovery respeita o limite de duas tentativas.
  */
 import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import postgres from 'postgres';
@@ -94,9 +94,7 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         await q.recover(recovery);
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
     });
-    it('restart repete draft_text interrompido uma vez', async () => {
-        // Stop the previous workers before creating the recovery fixture: a queued
-        // recovery job could otherwise execute the newly approved plan immediately.
+    it('restart repete draft_text interno uma vez e persiste o resultado', async () => {
         await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {
@@ -107,10 +105,10 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         await workers[0].waitUntilReady();
         await q.recover(recovery);
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
-        expect(calls).toBe(before + 1);
-        expect((await repo.get(conversation, p.id)).tasks[0].attempts).toBe(2);
+        expect(calls - before).toBe(1);
+        expect((await repo.get(conversation, p.id)).tasks[0]).toMatchObject({ status: 'completed', attempts: 2, result: { summary: 'Resultado sintético verificável' } });
     });
-    it('restart não repete draft_text após duas tentativas', async () => {
+    it('restart com limite esgotado não repete draft_text incerto', async () => {
         await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {

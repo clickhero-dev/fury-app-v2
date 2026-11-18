@@ -34,7 +34,8 @@ describe('sessão do trial público', () => {
     const nextRefresh = jwt.decode(renewed.tokens.refreshToken) as jwt.JwtPayload;
     expect(nextAccess.exp).toBe(firstAccess.exp);
     expect(nextRefresh.exp).toBe(firstRefresh.exp);
-    expect(setex).toHaveBeenLastCalledWith('refresh:u1', 20 * 24 * 60 * 60, expect.any(String));
+    expect(renewed.tokens.refreshToken).toBe(first.refreshToken);
+    expect(setex).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(20 * 24 * 60 * 60 * 1000);
     await expect(auth.refresh({ refreshToken: renewed.tokens.refreshToken })).rejects.toMatchObject({ code: 'REFRESH_TOKEN_EXPIRED' });
   });
@@ -57,7 +58,8 @@ describe('sessão do trial público', () => {
     vi.advanceTimersByTime(10 * 24 * 60 * 60 * 1000);
     const renewed = await auth.refresh({ refreshToken: socialSession.refreshToken });
     expect((jwt.decode(renewed.tokens.refreshToken) as jwt.JwtPayload).exp).toBe((jwt.decode(socialSession.refreshToken) as jwt.JwtPayload).exp);
-    expect(setex).toHaveBeenLastCalledWith('refresh:u1', 20 * 24 * 60 * 60, expect.any(String));
+    expect(renewed.tokens.refreshToken).toBe(socialSession.refreshToken);
+    expect(setex).toHaveBeenLastCalledWith('refresh:u1', duration, expect.any(String));
   });
 
   it('rejeita links inválidos sem emitir sessão', async () => {

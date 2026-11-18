@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 for (const provider of ['google', 'facebook'] as const) {
-  test(`${provider}: Trial aguarda aceite e abre chat`, async ({ page }) => {
+  // Gate de política temporariamente desativado na base hmg; preservar essa configuração.
+  test(`${provider}: Trial abre Home e conserva estado de política`, async ({ page }) => {
     const user = { id: 'u1', name: 'Teste', email: 'teste@example.test', role: 'owner', tenantId: 'tenant' };
     const session = { token: 'token', refreshToken: 'refresh', user, isNewUser: false, policy: { currentVersion: 'v1', accepted: false } };
     let accepted = false;
@@ -18,10 +19,9 @@ for (const provider of ['google', 'facebook'] as const) {
     });
     const query = provider === 'google' ? `social_login=${encodeURIComponent(JSON.stringify(session))}` : 'fb_handoff=handoff';
     await page.goto(`/login?${query}`);
-    await expect(page).toHaveURL(/\/politica$/);
-    await page.getByTestId('policy-agree-checkbox').check();
-    await page.getByTestId('policy-accept-button').click();
-    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page).toHaveURL(/\/inicio$/);
+    await expect(page.getByRole('heading', { name: 'O que vamos fazer hoje?' })).toBeVisible();
+    expect(accepted).toBe(false);
     await expect(page.getByTestId('policy-accept-button')).toHaveCount(0);
   });
 }

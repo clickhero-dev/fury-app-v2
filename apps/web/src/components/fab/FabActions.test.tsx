@@ -50,6 +50,12 @@ describe('FabActions — ações flutuantes de criação', () => {
     expect(screen.getByRole('button', { name: 'Criar campanha' }).parentElement).toHaveClass('hidden', 'md:flex');
   });
 
+  /* Cenário: Home apresenta apenas seus quatro caminhos guiados, sem atalhos sobre os cards. */
+  it('mantém a Home livre de atalhos flutuantes sobre os quatro cards', () => {
+    renderFab('/inicio');
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
   it('esconde o atalho de funcionalidade bloqueada pelo plano', () => {
     blocked.keys = ['campaigns.create', 'calendar'];
     renderFab();
