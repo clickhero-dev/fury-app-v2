@@ -33,6 +33,13 @@ describe('Pedidos diretos com sugestões contextuais opcionais',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Usar uma foto minha'}));
     expect(onSelect).toHaveBeenCalledWith(expect.stringContaining('Se não houver foto anexada'));
   });
+  it('oferece uma entrada opcional para conhecer o negócio sem abrir formulário',()=>{
+    const onSelect=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Configurar meu negócio'}));
+    expect(onSelect).toHaveBeenCalledWith(expect.stringContaining('ajuda guiada'));
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
   it('preserva sugestões PR465 nome/cidade sem enviar até escolha; clique duplicado não repete',async()=>{
     let resolve!:()=>void;
     const onSelect=vi.fn(()=>new Promise<void>(done=>{resolve=done;}));

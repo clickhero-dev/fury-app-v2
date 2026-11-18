@@ -44,6 +44,8 @@ describe('delegação do chatbot', () => {
   it('limita as rotas acessíveis', () => {
     expect(isChatToolPath('/api/studio/ai/generate-image')).toBe(true);
     expect(isChatToolPath('/api/campaigns/chat-account/act_123')).toBe(true);
+    expect(isChatToolPath('/api/chat/conversations/11111111-1111-4111-8111-111111111111/attachments/22222222-2222-4222-8222-222222222222/promote')).toBe(true);
+    expect(isChatToolPath('/api/chat/conversations/../attachments/22222222-2222-4222-8222-222222222222/promote')).toBe(false);
     expect(isChatToolPath('/api/campaigns/chat-account/act_123/extra')).toBe(false);
     expect(isChatToolPath('/api/admin/users')).toBe(false);
     expect(isChatToolPath('/api/studio/../admin/users')).toBe(false);
