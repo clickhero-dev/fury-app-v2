@@ -69,3 +69,52 @@ class ChatReadTools:
             return result
         except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
             return {'error': 'Não foi possível diagnosticar a conexão Meta.'}
+
+    async def promote_attachment(self, conversation_id: str, attachment_id: str, target: str, kind: str = '') -> dict:
+        """Salvar uma imagem enviada pelo usuário na marca: target logo, ou library com kind empresa/produto/equipe/modelo.
+
+        Use apenas quando a pessoa tiver acabado de enviar a imagem para essa
+        finalidade. A promoção usa o anexo privado pertencente à conversa, sem
+        aceitar URLs externas nem arquivos de outro usuário.
+        """
+        from uuid import UUID
+        try:
+            conversation_id, attachment_id = str(UUID(conversation_id)), str(UUID(attachment_id))
+            if target == 'logo':
+                if kind:
+                    raise ValueError()
+                body = {'target': 'logo'}
+            elif target == 'library' and kind in ('empresa', 'produto', 'equipe', 'modelo'):
+                body = {'target': 'library', 'kind': kind}
+            else:
+                raise ValueError()
+            response = await self.client.post(
+                self.base_url + f'/api/chat/conversations/{conversation_id}/attachments/{attachment_id}/promote',
+                headers={'Authorization': 'Bearer ' + self.token}, json=body, timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json().get('data')
+            if not isinstance(data, dict):
+                raise ValueError()
+            return data
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+            return {'error': 'Não foi possível salvar esta imagem na marca.'}
+
+    async def save_guided_business_context(self, tenant_name: str, business_context: str) -> dict:
+        """Persistir nome e oferta confirmados pelo fluxo guiado no contexto do negócio.
+
+        Use somente os valores retornados por guided_setup_answer.profileUpdate.
+        """
+        try:
+            if not 1 <= len(tenant_name.strip()) <= 255 or not 1 <= len(business_context.strip()) <= 5000:
+                raise ValueError()
+            response = await self.client.post(self.base_url + '/api/auth/me/chat-guided-update',
+                headers={'Authorization': 'Bearer ' + self.token},
+                json={'tenantName': tenant_name.strip(), 'businessContext': business_context.strip()}, timeout=15.0)
+            response.raise_for_status()
+            data = response.json().get('data')
+            if not isinstance(data, dict):
+                raise ValueError()
+            return data
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+            return {'error': 'Não foi possível salvar o contexto do negócio agora.'}

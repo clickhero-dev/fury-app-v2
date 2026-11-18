@@ -22,13 +22,11 @@ describe('MessageAttachments', () => {
     expect(screen.getByRole('button',{name:'Visualizar foto.png'})).toBeEnabled();
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
   });
-  it('busca bytes privados só ao abrir a imagem e revoga ao desmontar', async () => {
+  it('carrega bytes privados para mostrar a imagem e revoga ao desmontar', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('image',{headers:{'Content-Type':'image/png'}}));
     vi.stubGlobal('fetch',fetchMock);
     const {unmount} = render(<MessageAttachments conversationId="conversation" attachments={[attachment]}/>);
     expect(screen.getByText('foto.png')).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'Visualizar foto.png'}));
     expect(await screen.findByRole('img',{name:'foto.png'})).toHaveAttribute('src','blob:private');
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/conversations\/conversation\/attachments\/926c70e4-3d3c-4329-ad77-6a0738db408c$/);
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer private-token');
@@ -64,6 +62,9 @@ describe('MessageAttachments', () => {
     if (mimeType === 'application/pdf') {
       expect(screen.getByRole('link',{name:label})).toHaveAttribute('href','blob:private');
       expect(screen.getByText(/4 páginas/)).toBeInTheDocument();
-    } else expect(screen.getByLabelText(label)).toHaveAttribute('controls');
+    } else {
+      fireEvent.click(await screen.findByRole('button',{name:'Abrir arquivo.pdf'}));
+      expect(screen.getByRole('dialog').querySelector('video')).toHaveAttribute('controls');
+    }
   });
 });

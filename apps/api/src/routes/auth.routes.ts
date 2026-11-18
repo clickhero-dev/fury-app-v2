@@ -20,6 +20,7 @@ router.get('/me', authMiddleware, controllers.auth.getMe);
 router.patch('/me', authMiddleware, controllers.auth.updateMe);
 router.get('/me/chat-snapshot', authMiddleware, tenantMiddleware, controllers.chatProfile.snapshot);
 router.patch('/me/chat-update', authMiddleware, tenantMiddleware, controllers.chatProfile.update);
+router.post('/me/chat-guided-update', authMiddleware, tenantMiddleware, controllers.chatProfile.guidedUpdate);
 router.post('/business-context/improve', authMiddleware, tenantMiddleware, controllers.businessContext.improve);
 router.post('/change-password', authMiddleware, controllers.auth.changePassword);
 router.post('/set-password', authMiddleware, controllers.auth.setPassword);
