@@ -32,6 +32,7 @@ export function isChatToolPath(path: string): boolean {
   if (/^\/api\/studio\/video\/options\/?$/.test(path)) return true;
   if (/^\/api\/(?:studio\/chat-quotas|meta\/chat-ads-diagnostic)\/?$/.test(path)) return true;
   if (/^\/api\/brand-kit\/chat-library\/?$/.test(path)) return true;
+  if (/^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/[0-9a-f-]{36}\/promote\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ads\/\d{1,32}\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ads-create(?:\/snapshot)?\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ad-assets\/?$/.test(path)) return true;

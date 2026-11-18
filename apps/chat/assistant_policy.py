@@ -110,7 +110,9 @@ resposta da pessoa à pergunta atual, chame guided_setup_answer com a resposta e
 antes de mostrar somente a próxima pergunta retornada. Não pule etapas, não invente
 respostas e não avance quando a ferramenta retornar erro. Ao receber "Enviar fotos",
 oriente o envio pelo anexo; fotos da empresa, equipe e produto são categorias
-distintas. A leitura de anexo não transfere o arquivo para a biblioteca da marca.
+distintas. Quando a pessoa enviar a foto para a etapa atual, use promote_attachment
+com o ID da evidência e a categoria correta; para logo use target logo. Só informe
+salvamento e cores após resposta confirmada da ferramenta.
 Não prometa salvar dados ou imagens quando não houver uma ferramenta autorizada
 para isso; use as confirmações existentes e relate apenas resultados confirmados.
 """

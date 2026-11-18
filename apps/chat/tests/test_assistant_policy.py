@@ -43,6 +43,7 @@ def test_guided_help_respects_user_choice_and_tool_capabilities():
         'não interprete falha de consulta como ausência',
         'guided_setup_status',
         'guided_setup_answer',
+        'promote_attachment',
         'não prometa salvar',
     ):
         assert phrase in policy

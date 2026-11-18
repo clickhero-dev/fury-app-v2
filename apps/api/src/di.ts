@@ -102,6 +102,7 @@ import { ChatMediaController } from './controllers/chat-media.controller.js';
 import { ChatMediaValidator } from './services/chat/chat-media-validator.js';
 import { ChatTranscriptionService } from './services/chat/chat-transcription.service.js';
 import { ChatAttachmentService } from './services/chat/chat-attachment.service.js';
+import { ChatAttachmentPromotionService } from './services/chat/chat-attachment-promotion.service.js';
 import { ChatAttachmentReader } from './services/chat/chat-attachment-reader.js';
 import { OpenRouterChatMediaClient } from './services/chat/openrouter-chat-media.client.js';
 import { ChatAttachmentRepository } from './repository/chat-attachment.repository.js';
@@ -213,6 +214,7 @@ export const chatAttachmentService = new ChatAttachmentService(
   (tenantId, userId) => new ChatAttachmentRepository(tenantId, userId),
   createChatPrivateStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
 );
+export const chatAttachmentPromotionService = new ChatAttachmentPromotionService(chatAttachmentService, brandKitService, brandKitPhotoService);
 export const chatPlanRuntime = createChatPlanRuntime({
   baseUrl: process.env.INTERNAL_NODE_API_ORIGIN ?? `http://127.0.0.1:${process.env.PORT || '3000'}`,
   secret: process.env.CHAT_DELEGATION_SECRET ?? '',
@@ -220,7 +222,7 @@ export const chatPlanRuntime = createChatPlanRuntime({
 });
 
 export const controllers = {
-  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService),
+  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService, chatAttachmentPromotionService),
   chatPlan: chatPlanRuntime.controller,
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),

@@ -69,3 +69,33 @@ class ChatReadTools:
             return result
         except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
             return {'error': 'Não foi possível diagnosticar a conexão Meta.'}
+
+    async def promote_attachment(self, conversation_id: str, attachment_id: str, target: str, kind: str = '') -> dict:
+        """Salvar uma imagem enviada pelo usuário na marca: target logo, ou library com kind empresa/produto/equipe/modelo.
+
+        Use apenas quando a pessoa tiver acabado de enviar a imagem para essa
+        finalidade. A promoção usa o anexo privado pertencente à conversa, sem
+        aceitar URLs externas nem arquivos de outro usuário.
+        """
+        from uuid import UUID
+        try:
+            conversation_id, attachment_id = str(UUID(conversation_id)), str(UUID(attachment_id))
+            if target == 'logo':
+                if kind:
+                    raise ValueError()
+                body = {'target': 'logo'}
+            elif target == 'library' and kind in ('empresa', 'produto', 'equipe', 'modelo'):
+                body = {'target': 'library', 'kind': kind}
+            else:
+                raise ValueError()
+            response = await self.client.post(
+                self.base_url + f'/api/chat/conversations/{conversation_id}/attachments/{attachment_id}/promote',
+                headers={'Authorization': 'Bearer ' + self.token}, json=body, timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json().get('data')
+            if not isinstance(data, dict):
+                raise ValueError()
+            return data
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+            return {'error': 'Não foi possível salvar esta imagem na marca.'}
