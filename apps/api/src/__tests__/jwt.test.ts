@@ -53,6 +53,27 @@ describe('jwt', () => {
     expect(decoded.userId).toBe('u1');
   });
 
+  it('refresh token tem prazo absoluto de 30 dias e identificador único', () => {
+    const previous = process.env.JWT_REFRESH_EXPIRES_IN;
+    delete process.env.JWT_REFRESH_EXPIRES_IN;
+    try {
+      const first = generateRefreshToken('u1');
+      const second = generateRefreshToken('u1');
+      const decoded = jwt.decode(first) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(30 * 24 * 60 * 60);
+      expect(first).not.toBe(second);
+    } finally {
+      if (previous === undefined) delete process.env.JWT_REFRESH_EXPIRES_IN;
+      else process.env.JWT_REFRESH_EXPIRES_IN = previous;
+    }
+  });
+
+  it('access token renovado não ultrapassa o fim da sessão', () => {
+    const deadline = Math.floor(Date.now() / 1000) + 60;
+    const token = generateAccessToken({ userId: 'u1', tenantId: 't1', email: 'a@b.com', role: 'admin' }, deadline);
+    expect((jwt.decode(token) as { exp: number }).exp).toBe(deadline);
+  });
+
   it('verifyAccessToken returns payload for valid token', () => {
     const token = generateAccessToken({ userId: 'u1', tenantId: 't1', email: 'a@b.com', role: 'admin' });
     const payload = verifyAccessToken(token);
