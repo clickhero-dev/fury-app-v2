@@ -37,4 +37,11 @@ describe('visualização de mídia no chat', () => {
     fireEvent.keyDown(document,{key:'Tab'});
     expect(document.activeElement).toBe(close);
   });
+  it('informa falha de mídia e permite tentar visualização novamente', () => {
+    render(<ChatMediaViewer src="https://example.test/foto.png" kind="image" name="foto.png" onDownload={vi.fn()}/>);
+    fireEvent.error(screen.getByAltText('foto.png'));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Tentar carregar foto.png novamente'}));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });
