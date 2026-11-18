@@ -9,7 +9,8 @@ ALLOWED = frozenset(('timeout', 'auth', 'error'))
 def classify_provider_error(error: Exception) -> str:
     import openai
     from streaming import ProviderRunError
-    if isinstance(error, ProviderRunError):
+    from multi_provider_core import ProviderFailure
+    if isinstance(error, (ProviderRunError, ProviderFailure)):
         return error.kind if error.kind in ALLOWED else 'error'
     if isinstance(error, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)):
         return 'timeout'
@@ -18,12 +19,13 @@ def classify_provider_error(error: Exception) -> str:
     return 'error'
 
 
-async def report_provider_failure(client: httpx.AsyncClient, host: str, key: str, kind: str) -> None:
+async def report_provider_failure(client: httpx.AsyncClient, host: str, key: str, kind: str, provider: str = 'openrouter') -> None:
     safe = kind if kind in ALLOWED else 'error'
-    log.warning('Falha de provedor OpenRouter: %s', safe)
+    provider = provider if provider in ('openai', 'anthropic', 'openrouter') else 'unknown'
+    log.warning('Falha de provedor %s: %s', provider, safe)
     if not key:
         return
     try:
-        await client.post(host.rstrip('/') + '/capture/', json={'api_key':key, 'event':'chat_provider_failure', 'properties':{'distinct_id':'chat-service','provider':'openrouter','kind':safe}}, timeout=3.0)
+        await client.post(host.rstrip('/') + '/capture/', json={'api_key':key, 'event':'chat_provider_failure', 'properties':{'distinct_id':'chat-service','provider':provider,'kind':safe}}, timeout=3.0)
     except httpx.HTTPError:
         log.warning('Telemetria do chatbot indisponível')

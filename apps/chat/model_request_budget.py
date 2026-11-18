@@ -78,6 +78,16 @@ def durable_budget_scope(charge):
         _durable_charge.reset(token)
 
 
+async def admit_model_request(body: bytes):
+    """Validate and charge one physical model request before sending it."""
+    tokens = estimate_request_tokens(body)
+    if tokens > MAX_MODEL_REQUEST_TOKENS:
+        raise ModelRequestBudgetExceeded('A requisição excede o limite seguro de contexto.')
+    charge = _durable_charge.get()
+    if charge is not None:
+        await charge(tokens)
+
+
 @contextmanager
 def provider_retry_scope(run_id=None, on_retry=None):
     state = {

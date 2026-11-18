@@ -26,7 +26,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
  *   1. Tenta renovar o token via `POST /auth/refresh`.
  *   2. Se o refresh estiver em andamento, enfileira a requisição original.
  *   3. Após o refresh, reprocessa a fila com o novo token.
- *   4. Se o refresh falhar, força logout.
+ *   4. Preserva a sessão em falhas temporárias de refresh.
  * - Em caso de 401 em rotas de auth (`/auth/me`, `/auth/refresh`), força logout.
  */
 api.interceptors.response.use(
