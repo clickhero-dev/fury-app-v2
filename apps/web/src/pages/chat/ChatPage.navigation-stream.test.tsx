@@ -1,3 +1,4 @@
+import './chat-websocket-test-mock';
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';

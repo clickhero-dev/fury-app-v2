@@ -36,6 +36,27 @@ function app(fetcher: typeof fetch, logged = true) {
   return app;
 }
 describe('proxy do chat', () => {
+  it('emite ticket somente para usuário autenticado, sem cache e sem encaminhar token original', async () => {
+    const fetcher = vi.fn(async () => new Response('{"ticket":"opaque"}', { headers: {'content-type': 'application/json'} }));
+    const server = app(fetcher as typeof fetch);
+    const res = await request(server).post('/chat/websocket-ticket').set('Authorization', 'Bearer original').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.ticket).toBe('opaque');
+    expect(res.headers['cache-control']).toContain('no-store');
+    expect(fetcher.mock.calls[0][0]).toBe('http://chat:8000/websocket-ticket');
+    const headers = fetcher.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers.authorization).not.toContain('original');
+    expect(verifyChatDelegation(headers.authorization.slice(7), secret).humanIntent).not.toBe(true);
+    expect((await request(server).get('/chat/websocket-ticket')).status).toBe(404);
+    expect((await request(app(fetcher as typeof fetch, false)).post('/chat/websocket-ticket')).status).toBe(401);
+  });
+  it('não emite ticket para ator delegado nem aceita corpo controlado pelo cliente', async () => {
+    const fetcher = vi.fn();
+    vi.mocked(getDelegatedUser).mockReturnValueOnce(user);
+    expect((await request(app(fetcher as typeof fetch)).post('/chat/websocket-ticket').send({})).status).toBe(403);
+    expect((await request(app(fetcher as typeof fetch)).post('/chat/websocket-ticket').send({tenantId:'outro'})).status).toBe(400);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it.each([
     '/conversations/123/approvals/review',
     '/conversations/123/approvals/confirm-batch',
