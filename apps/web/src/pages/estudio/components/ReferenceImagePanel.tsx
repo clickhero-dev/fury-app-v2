@@ -19,7 +19,7 @@ export function FilterChips({ options, value, counts, onChange }: FilterChipsPro
   return (
     <div className="space-y-1.5">
       {/* todos lado a lado: nome em cima, número embaixo */}
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      <div className={`grid gap-1.5 ${options.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
         {options.map((f) => {
           const active = value === f;
           return (
@@ -32,7 +32,7 @@ export function FilterChips({ options, value, counts, onChange }: FilterChipsPro
                 active ? 'chip-active border-brand-hover bg-brand-hover text-white shadow-sm' : 'border-border bg-surface text-text-secondary hover:text-text-primary'
               }`}
             >
-              <span className="block max-w-full truncate">{f === 'todas' ? 'Todas' : KIND_META[f].plural}</span>{' '}
+              <span className="block max-w-full break-words">{f === 'todas' ? 'Todas' : KIND_META[f].plural}</span>{' '}
               <span className="block text-[11px] opacity-75">{counts[f]}</span>
             </button>
           );
@@ -127,7 +127,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
   const visible = filter === 'todas' ? photos : photos.filter((p) => p.kind === filter);
 
   return (
-    <aside className="ady-decor sticky top-6 flex max-h-[calc(100vh-11rem)] flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+    <aside className="ady-decor min-w-0 lg:sticky lg:top-6 flex max-h-[60vh] lg:max-h-[calc(100vh-11rem)] flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="shrink-0">
         <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Suas imagens</h2>
         <p className="mt-1 text-xs text-text-tertiary">Toque numa imagem para usar nesta criação.</p>
@@ -177,7 +177,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
                   selected={selected}
                   onClick={() => (photo.kind === 'modelo' ? onPickTemplate?.(photo) : onToggleArtPhoto(photo))}
                 />
-                <button type="button" aria-label={`Ocultar imagem: ${KIND_META[photo.kind].label}`} title="Ocultar do painel" onClick={() => { hide.reset(); setFeedback(''); setToHide(photo); }} className="absolute right-1 bottom-1 rounded bg-surface p-1 text-text-primary shadow"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={`Ocultar imagem: ${KIND_META[photo.kind].label}`} title="Ocultar do painel" onClick={() => { hide.reset(); setFeedback(''); setToHide(photo); }} className="mt-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border border-border bg-surface px-1 text-xs text-text-secondary"><X className="h-3 w-3" aria-hidden="true" />Ocultar</button>
                 </div>
               );
             })}

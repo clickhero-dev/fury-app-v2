@@ -53,11 +53,11 @@ export function LibraryPickerDialog({ mode, selectedIds, maxArt, onClose, onConf
   };
 
   const uploadTileClass =
-    'flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-2 text-center text-xs font-semibold';
+    'flex aspect-square cursor-pointer focus-within:ring-2 focus-within:ring-brand flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-2 text-center text-xs font-semibold';
 
   return (
     <StudioDialogShell open onClose={onClose} className="max-w-2xl">
-        <DialogHeader>
+        <DialogHeader className="pr-12 sm:pr-8">
           <DialogTitle>{isModelo ? 'Escolha um modelo' : 'Fotos para colocar na arte'}</DialogTitle>
           <DialogDescription>
             {isModelo
@@ -80,7 +80,7 @@ export function LibraryPickerDialog({ mode, selectedIds, maxArt, onClose, onConf
             <button type="button" className="underline" onClick={() => void refetch()}>Tentar novamente</button>
           </div>
         ) : (
-          <div className="grid max-h-[50vh] grid-cols-4 gap-3 overflow-y-auto pr-1 sm:grid-cols-5">
+          <div className="grid max-h-[50vh] grid-cols-3 gap-3 overflow-y-auto pr-1 sm:grid-cols-5">
             {isModelo ? (
               <label className={`${uploadTileClass} border-brand/50 bg-brand/5 text-brand`}>
                 <input

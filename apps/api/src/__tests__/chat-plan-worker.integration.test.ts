@@ -1,7 +1,7 @@
 /* Funcionalidade: executor BullMQ + Postgres isolados sobrevivem a restart.
  * Cenário: Dado dois workers e dois jobs, quando executam, então só há um efeito por etapa.
  * Cenário: Dado plano aprovado sem enqueue, quando recovery roda após restart, então retoma do DB.
- * Cenário: Dada tarefa interna com tentativas esgotadas após crash, quando worker reinicia, então não repete.
+ * Cenário: Dado draft_text interrompido, recovery respeita o limite de duas tentativas.
  */
 import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import postgres from 'postgres';
@@ -94,10 +94,23 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         await q.recover(recovery);
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
     });
-    it('restart após esgotar tentativas não repete draft_text', async () => {
-        // A recuperação periódica do cenário anterior continua agendada. Pare os
-        // workers antes de aprovar o plano para não executar a tarefa antes de
-        // instalar o estado de crash que este cenário pretende testar.
+    it('restart repete draft_text interrompido uma vez', async () => {
+        // Stop the previous workers before creating the recovery fixture: a queued
+        // recovery job could otherwise execute the newly approved plan immediately.
+        await Promise.all(workers.map(w => w.close()));
+        const p = await draft('draft_text', { prompt: 'Texto sintético' });
+        await repo.mutate(conversation, p.id, p.version, p => {
+            Object.assign(p.tasks[0], { status: 'running', attempts: 1, fence: randomUUID(), leaseUntil: new Date(Date.now() - 1000).toISOString() });
+        });
+        const before = calls;
+        workers = [createChatPlanWorker(connection, executor, q, recovery, { prefix })];
+        await workers[0].waitUntilReady();
+        await q.recover(recovery);
+        await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
+        expect(calls).toBe(before + 1);
+        expect((await repo.get(conversation, p.id)).tasks[0].attempts).toBe(2);
+    });
+    it('restart não repete draft_text após duas tentativas', async () => {
         await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {
