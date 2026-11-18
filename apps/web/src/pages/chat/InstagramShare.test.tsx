@@ -30,6 +30,18 @@ describe('compartilhamento no Instagram', () => {
     expect(post.mock.calls[0][1]).toEqual({caption:'Olá',instagramUserId:'ig'});
     expect(await screen.findByText(/publicado com sucesso/i)).toBeTruthy();
   });
+  it('permite cancelar revisão com Escape e devolve foco ao botão', async () => {
+    get.mockResolvedValueOnce({data:{data:[{selectedInstagramUserId:'ig'}]}});
+    get.mockResolvedValueOnce({data:{data:{scopes:['instagram_content_publish']}}});
+    render(<InstagramShare src="https://example.com/imagem.png" kind="image" mediaKey="g"/>);
+    const trigger = await screen.findByRole('button', {name:'Compartilhar no Instagram'});
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', {name:'Revisar publicação'})).toBeTruthy();
+    fireEvent.keyDown(document,{key:'Escape'});
+    expect(screen.queryByRole('dialog',{name:'Revisar publicação'})).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(post).not.toHaveBeenCalled();
+  });
   it('não considera erro de permissão como conta desconectada', async () => {
     get.mockResolvedValueOnce({data:{data:[{selectedInstagramUserId:'ig'}]}});
     get.mockRejectedValueOnce(new Error('offline'));

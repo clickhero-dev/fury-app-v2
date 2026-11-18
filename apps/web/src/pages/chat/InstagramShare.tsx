@@ -15,6 +15,8 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
   const [message, setMessage] = useState('');
   const [locked, setLocked] = useState(() => !!sessionStorage.getItem(`chat-ig-publish:${mediaKey}`));
   const submitting = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const check = useCallback(async () => {
     setState('loading');
     try {
@@ -36,6 +38,24 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [check]);
+  useEffect(() => {
+    if (!review) return;
+    dialog.current?.querySelector<HTMLElement>('textarea')?.focus();
+    const onKeyDown = (event:KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting.current) {
+        setReview(false); trigger.current?.focus();
+      }
+      if (event.key === 'Tab') {
+        const items = dialog.current?.querySelectorAll<HTMLElement>('textarea, button:not([disabled]), video[controls]');
+        if (!items?.length) return;
+        const first = items[0], last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown',onKeyDown);
+    return () => document.removeEventListener('keydown',onKeyDown);
+  },[review]);
   async function publish() {
     if (submitting.current || locked || state !== 'ready') return;
     submitting.current = true; setBusy(true); setMessage('');
@@ -58,18 +78,18 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
     } finally { submitting.current = false; setBusy(false); setReview(false); }
   }
   return <div>
-    <button type="button" disabled={state !== 'ready' || locked} onClick={() => setReview(true)}>Compartilhar no Instagram</button>
+    <button ref={trigger} type="button" disabled={state !== 'ready' || locked} onClick={() => setReview(true)}>Compartilhar no Instagram</button>
     {state === 'loading' && <p role="status">Verificando Instagram…</p>}
     {state === 'disconnected' && <a href="/configuracoes/integracoes" target="_blank" rel="noopener noreferrer">Conectar Instagram e dar permissão</a>}
     {state === 'permission' && <p>Permissão de publicação ausente. <a href="/configuracoes/integracoes" target="_blank" rel="noopener noreferrer">Atualize a integração Meta</a>.</p>}
     {state === 'multiple' && <p>Há mais de uma conexão. Selecione a conta em Configurações antes de compartilhar.</p>}
     {state === 'unknown' && <div role="alert">Não foi possível verificar o Instagram. <button type="button" onClick={() => void check()}>Tentar novamente</button></div>}
     {review && createPortal(<div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4">
-      <div role="dialog" aria-modal="true" aria-label="Revisar publicação" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 text-slate-900 shadow-xl">
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label="Revisar publicação" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 text-slate-900 shadow-xl">
       <p>Publicar {kind === 'image' ? 'imagem' : 'vídeo'} em @{username}?</p>
       {kind === 'image' ? <img src={src} alt="Mídia a publicar" className="my-3 max-h-64 max-w-full object-contain"/> : <video src={src} controls aria-label="Mídia a publicar" className="my-3 max-h-64 max-w-full"/>}
       <label>Legenda<textarea value={caption} maxLength={5000} onChange={event => setCaption(event.target.value)}/></label>
-      <button type="button" disabled={busy} onClick={() => setReview(false)}>Cancelar</button>
+      <button type="button" disabled={busy} onClick={() => {setReview(false); trigger.current?.focus();}}>Cancelar</button>
       <button type="button" disabled={busy || locked} onClick={() => void publish()}>Confirmar publicação</button>
       </div>
     </div>, document.body)}
