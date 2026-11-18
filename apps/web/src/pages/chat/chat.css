@@ -271,6 +271,7 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 }
 
 .ady-chat-action-start { display: grid; gap: .6rem; max-width: 100%; margin-top: .75rem; padding: .85rem; border: 1px solid var(--border-main); border-radius: 14px; background: var(--bg-surface); }
+.ady-chat-action-start textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 5rem; resize: vertical; }
 .ady-chat-action-start h2 { font-size: 1rem; line-height: 1.4; font-weight: 650; }
 .ady-chat-action-suggestions button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .ady-chat-action-start .ady-chat-action-suggestions { display: grid; }
