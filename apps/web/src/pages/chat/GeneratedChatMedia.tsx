@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ChatMediaViewer } from './ChatMediaViewer';
 import { InstagramShare } from './InstagramShare';
+import { downloadStudioAsset } from '@/lib/download-studio-asset';
 
-export function GeneratedChatMedia({src, kind, mediaKey}: {src: string; kind: 'image' | 'video'; mediaKey: string}) {
+export function GeneratedChatMedia({src, kind, mediaKey, assetId}: {src: string; kind: 'image' | 'video'; mediaKey: string; assetId?: string}) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const name = kind === 'image' ? 'Imagem gerada' : 'Vídeo gerado';
@@ -10,6 +11,10 @@ export function GeneratedChatMedia({src, kind, mediaKey}: {src: string; kind: 'i
     if (loading) return;
     setLoading(true); setError('');
     try {
+      if (assetId) {
+        await downloadStudioAsset(assetId);
+        return;
+      }
       const response = await fetch(src);
       if (!response.ok) throw new Error('download failed');
       const blob = await response.blob();

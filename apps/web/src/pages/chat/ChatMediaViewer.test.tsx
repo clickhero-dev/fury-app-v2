@@ -26,4 +26,15 @@ describe('visualização de mídia no chat', () => {
     fireEvent.click(screen.getByRole('button', {name:'Fechar visualização'}));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+  it('mantém navegação por teclado dentro da visualização', () => {
+    render(<ChatMediaViewer src="blob:foto" kind="image" name="foto.png" onDownload={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button', {name:'Abrir foto.png'}));
+    const close = screen.getByRole('button',{name:'Fechar visualização'});
+    const download = screen.getByRole('button',{name:'Baixar foto.png em tela cheia'});
+    close.focus();
+    fireEvent.keyDown(document,{key:'Tab',shiftKey:true});
+    expect(document.activeElement).toBe(download);
+    fireEvent.keyDown(document,{key:'Tab'});
+    expect(document.activeElement).toBe(close);
+  });
 });

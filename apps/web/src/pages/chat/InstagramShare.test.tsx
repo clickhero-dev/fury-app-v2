@@ -12,7 +12,7 @@ describe('compartilhamento no Instagram', () => {
   it('oferece conexão quando não há conta e não publica', async () => {
     get.mockResolvedValueOnce({data:{data:[]}});
     render(<InstagramShare src="https://example.com/imagem.png" kind="image" mediaKey="a"/>);
-    expect(await screen.findByRole('link', {name:/conectar instagram/i})).toBeTruthy();
+    expect((await screen.findByRole('link', {name:/conectar instagram/i})).getAttribute('target')).toBe('_blank');
     expect(post).not.toHaveBeenCalled();
   });
   it('pede revisão e confirmação antes de publicar', async () => {

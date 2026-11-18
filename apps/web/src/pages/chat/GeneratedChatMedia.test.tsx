@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { GeneratedChatMedia } from './GeneratedChatMedia';
 vi.mock('./InstagramShare', () => ({InstagramShare: () => null}));
+vi.mock('@/lib/download-studio-asset', () => ({downloadStudioAsset: vi.fn()}));
+import { downloadStudioAsset } from '@/lib/download-studio-asset';
 
 describe('mídia gerada', () => {
   it('permite abrir imagem e relata erro ao baixar', async () => {
@@ -25,5 +27,11 @@ describe('mídia gerada', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     click.mockRestore();
     vi.unstubAllGlobals();
+  });
+  it('usa download autenticado da biblioteca para mídia gerada persistida', async () => {
+    vi.mocked(downloadStudioAsset).mockResolvedValueOnce(undefined);
+    render(<GeneratedChatMedia src="https://example.com/image.png" kind="image" mediaKey="c" assetId="asset-1"/>);
+    fireEvent.click(screen.getByRole('button', {name:'Baixar Imagem gerada'}));
+    await waitFor(() => expect(downloadStudioAsset).toHaveBeenCalledWith('asset-1'));
   });
 });
