@@ -1,4 +1,9 @@
-# Chat: voz e anexos privados (API Node)
+# Chat: voz e anexos (API Node)
+
+Imagens novas JPEG/PNG/WebP usam o bucket público `fury-studio-assets` com as
+credenciais R2 do Estúdio. Qualquer pessoa com a URL pública pode acessá-las.
+Anexos antigos, PDFs e vídeos permanecem no armazenamento privado e dependem
+da configuração original para leitura e exclusão.
 
 ## Contrato HTTP
 
@@ -49,7 +54,7 @@ Cleanup humano mantém `withConversation` e é **somente para rascunhos**: qualq
 - Chave: resolução existente `resolveAiKey` dentro de `runWithTenant`, inclusive depois de Multer. Nenhuma chave do frontend e nenhum fallback de parceiro para chave alheia.
 - Desenvolvimento: `CHAT_PRIVATE_STORAGE_DIR` **absoluto**, privado, fora de diretórios servidos/static/public e do frontend. Diretório 0700, objetos 0600, UUIDs opacos, O_NOFOLLOW e rejeição de symlinks. Não usar um path alcançável pelo Vite `/@fs` ou outro servidor estático.
 - R2: `CHAT_PRIVATE_R2_BUCKET`, `CHAT_PRIVATE_R2_ACCOUNT_ID`, `CHAT_PRIVATE_R2_ACCESS_KEY_ID`, `CHAT_PRIVATE_R2_SECRET_ACCESS_KEY`, `CHAT_PRIVATE_R2_PRIVACY_CONFIRMED=true`.
-- O operador só deve confirmar privacidade depois de desabilitar `r2.dev` e qualquer domínio público do bucket separado. O protocolo S3 não permite verificar essa configuração administrativa; **não foi provisionada/verificada externamente**. O bucket `fury-studio-assets` é sempre recusado, não há URL pública/presigned nem fallback público. Em produção a ausência de R2 dedicado confirmado resulta em 503; local não é fallback de produção.
+- O operador só deve confirmar privacidade depois de desabilitar `r2.dev` e qualquer domínio público do bucket separado. O protocolo S3 não permite verificar essa configuração administrativa; **não foi provisionada/verificada externamente**. O adaptador privado recusa o bucket `fury-studio-assets`. Em produção, anexos antigos, PDFs e vídeos exigem R2 dedicado confirmado; local não é fallback de produção. Imagens novas usam o bucket público do Estúdio.
 - Dockerfile API instala `ffmpeg poppler-utils util-linux`. Um container descartável `node:22-alpine` confirmou os cinco executáveis de validação.
 
 ## Verificação reproduzível

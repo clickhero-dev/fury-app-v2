@@ -117,6 +117,7 @@
 .ady-chat-quick { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .ady-chat-quick button { border-radius: 24px; font-size: .8125rem; background: var(--bg-surface); }
 .ady-chat-quick svg { color: var(--color-brand); }
+.ady-chat-quick .ady-chat-quick-primary { flex-basis: 100%; justify-content: flex-start; border-color: var(--color-brand); font-weight: 650; }
 .ady-chat-message { max-width: min(88%, 720px); min-width: 0; width: fit-content; padding: .6rem .85rem; border: 1px solid var(--border-main); overflow-wrap: anywhere; box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
 .ady-chat-message > strong { display: block; margin-bottom: .2rem; font-size: .6875rem; color: var(--text-secondary); font-weight: 600; }
 .ady-chat-message[data-role=user] { align-self: flex-end; border-color: color-mix(in srgb, var(--color-brand) 22%, var(--border-main)); border-radius: 14px 4px 14px 14px; background: color-mix(in srgb, var(--color-brand) 16%, var(--bg-surface)); }
@@ -268,7 +269,6 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
   body:has(.ady-chat) .ady-notification-controls > button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
   body:has(.ady-chat) .ady-notification-controls > [role=dialog] { top: 100%; }
 }
-@media (max-width: 1023px) and (max-height: 450px) { .ady-chat-header { min-height: 112px; } }
 
 .ady-chat-action-start { display: grid; gap: .6rem; max-width: 100%; margin-top: .75rem; padding: .85rem; border: 1px solid var(--border-main); border-radius: 14px; background: var(--bg-surface); }
 .ady-chat-action-start h2 { font-size: 1rem; line-height: 1.4; font-weight: 650; }
@@ -276,6 +276,41 @@ html.dark .ady-chat-markdown a { color: var(--color-brand); }
 .ady-chat-action-start .ady-chat-action-suggestions { display: grid; }
 .ady-chat-action-start p { font-size: .8rem; color: var(--text-secondary); }
 .ady-chat-action-start > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ady-chat-more-ideas { align-self: flex-start; max-width: 100%; white-space: normal; }
 .ady-chat-welcome { min-width: 0; width: 100%; overflow-wrap: anywhere; }
 .ady-chat-quick button { max-width: 100%; }
 .ady-chat-quick svg { flex-shrink: 0; }
+
+/* One mobile toolbar, not a decorative masthead. Keep every action at least 44px. */
+@media (max-width: 767px), (max-width: 1023px) and (max-height: 450px) {
+  .ady-chat { font-size: 1rem; }
+  .ady-chat-header {
+    min-height: 52px;
+    padding: .2rem 7rem .2rem .5rem;
+    gap: .25rem;
+  }
+  .ady-chat-header > .ady-chat-avatar,
+  .ady-chat-header p { display: none; }
+  .ady-chat-header h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ady-chat-identity { display: block; }
+  .ady-chat-messages { padding: .625rem .5rem; gap: .5rem; }
+  .ady-chat-message { max-width: 100%; padding: .5rem .625rem; }
+  .ady-chat-markdown { line-height: 1.55; }
+  .ady-chat-markdown p { margin-bottom: .5rem; }
+  .ady-chat-markdown > :last-child { margin-bottom: 0; }
+  .ady-chat-approval { padding: .625rem .75rem; }
+  .ady-chat-approval > p { margin: .5rem 0; }
+  .ady-chat-details { margin: .5rem 0; gap: .375rem; font-size: 1rem; }
+  .ady-chat-details dd { margin-top: .125rem; }
+  /* The frame already reserves the bottom safe area; don't reserve it twice. */
+  .ady-chat-composer-area { padding: .375rem .5rem; }
+  .ady-chat-composer { gap: .375rem; }
+  .ady-chat-composer-hint { display: none; }
+  .ady-chat textarea::placeholder { white-space: nowrap; }
+  /* Scoped to chat: shell controls share the toolbar instead of covering messages. */
+  body:has(.ady-chat) .ady-notification-controls {
+    flex-direction: row;
+    top: calc(max(.5rem, env(safe-area-inset-top)) + .25rem);
+    right: calc(max(.5rem, env(safe-area-inset-right)) + .5rem);
+  }
+}

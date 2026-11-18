@@ -1,59 +1,81 @@
-import { useState } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatQuickActions } from './ChatQuickActions';
-import type { QuickAction } from './quick-actions';
 
-const labels = ['Criar post para o Instagram', 'Agendar posts da semana', 'Criar Reels para o Instagram', 'Criar vídeo para o negócio', 'Aumentar seguidores no Instagram', 'Atrair clientes pelo WhatsApp'];
-function Harness({onSelect = vi.fn(), disabled = false, context = {tenantName:'Flores da Ana', city:'Recife'}}: {onSelect?: (answer:string) => Promise<void>; disabled?:boolean; context?:{tenantName?:string; city?:string}}) {
-  const [selected, onChange] = useState<QuickAction | null>(null);
-  return <ChatQuickActions {...{selected,onChange,onSelect,disabled,context}}/>;
-}
-describe('Funcionalidade: iniciar ações guiadas do Ady com sugestões', () => {
-  it.each(labels)('Quando toca em %s Então oferece três opções sem formulário nem envio', label => {
-    const onSelect = vi.fn(); render(<Harness onSelect={onSelect}/>);
-    fireEvent.click(screen.getByRole('button', {name:label, exact:true}));
-    expect(screen.getByRole('heading', {name:label})).toBeInTheDocument();
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', {name:'Continuar com Ady'})).not.toBeInTheDocument();
-    expect(screen.getByRole('group', {name:/\?/}).querySelectorAll('button')).toHaveLength(3);
-    expect(screen.getByText(/compositor.*Mensagem/)).toBeInTheDocument();
+const actions=[['Não sei o que postar','próximo post'],['Organizar minha semana','semana'],['Usar uma foto minha','foto']];
+describe('Pedidos diretos com sugestões contextuais opcionais',()=>{
+  it('preserva três pedidos, um principal; montagem não envia nem abre briefing',()=>{
+    const onSelect=vi.fn();
+    const view=render(<ChatQuickActions onSelect={onSelect}/>);
+    expect(within(screen.getByRole('group',{name:'Ações para começar'})).getAllByRole('button').map(button=>button.textContent?.trim())).toEqual(actions.map(([label])=>label));
+    expect(screen.getByRole('button',{name:actions[0][0]})).toHaveClass('ady-chat-quick-primary');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    view.unmount();render(<ChatQuickActions onSelect={onSelect}/>);
     expect(onSelect).not.toHaveBeenCalled();
   });
-  it('Dado negócio e cidade Quando abre Reels Então as intenções refletem o contexto e selecionam uma única vez', async () => {
-    let resolve!: () => void;
-    const onSelect = vi.fn(() => new Promise<void>(r => {resolve=r;}));
-    render(<Harness onSelect={onSelect}/>);
-    fireEvent.click(screen.getByRole('button', {name:labels[2]}));
-    const suggestion = screen.getByRole('button', {name:'Apresentar Flores da Ana para atrair clientes em Recife'});
-    fireEvent.click(suggestion); fireEvent.click(suggestion);
+  it.each(actions)('%s inicia preparação imediatamente sem resposta obrigatória',(label,deliverable)=>{
+    const onSelect=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:label,exact:true}));
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith('Apresentar Flores da Ana para atrair clientes em Recife');
-    await act(async () => resolve());
+    const prompt=onSelect.mock.calls[0][0];
+    expect(prompt).toContain(deliverable);
+    expect(prompt).toContain('contexto autorizado');
+    expect(prompt).toContain('Não faça perguntas opcionais');
+    expect(prompt).toContain('confirmação explícita');
+    expect(prompt).toContain('não autoriza publicar, agendar, investir em mídia paga');
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
-  it('Dado contexto ausente Quando escolhe Reels Então oferece intenções sem inventar negócio ou cidade', () => {
-    render(<Harness context={{}}/>);
-    fireEvent.click(screen.getByRole('button', {name:labels[2]}));
-    expect(screen.getByRole('button', {name:'Apresentar meu negócio para atrair clientes'})).toBeEnabled();
-    expect(screen.getByRole('button', {name:'Compartilhar dicas para engajar meu público'})).toBeEnabled();
+  it('foto só pede anexo se faltar; contexto não inventa foto recebida',()=>{
+    const onSelect=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Usar uma foto minha'}));
+    expect(onSelect).toHaveBeenCalledWith(expect.stringContaining('Se não houver foto anexada'));
   });
-  it('Dado teclado Quando abre e avança Então a pergunta recebe foco e Enter seleciona a sugestão', async () => {
-    const user = userEvent.setup(); const onSelect = vi.fn().mockResolvedValue(undefined);
-    render(<Harness onSelect={onSelect}/>);
-    await user.click(screen.getByRole('button', {name:labels[2]}));
-    expect(screen.getByText('Qual é o tema e o objetivo do Reels?')).toHaveFocus();
-    await user.tab(); expect(screen.getByRole('button', {name:/Apresentar Flores/})).toHaveFocus();
-    await user.keyboard('{Enter}'); expect(onSelect).toHaveBeenCalledTimes(1);
+  it('preserva sugestões PR465 nome/cidade sem enviar até escolha; clique duplicado não repete',async()=>{
+    let resolve!:()=>void;
+    const onSelect=vi.fn(()=>new Promise<void>(done=>{resolve=done;}));
+    const onExplore=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect} onExplore={onExplore} context={{tenantName:'Flores da Ana',city:'Recife'}}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Outras ideias para meu negócio'}));
+    expect(onExplore).toHaveBeenCalledTimes(1);
+    const option=screen.getByRole('button',{name:'Apresentar Flores da Ana em Recife'});
+    expect(screen.getByRole('group',{name:'Sugestões para meu negócio'}).querySelectorAll('button')).toHaveLength(3);
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.click(option);fireEvent.click(option);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect.mock.calls[0][0]).toContain('Apresentar Flores da Ana em Recife');
+    await act(async()=>resolve());
   });
-  it('Dado um fluxo aberto Quando cancela Então retorna aos seis atalhos sem enviar', () => {
-    const onSelect = vi.fn(); render(<Harness onSelect={onSelect}/>);
-    fireEvent.click(screen.getByRole('button', {name:labels[0]}));
-    fireEvent.click(screen.getByRole('button', {name:'Cancelar'}));
-    expect(screen.getAllByRole('button')).toHaveLength(6); expect(onSelect).not.toHaveBeenCalled();
+  it('opções sem perfil não inventam nome/cidade e podem ser fechadas sem envio',()=>{
+    const onSelect=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Outras ideias para meu negócio'}));
+    expect(screen.getByRole('button',{name:'Apresentar meu negócio'})).toBeEnabled();
+    fireEvent.click(screen.getByRole('button',{name:'Ocultar outras ideias'}));
+    expect(screen.queryByRole('group',{name:'Sugestões para meu negócio'})).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
   });
-  it('Dado que está ocupado Então não permite iniciar ações', () => {
-    render(<Harness disabled/>);
-    screen.getAllByRole('button').forEach(button => expect(button).toBeDisabled());
+  it('teclado expande e seleciona sem pergunta nem formulário extra',async()=>{
+    const user=userEvent.setup(),onSelect=vi.fn().mockResolvedValue(undefined);
+    render(<ChatQuickActions onSelect={onSelect} context={{tenantName:'Flores',city:'Recife'}}/>);
+    await user.click(screen.getByRole('button',{name:'Outras ideias para meu negócio'}));
+    await user.tab();
+    expect(screen.getByRole('button',{name:'Apresentar Flores em Recife'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+  it('contexto HTML é texto, nunca elemento executável',()=>{
+    render(<ChatQuickActions onSelect={vi.fn()} context={{tenantName:'<img src=x onerror=alert(1)>',city:'<Recife>'}}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Outras ideias para meu negócio'}));
+    expect(screen.getByRole('button',{name:'Apresentar <img src=x onerror=alert(1)> em <Recife>'})).toBeVisible();
+    expect(document.querySelector('img')).toBeNull();
+  });
+  it('ocupado desabilita pedidos e expansão sem enviar',()=>{
+    const onSelect=vi.fn();
+    render(<ChatQuickActions onSelect={onSelect} disabled/>);
+    screen.getAllByRole('button').forEach(button=>{expect(button).toBeDisabled();fireEvent.click(button);});
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

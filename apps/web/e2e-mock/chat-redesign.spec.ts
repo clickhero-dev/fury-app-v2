@@ -103,12 +103,13 @@ test('preserva rascunho quando não consegue iniciar a conversa', async ({ page 
   expect(counts).toEqual({ creates: 1, sends: 0 });
 });
 
-test('atalho inicia etapa específica sem enviar ou preencher compositor', async ({ page }) => {
+test('atalho prepara diretamente sem briefing nem preencher compositor', async ({ page }) => {
   const counts = await isolateChat(page, 'light');
-  await page.getByRole('button', { name: 'Criar post para o Instagram', exact: true }).click();
-  await expect(page.getByRole('heading', {name:'Criar post para o Instagram'})).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Mensagem', exact: true })).toHaveValue('');
   expect(counts).toEqual({ creates: 0, sends: 0 });
+  await page.getByRole('button', { name: 'Não sei o que postar', exact: true }).click();
+  await expect.poll(() => counts.sends).toBe(1);
+  await expect(page.getByRole('textbox', { name: 'Mensagem', exact: true })).toHaveValue('');
+  expect(counts).toEqual({ creates: 1, sends: 1 });
 });
 
 test('histórico móvel fecha com Escape e devolve foco', async ({ page }, testInfo) => {
@@ -378,19 +379,12 @@ for (const viewport of [{ width: 1287, height: 652 }, { width: 375, height: 812 
   });
 }
 
-// Dado um fluxo específico, Quando criar a conversa falha,
-// Então o briefing permanece e cancelar oferece uma saída sem efeito externo.
-test('falha no início do atalho preserva briefing e permite cancelar', async ({page}) => {
+// Quando criar a conversa falha, os atalhos voltam a ficar disponíveis.
+test('falha no início do pedido direto permite tentar novamente', async ({page}) => {
   const counts = await isolateChat(page, 'light', true);
-  await page.getByRole('button',{name:'Criar post para o Instagram',exact:true}).click();
-  const answer = page.getByRole('textbox',{name:'Mensagem',exact:true});
-  await answer.fill('   ');
-  await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
-  await answer.fill('Apresentar minha floricultura');
-  await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+  await page.getByRole('button',{name:'Não sei o que postar',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('Não foi possível iniciar a conversa');
-  await expect(answer).toHaveValue('Apresentar minha floricultura');
-  await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Não sei o que postar',exact:true})).toBeEnabled();
   await expect(page.getByRole('group',{name:'Ações para começar'})).toBeVisible();
   expect(counts).toEqual({creates:1,sends:0});
 });

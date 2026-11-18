@@ -13,15 +13,32 @@ const json = (data: unknown) => new Response(JSON.stringify(data));
 beforeEach(() => { sessionStorage.clear(); localStorage.setItem('token','token'); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('integra etapa específica sem alterar o compositor ou enviar no toque', async () => {
-  const fetchMock = vi.fn(async () => json([]));
+it('prepara o post no clique e apresenta próximos passos pelo contrato clarify existente', async () => {
+  const sends: Record<string, unknown>[] = [];
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/conversations')) return json(init?.method === 'POST' ? {id:'b',title:'Nova conversa'} : []);
+    if (url.endsWith('/messages')) {
+      sends.push(JSON.parse(init!.body as string));
+      return new Response(`event: done\ndata: ${JSON.stringify({message:{id:'m',role:'assistant',content:'Aqui está seu próximo post.'},clarification:{id:'next',run_id:'r',message_id:'m',question:'Quer continuar?',choices:['Ajustar o texto','Preparar outra ideia'],selected_index:null}})}\n\n`);
+    }
+    if (url.endsWith('/answer')) return new Response('event: done\ndata: {"message":{"id":"m2","role":"assistant","content":"Aqui vai outra ideia."}}\n\n');
+    throw new Error(url);
+  });
   vi.stubGlobal('fetch', fetchMock);
   render(<ChatPage/>);
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-  fireEvent.click(screen.getByRole('button', {name:'Criar post para o Instagram',exact:true}));
-  expect(screen.getByRole('heading',{name:'Criar post para o Instagram'})).toBeInTheDocument();
+  expect(screen.getByText('Vamos preparar seu próximo post?')).toBeInTheDocument();
+  expect(screen.getByText(/Você não precisa saber de marketing/)).toBeInTheDocument();
+  expect(sends).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', {name:'Não sei o que postar',exact:true}));
+  await screen.findByText('Aqui está seu próximo post.');
   expect(screen.getByLabelText('Mensagem')).toHaveValue('');
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(screen.queryByLabelText('Qual é o tema do post e para qual público?')).not.toBeInTheDocument();
+  expect(sends).toHaveLength(1);
+  expect(sends[0].content).toEqual(expect.stringContaining('próximo post'));
+  fireEvent.click(screen.getByRole('button', {name:'Preparar outra ideia'}));
+  await screen.findByText('Aqui vai outra ideia.');
+  expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/answer'))).toHaveLength(1);
 });
 
 it('consulta aprovações de worker de plano ativo e isola resposta atrasada ao trocar de conversa', async () => {
