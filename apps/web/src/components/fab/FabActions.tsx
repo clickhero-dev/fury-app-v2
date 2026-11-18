@@ -28,7 +28,7 @@ const actions = [
   { key: 'postar', label: 'Postar', icon: Send, to: '/calendario?criar=post', view: 'calendar' },
 ] as const;
 
-export function FabActions() {
+export function FabActions({ hiddenOnMobile = false }: { hiddenOnMobile?: boolean }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isBlocked } = useBlockedViews();
@@ -40,7 +40,7 @@ export function FabActions() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+    <div className={`fixed bottom-6 right-6 z-50 flex-col gap-3 ${hiddenOnMobile ? 'hidden md:flex' : 'flex'}`}>
       {visible.map(({ key, label, icon: Icon, to }) => (
         <button
           key={key}

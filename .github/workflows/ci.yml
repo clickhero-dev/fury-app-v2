@@ -159,6 +159,18 @@ jobs:
         working-directory: apps/web
         run: npx playwright test -c playwright.rating.config.ts
 
+      - name: Run Studio mobile and desktop E2E (isolated API, no paid generation)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.studio-mobile.config.ts
+
+      - name: Upload Studio responsive evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-mobile-evidence
+          path: apps/web/test-results/studio-mobile
+          retention-days: 7
+
       - name: Generate coverage badge
         if: github.event_name == 'push'
         run: npm run coverage:badge

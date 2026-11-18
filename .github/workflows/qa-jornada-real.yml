@@ -1,13 +1,13 @@
 name: QA - jornada real
 
 # Jornada real (login, campanha, pausa, imagem) com a conta de teste,
-# rodando o front da branch do PR contra a API do hmg.
+# rodando o front da branch escolhida contra a API do hmg.
+# Esta jornada altera dados e consome geração paga: execução manual explícita.
+# PRs validam o Estúdio automaticamente com a API isolada no workflow ci.yml.
 on:
-  pull_request:
   workflow_dispatch:
 
-# Uma execução por PR; execuções de PRs diferentes não se cancelam.
-# Atualizações da mesma PR substituem a execução obsoleta.
+# Uma execução manual por branch; branches diferentes não se cancelam.
 concurrency:
   group: qa-jornada-real-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
