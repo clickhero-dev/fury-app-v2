@@ -24,6 +24,7 @@
 - Testes unitários e E2E com mocks verdes; regressão desktop coberta; CI verde e PR sem conflitos na base atual.
 
 ## Evidências durante implementação
+- Continuação da PR #477: o cenário real cria uma proposta de orçamento existente sem moeda confirmada; a API a recusa com 409, conforme `validate_pending` e o teste de integração do serviço. Corrigir o E2E para exigir 409 e verificar que a proposta continua pendente sem resultado. Manter 404 para proposta inexistente ou inacessível. Executar o gate com serviços descartáveis e verificar CI e jornada real no mesmo commit; não usar conta sem cota.
 - Red: 7 falhas esperadas no teste de atalhos com os rótulos/fluxos antigos; Green: 8 testes unitários de atalhos.
 - Red de viewport: simulação 300x320 com offsetLeft=10/offsetTop=30 recebeu borda direita 382 em tela 390 e 828 em tela 844, limite esperado 310. O hook anterior só acompanhava altura e offsetTop. Correção passa também largura e offsetLeft, inclui safe areas e usa posicionamento até 1023 px.
 - Primeira execução E2E paralela de dois comandos compartilhou diretório de artefatos e gerou ENOENT no fechamento; reexecução isolada com diretório próprio. Não foi falha de produto.

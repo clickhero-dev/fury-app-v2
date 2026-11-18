@@ -141,7 +141,10 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
         await expect(card).toContainText('Expirada'); await expect(card).toContainText('moeda não confirmada');
         await expect(card.getByRole('button',{name:'Confirmar ação'})).toHaveCount(0);
         const rejected = await page.request.post(`${process.env.CHAT_E2E_API_URL ?? 'http://127.0.0.1:3199/api'}/chat/approvals/${id}/confirm`,{headers:{Authorization:`Bearer ${token}`}});
-        expect(rejected.status()).toBe(404);
+        expect(rejected.status()).toBe(409);
+        const rejectedApproval = await db`select status, result from chat_approvals where id=${id}`;
+        expect(rejectedApproval[0].status).toBe('pending');
+        expect(rejectedApproval[0].result).toBeNull();
       } else {
         await expect(card).toContainText('15,00'); await card.getByRole('button',{name:'Confirmar ação'}).click(); await expect(card).toContainText('Concluída');
       }
