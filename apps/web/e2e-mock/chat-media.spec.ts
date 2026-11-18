@@ -160,7 +160,6 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Mostrar conversas', exact: true }).click();
     await page.getByRole('button', { name: 'Conversa de mídia', exact: true }).click();
     for (const file of fixtures) await expect(page.getByText(file, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Visualizar referencia.png', exact: true }).click();
     await expect.poll(() => state.downloads).toBeGreaterThan(0);
     await expect(page.getByRole('img', { name: 'referencia.png', exact: true })).toBeVisible();
     await expect.poll(() => page.getByRole('img', { name: 'referencia.png', exact: true }).evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
