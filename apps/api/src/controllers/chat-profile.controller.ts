@@ -22,8 +22,10 @@ export class ChatProfileController {
       const body = z.object({
         tenantName: z.string().min(1).max(255),
         businessContext: z.string().min(1).max(5000),
+        conversationId: z.string().uuid(), runId: z.string().uuid(), leaseId: z.string().uuid(),
       }).strict().parse(req.body);
-      res.json({ success: true, data: await this.service.applyGuidedBusinessContext(req.tenant!.tenantId, req.user!.userId, body) });
+      const { conversationId, runId, leaseId, ...values } = body;
+      res.json({ success: true, data: await this.service.applyGuidedBusinessContext(req.tenant!.tenantId, req.user!.userId, values, { conversationId, runId, leaseId }) });
     } catch (err) { next(err); }
   };
 }

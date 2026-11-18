@@ -201,6 +201,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0083_chat_media_publish' },
   { tag: '0084_chat_guided_setups' },
   { tag: '0085_chat_guided_setup_receipts' },
+  { tag: '0086_chat_guided_profile_effects' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

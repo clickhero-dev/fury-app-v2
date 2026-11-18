@@ -1,10 +1,4 @@
-"""Fenced, per-message guided-setup persistence.
-
-``replayed`` is an at-most-once external-effect claim: callers must never invoke
-the context writer on a replay. A crash after commit and before the HTTP call
-may therefore leave the profile unsynchronized; exactly-once HTTP needs a
-downstream idempotency key and cannot be guaranteed by a local transaction.
-"""
+"""Fenced, per-message guided-setup persistence and profile preconditions."""
 import json
 from contextlib import asynccontextmanager
 
@@ -108,9 +102,27 @@ class GuidedSetupPersistence:
         return _state(row)
 
     async def _snapshot(self, conn):
-        return await conn.fetchrow('''SELECT step,answers FROM chat_guided_setup_snapshots
+        return await conn.fetchrow('''SELECT step,answers,profile_user_version,profile_tenant_version FROM chat_guided_setup_snapshots
             WHERE conversation_id=$1 AND user_message_id=$2''',
             self.conversation_id, self.user_message_id)
+
+    async def pending_profile_update(self):
+        """Return a committed profile intent for downstream idempotent reconciliation."""
+        async with self._fenced() as conn:
+            receipt = await conn.fetchrow('''SELECT result FROM chat_guided_setup_receipts
+                WHERE conversation_id=$1 AND user_message_id=$2''',
+                self.conversation_id, self.user_message_id)
+            if receipt is None:
+                return None
+            result = _decode(receipt['result'])
+            if not isinstance(result, dict):
+                raise TypeError('Invalid guided setup receipt')
+            update = result.get('profileUpdate')
+            if update is not None and (not isinstance(update, dict) or
+                    not isinstance(update.get('tenantName'), str) or
+                    not isinstance(update.get('businessContext'), str)):
+                raise TypeError('Invalid guided profile intent')
+            return update
 
     async def capture_snapshot(self):
         """Call before invoking the model; retries can only load existing snapshots."""
@@ -125,10 +137,19 @@ class GuidedSetupPersistence:
             if previous:
                 raise SnapshotMissing()
             state = await self._locked_state(conn)
+            versions = None
+            if state.step == OFFERING:
+                versions = await conn.fetchrow('''SELECT u.xmin::text AS "userVersion",
+                    t.xmin::text AS "tenantVersion" FROM users u JOIN tenants t ON t.id=u.tenant_id
+                    WHERE u.id=$1 AND t.id=$2''', self.user_id, self.tenant_id)
+                if versions is None:
+                    raise RunExpired()
             await conn.execute('''INSERT INTO chat_guided_setup_snapshots
-                (conversation_id,user_message_id,step,answers) VALUES($1,$2,$3,$4::jsonb)
+                (conversation_id,user_message_id,step,answers,profile_user_version,profile_tenant_version)
+                VALUES($1,$2,$3,$4::jsonb,$5,$6)
                 ON CONFLICT (conversation_id,user_message_id) DO NOTHING''',
-                self.conversation_id, self.user_message_id, state.step, json.dumps(state.answers or {}))
+                self.conversation_id, self.user_message_id, state.step, json.dumps(state.answers or {}),
+                versions['userVersion'] if versions else None, versions['tenantVersion'] if versions else None)
             return _state(await self._snapshot(conn))
 
     async def save_answer(self, answer):
@@ -152,6 +173,12 @@ class GuidedSetupPersistence:
                 raise StaleSetupTurn()
             next_state = advance(state, answer)
             result = _result(next_state, state.step)
+            if 'profileUpdate' in result:
+                user_version = snapshot['profile_user_version']
+                tenant_version = snapshot['profile_tenant_version']
+                if not user_version or not tenant_version:
+                    raise SnapshotMissing()
+                result['profileExpected'] = {'userVersion': user_version, 'tenantVersion': tenant_version}
             await conn.execute('''UPDATE chat_guided_setups SET step=$3,answers=$4::jsonb,
                 updated_at=clock_timestamp() WHERE tenant_id=$1 AND user_id=$2''',
                 self.tenant_id, self.user_id, next_state.step, json.dumps(next_state.answers or {}))

@@ -230,7 +230,7 @@ do transporte após retry; falha posterior do stream segue a telemetria de falha
 A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
 operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.
 
-O setup guiado requer as migrations `0084` e `0085`. Cada turno captura a etapa
+O setup guiado requer as migrations `0084`, `0085` e `0086`. Cada turno captura a etapa
 antes do modelo e registra o avanço com um recibo atômico por mensagem; uma
 retomada devolve o recibo e não avança novamente. Uma etapa alterada por outra
 execução após a captura é rejeitada. A ferramenta de resposta só fica disponível
@@ -238,7 +238,18 @@ quando a pergunta exibida corresponde à pergunta canônica da etapa, e aceita
 apenas o texto enviado pela pessoa; caso contrário, é preciso confirmar novamente.
 Se a tabela ou o snapshot estiverem
 indisponíveis, o chat normal continua, mas a resposta guiada não é aplicada.
-As chamadas externas de atualização de perfil não são repetidas automaticamente:
-se o processo cair após gravar a resposta, o resultado do perfil pode ser
-incerto e deve ser conferido. Isso evita sobrescritas e não é garantia de
-entrega exatamente uma vez.
+O recibo guarda as versões do perfil observadas antes do modelo. A API valida
+o recibo e o lease, confere essas versões e registra o efeito na mesma transação
+da atualização. A chave do efeito é a mensagem original, não o run; uma
+retomada pode reconciliar com segurança inclusive uma resposta HTTP perdida.
+Se o perfil mudou, o serviço recusa a atualização e solicita conferência;
+snapshots antigos sem versões exigem nova confirmação. Uma falha transitória
+de sincronização esgotada agenda recuperação do turno, dentro dos limites
+duráveis existentes, em vez de declarar a atualização concluída.
+
+**Rollout:** aplique as migrations antes dos serviços e atualize API e chat
+em uma janela coordenada, sem aceitar respostas guiadas de instâncias antigas.
+O contrato anterior não carrega lease nem chave de idempotência: a API nova o
+recusa, pois não é possível validá-lo com segurança. O chat novo trata a
+rejeição de validação da API antiga como transitória, sujeita ao orçamento de
+recuperação; não dependa dele para cobrir um deploy prolongado.

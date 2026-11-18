@@ -164,7 +164,7 @@ def test_declined_setup_has_a_terminal_response():
     assert result['choices'] == []
 
 
-def test_replayed_answer_never_repeats_external_context_write():
+def test_replayed_answer_reconciles_idempotent_external_context_write():
     import asyncio
 
     class Setup:
@@ -184,9 +184,30 @@ def test_replayed_answer_never_repeats_external_context_write():
         tool = GuidedSetupTools(Setup(), writer)
         assert (await tool.guided_setup_answer('Café'))['contextSaved'] is True
         resumed = await tool.guided_setup_answer('Café')
-        assert resumed['contextSaved'] is False
-        assert resumed['contextUncertain'] is True
-        assert calls == [('Loja', 'Café')]
+        assert resumed['contextSaved'] is True
+        assert calls == [('Loja', 'Café'), ('Loja', 'Café')]
+    asyncio.run(scenario())
+
+
+def test_replayed_answer_recovers_after_profile_request_failed():
+    import asyncio
+
+    class Setup:
+        replayed = False
+        async def save_answer(self, _answer):
+            replayed, self.replayed = self.replayed, True
+            return {'step': COMPANY_PHOTOS, 'answers': {}, 'replayed': replayed,
+                    'profileUpdate': {'tenantName': 'Loja', 'businessContext': 'Café'}}
+
+    async def scenario():
+        calls = []
+        async def writer(*args):
+            calls.append(args)
+            return {'error': 'indisponível'} if len(calls) == 1 else {}
+        tool = GuidedSetupTools(Setup(), writer)
+        assert (await tool.guided_setup_answer('Café'))['contextSaved'] is False
+        assert (await tool.guided_setup_answer('Café'))['contextSaved'] is True
+        assert len(calls) == 2
     asyncio.run(scenario())
 
 

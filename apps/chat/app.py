@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from memory import ContextBudgetExceeded, conversation_context, consolidate, compress_memories, requires_compression, estimate_request_tokens, MAX_CONTEXT_COMPACTION_BATCHES, MAX_SUMMARY_RESPONSES_PER_BATCH
 from model_request_budget import create_budgeted_http_client as create_model_http_client, is_model_request_budget_error
 from tools import AdyTools, ImageProposal
-from chat_read_tools import ChatReadTools
+from chat_read_tools import ChatReadTools, ProfileSyncTransient
 from streaming import start_stream, recoverable_job_id, resume_approved_video, safe_video_job, checked_agent_events
 from model_request_budget import provider_retry_scope, mark_provider_output, durable_budget_scope
 from turn_recovery import TurnRecovery, transient_failure
@@ -324,6 +324,7 @@ def create_app():
             heartbeat_task = asyncio.create_task(heartbeat())
             provider_active = False
             tool_checkpoint_failed = False
+            profile_sync_failed = False
             async def report(error):
                 await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error))
             async def report_retry(attempt, max_attempts, retry_in_ms):
@@ -365,7 +366,8 @@ def create_app():
                 proposal = ImageProposal(fenced, user['tenantId'], user['userId'], conversation_id, emit_approval, ady)
                 plans = PlanTools(os.environ.get('ADY_API_URL', ''), request.headers['authorization'][7:], app.state.http, str(conversation_id), run_id=str(run_id), lease_id=str(lease_id))
                 plan_tools = tools_for_agent(plans)
-                read_tools = ChatReadTools(os.environ['ADY_API_URL'], request.headers['authorization'][7:], app.state.http)
+                read_tools = ChatReadTools(os.environ['ADY_API_URL'], request.headers['authorization'][7:], app.state.http,
+                                           conversation_id=str(conversation_id), run_id=str(run_id), lease_id=str(lease_id))
                 guided_repository = GuidedSetupPersistence(db, user['tenantId'], user['userId'], conversation_id, run_id, lease_id, user_message_id)
                 guided_setup = GuidedSetupTools(guided_repository, read_tools.save_guided_business_context, expected_answer=question)
                 try:
@@ -379,12 +381,20 @@ def create_app():
                     guided_tools = [guided_setup.guided_setup_status]
                     if matches_question(guided_state.step, shown_question):
                         guided_tools.append(guided_setup.guided_setup_answer)
-                except (asyncpg.UndefinedTableError, SnapshotMissing):
+                except (asyncpg.UndefinedTableError, asyncpg.UndefinedColumnError, SnapshotMissing):
                     # Optional setup must not block ordinary chat during migration
                     # rollout or unsafe legacy retries. Never allow an unsnapshotted answer.
                     guided_setup_snapshot = await guided_setup.guided_setup_status()
                     guided_tools = [guided_setup.guided_setup_status]
                     guided_available = False
+                if retry and guided_available:
+                    pending_profile = await guided_repository.pending_profile_update()
+                    if pending_profile is not None:
+                        reconciled = await read_tools.save_guided_business_context(
+                            pending_profile['tenantName'], pending_profile['businessContext'])
+                        guided_setup_snapshot['profileReconciliation'] = (
+                            {'contextSaved': False, 'contextError': reconciled['error']}
+                            if reconciled.get('error') else {'contextSaved': True})
                 read_tool_list = [ady.campaigns, ady.campaign_ads, ady.ad_details, ady.ad_assets, ady.available_ad_assets, ady.calendar, ady.brand, ady.brand_photos, ady.profile, ady.assets, read_tools.quotas, read_tools.meta_ads_diagnostic, read_tools.promote_attachment]
                 tool_list = read_tool_list + guided_tools + available_proposal_tools(proposal) + plan_tools
                 if retry:
@@ -471,12 +481,15 @@ def create_app():
                 # any provider call/tool. Attachments are re-read under current auth.
                 await checkpoints.save_context(context, history)
                 async def guarded_tool(function, args, function_name=None):
-                    nonlocal tool_checkpoint_failed
-                    if tool_checkpoint_failed:
+                    nonlocal tool_checkpoint_failed, profile_sync_failed
+                    if tool_checkpoint_failed or profile_sync_failed:
                         raise SafeToolFailure('Não foi possível preservar o trabalho desta resposta.')
                     mark_provider_output()
                     try:
                         return await guarded_checkpointed_tool(checkpoints, function, args, name=function_name)
+                    except ProfileSyncTransient:
+                        profile_sync_failed = True
+                        raise
                     except SafeToolFailure:
                         # Agno may turn hook exceptions into tool results and log
                         # them. Never expose DB diagnostics or allow a subsequent
@@ -497,6 +510,8 @@ def create_app():
                     async for event in checked_agent_events(agent.arun(conversation_context(agent_history()), stream=True), provider_state):
                         if tool_checkpoint_failed:
                             raise SafeToolFailure('Não foi possível preservar o trabalho desta resposta.')
+                        if profile_sync_failed:
+                            raise ProfileSyncTransient('Não foi possível confirmar o contexto do negócio.')
                         content = getattr(event, 'content', None)
                         if isinstance(content, str) and content:
                             mark_provider_output()
@@ -518,6 +533,8 @@ def create_app():
                                 await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
                 if tool_checkpoint_failed:
                     raise SafeToolFailure('Não foi possível preservar o trabalho desta resposta.')
+                if profile_sync_failed:
+                    raise ProfileSyncTransient('Não foi possível confirmar o contexto do negócio.')
                 if not ''.join(model_chunks).strip():
                     raise ValueError('Resposta vazia')
                 provider_active = False
@@ -563,10 +580,10 @@ def create_app():
             except Exception as error:
                 await observe('failed')
                 request_budget_error = is_model_request_budget_error(error)
-                if provider_active and not tool_checkpoint_failed and not isinstance(error, (RunExpired, ContextBudgetExceeded, SafeToolFailure)) and not request_budget_error:
+                if provider_active and not tool_checkpoint_failed and not profile_sync_failed and not isinstance(error, (RunExpired, ContextBudgetExceeded, SafeToolFailure, ProfileSyncTransient)) and not request_budget_error:
                     await report(error)
                 try:
-                    await recovery.finish(run_id,lease_id,transient=provider_active and not tool_checkpoint_failed and transient_failure(error))
+                    await recovery.finish(run_id,lease_id,transient=profile_sync_failed or isinstance(error, ProfileSyncTransient) or (provider_active and not tool_checkpoint_failed and transient_failure(error)))
                 except Exception:
                     pass
                 budget_error = isinstance(error, ContextBudgetExceeded) or request_budget_error

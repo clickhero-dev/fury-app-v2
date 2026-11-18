@@ -37,6 +37,8 @@ class Connection:
             return self.receipts.get(args[1])
         if 'chat_guided_setups' in sql:
             return self.state
+        if 'FROM users u JOIN tenants t' in sql:
+            return {'userVersion': '1', 'tenantVersion': '2'}
         raise AssertionError(sql)
 
     async def execute(self, sql, *args):
@@ -49,7 +51,8 @@ class Connection:
         elif 'INSERT INTO chat_guided_setup_receipts' in sql:
             self.receipts[args[1]] = {'result': args[2]}
         elif 'INSERT INTO chat_guided_setup_snapshots' in sql:
-            self.snapshots.setdefault(args[1], {'step': args[2], 'answers': args[3]})
+            self.snapshots.setdefault(args[1], {'step': args[2], 'answers': args[3],
+                                                'profile_user_version': args[4], 'profile_tenant_version': args[5]})
         else:
             raise AssertionError(sql)
 
@@ -137,4 +140,38 @@ def test_profile_update_is_replayed_without_an_external_effect_claim():
         next_turn = repo(pool)
         await next_turn.capture_snapshot()
         assert 'profileUpdate' not in await next_turn.save_answer('Pular')
+    asyncio.run(scenario())
+
+
+def test_pending_profile_update_can_be_reconciled_without_invoking_model():
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        setup = repo(pool)
+        await setup.capture_snapshot()
+        assert await setup.pending_profile_update() is None
+        await setup.save_answer('Café')
+        assert await setup.pending_profile_update() == {
+            'tenantName': 'Loja', 'businessContext': 'Produtos ou serviços: Café',
+        }
+        pool.conn.valid = False
+        with pytest.raises(RunExpired):
+            await setup.pending_profile_update()
+    asyncio.run(scenario())
+
+
+def test_old_offering_snapshot_without_versions_cannot_update_profile():
+    from guided_setup_persistence import SnapshotMissing
+
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        setup = repo(pool)
+        await setup.capture_snapshot()
+        snapshot = next(iter(pool.conn.snapshots.values()))
+        snapshot['profile_user_version'] = None
+        with pytest.raises(SnapshotMissing):
+            await setup.save_answer('Café')
+        assert not pool.conn.receipts
+        assert pool.conn.writes == 0
     asyncio.run(scenario())

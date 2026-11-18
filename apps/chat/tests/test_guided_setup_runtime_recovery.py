@@ -25,7 +25,8 @@ MIGRATIONS = Path(__file__).resolve().parents[3] / 'packages/db/migrations'
 
 
 async def install_guided_migrations(pool):
-    for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql'):
+    for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
+                 '0086_chat_guided_profile_effects.sql'):
         await pool.execute((MIGRATIONS / name).read_text())
 
 
@@ -183,4 +184,77 @@ def test_missing_guided_migrations_do_not_block_chat(monkeypatch):
             assert any('indisponível neste turno' in text for text in calls[0]['instructions'])
             assert await pool.fetchval("SELECT to_regclass('chat_guided_setups')") is None
 
+    asyncio.run(scenario())
+
+
+def test_retry_reconciles_profile_receipt_before_model(monkeypatch):
+    from conversation_repository import ConversationRepository
+    from guided_setup_persistence import GuidedSetupPersistence
+    from guided_setup import OFFERING
+
+    async def scenario():
+        async with database() as (pool, tenant, user, cid):
+            await install_guided_migrations(pool)
+            await pool.execute('ALTER TABLE users ADD COLUMN tenant_id uuid')
+            await pool.execute('UPDATE users SET tenant_id=$1 WHERE id=$2', tenant, user)
+            await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
+                VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_question(pool, cid, question_for(OFFERING)['question'])
+            run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Café')
+            setup = GuidedSetupPersistence(pool, tenant, user, cid, run, lease, mid)
+            await setup.capture_snapshot()
+            await setup.save_answer('Café')
+            await pool.execute("UPDATE chat_response_runs SET status='failed' WHERE id=$1", run)
+            calls, requests = [], []
+            application = configure_runtime(monkeypatch, tenant, user, calls)
+            async with application.router.lifespan_context(application):
+                application.state.pool = pool
+                async def backend(request):
+                    requests.append(request)
+                    return httpx.Response(200, json={'data': {'tenantName': 'Loja', 'businessContext': 'Produtos ou serviços: Café'}})
+                application.state.http._transport = httpx.MockTransport(backend)
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
+                                             base_url='http://chat',
+                                             headers={'authorization': 'Bearer synthetic'}) as client:
+                    response = await client.post(f'/conversations/{cid}/retry?run_id={run}')
+                application.state.pool = None
+            assert 'event: done' in response.text
+            assert requests and requests[0].url.path.endswith('/chat-guided-update')
+            assert await pool.fetchval('SELECT count(*) FROM chat_guided_setup_receipts') == 1
+    asyncio.run(scenario())
+
+
+def test_profile_timeout_queues_turn_and_reconciles_on_retry(monkeypatch):
+    from guided_setup import OFFERING
+
+    async def scenario():
+        async with database() as (pool, tenant, user, cid):
+            await install_guided_migrations(pool)
+            await pool.execute('ALTER TABLE users ADD COLUMN tenant_id uuid')
+            await pool.execute('UPDATE users SET tenant_id=$1 WHERE id=$2', tenant, user)
+            await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
+                VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_question(pool, cid, question_for(OFFERING)['question'])
+            calls, requests = [], []
+            application = configure_runtime(monkeypatch, tenant, user, calls, tool_answer='Café')
+            async with application.router.lifespan_context(application):
+                application.state.pool = pool
+                async def backend(request):
+                    requests.append(request)
+                    return (httpx.Response(503, json={'error': 'private'}) if len(requests) <= 3
+                            else httpx.Response(200, json={'data': {'tenantName': 'Loja', 'businessContext': 'Produtos ou serviços: Café'}}))
+                application.state.http._transport = httpx.MockTransport(backend)
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
+                                             base_url='http://chat',
+                                             headers={'authorization': 'Bearer synthetic'}) as client:
+                    first = await client.post(f'/conversations/{cid}/messages', json={'content': 'Café'})
+                    assert 'event: error' in first.text and 'private' not in first.text
+                    run = await pool.fetchrow('SELECT id,user_message_id FROM chat_response_runs WHERE conversation_id=$1', cid)
+                    assert await pool.fetchval('SELECT status FROM chat_turn_recovery WHERE user_message_id=$1', run['user_message_id']) == 'queued'
+                    resumed = await client.post(f'/conversations/{cid}/retry?run_id={run["id"]}')
+                    assert 'event: done' in resumed.text
+                application.state.pool = None
+            assert len(requests) >= 4
+            assert await pool.fetchval('SELECT count(*) FROM chat_guided_setup_receipts') == 1
+            assert await pool.fetchval('SELECT step FROM chat_guided_setups') == 'company_photos'
     asyncio.run(scenario())

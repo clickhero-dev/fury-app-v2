@@ -1,12 +1,25 @@
 """Ferramentas de leitura com identidade delegada, sem expor dados do provedor."""
+import asyncio
+from uuid import UUID
+
 import httpx
 
 
+class ProfileSyncTransient(Exception):
+    """Profile reconciliation can safely be retried with the durable receipt."""
+
+
+class _ProfileResponseUncertain(Exception):
+    pass
+
+
 class ChatReadTools:
-    def __init__(self, base_url: str, token: str, client: httpx.AsyncClient):
+    def __init__(self, base_url: str, token: str, client: httpx.AsyncClient, *,
+                 conversation_id: str | None = None, run_id: str | None = None, lease_id: str | None = None):
         self.base_url = base_url.rstrip('/')
         self.token = token
         self.client = client
+        self.conversation_id, self.run_id, self.lease_id = conversation_id, run_id, lease_id
 
     async def _get(self, path: str) -> dict:
         request = httpx.Request('GET', self.base_url + path,
@@ -77,7 +90,6 @@ class ChatReadTools:
         finalidade. A promoção usa o anexo privado pertencente à conversa, sem
         aceitar URLs externas nem arquivos de outro usuário.
         """
-        from uuid import UUID
         try:
             conversation_id, attachment_id = str(UUID(conversation_id)), str(UUID(attachment_id))
             if target == 'logo':
@@ -108,13 +120,40 @@ class ChatReadTools:
         try:
             if not 1 <= len(tenant_name.strip()) <= 255 or not 1 <= len(business_context.strip()) <= 5000:
                 raise ValueError()
-            response = await self.client.post(self.base_url + '/api/auth/me/chat-guided-update',
-                headers={'Authorization': 'Bearer ' + self.token},
-                json={'tenantName': tenant_name.strip(), 'businessContext': business_context.strip()}, timeout=15.0)
-            response.raise_for_status()
-            data = response.json().get('data')
-            if not isinstance(data, dict):
-                raise ValueError()
-            return data
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+            body = {'tenantName': tenant_name.strip(), 'businessContext': business_context.strip(),
+                    'conversationId': str(UUID(self.conversation_id)), 'runId': str(UUID(self.run_id)),
+                    'leaseId': str(UUID(self.lease_id))}
+        except (ValueError, TypeError, AttributeError):
             return {'error': 'Não foi possível salvar o contexto do negócio agora.'}
+        for attempt in range(3):
+            try:
+                response = await self.client.post(self.base_url + '/api/auth/me/chat-guided-update',
+                    headers={'Authorization': 'Bearer ' + self.token}, json=body, timeout=15.0)
+                if response.status_code in (408, 429) or response.status_code >= 500:
+                    raise httpx.HTTPStatusError('transient', request=response.request, response=response)
+                response.raise_for_status()
+                try:
+                    data = response.json().get('data')
+                    if (not isinstance(data, dict) or data.get('tenantName') != body['tenantName']
+                            or data.get('businessContext') != body['businessContext']):
+                        raise ValueError()
+                except (ValueError, TypeError, AttributeError) as error:
+                    raise _ProfileResponseUncertain() from error
+                return data
+            except (httpx.RequestError, httpx.HTTPStatusError, _ProfileResponseUncertain) as error:
+                validation_rollout = False
+                if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 400:
+                    try:
+                        validation_rollout = error.response.json().get('error', {}).get('code') == 'VALIDATION_ERROR'
+                    except (ValueError, AttributeError):
+                        pass
+                if (isinstance(error, httpx.HTTPStatusError) and error.response.status_code < 500
+                        and error.response.status_code not in (408, 429) and not validation_rollout):
+                    if error.response.status_code == 409:
+                        return {'error': 'O perfil ou a execução mudou. Confira os dados atuais antes de tentar novamente.'}
+                    return {'error': 'Não foi possível salvar o contexto do negócio agora.'}
+                if attempt == 2:
+                    raise ProfileSyncTransient('Não foi possível confirmar o contexto do negócio.') from None
+                await asyncio.sleep(0.25 * 2 ** attempt)
+            except (ValueError, TypeError, KeyError, AttributeError):
+                return {'error': 'Não foi possível salvar o contexto do negócio agora.'}

@@ -161,8 +161,6 @@ class GuidedSetupTools:
         try:
             result = await self.setup.save_answer(answer)
             update = result.get('profileUpdate')
-            if update and result.get('replayed'):
-                return {**result, 'contextSaved': False, 'contextUncertain': True}
             if update and not self.context_writer:
                 return {**result, 'contextSaved': False, 'contextError': 'A atualização do perfil não foi confirmada.'}
             if update:
