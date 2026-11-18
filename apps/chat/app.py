@@ -318,6 +318,7 @@ def create_app():
             heartbeat_task = asyncio.create_task(heartbeat(lambda: fenced.heartbeat()))
             provider_active = False
             tool_guard = None
+            phase = 'preparation'
             async def report(error):
                 await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error), getattr(error, 'provider', None))
             async def report_retry(attempt, max_attempts, retry_in_ms):
@@ -435,6 +436,7 @@ def create_app():
                         raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
                 # Capture the actual causal context after safe compaction, before
                 # any provider call/tool. Attachments are re-read under current auth.
+                phase = 'checkpoint'
                 await checkpoints.save_context(context, history)
                 async def guarded_tool(function, args, function_name=None):
                     mark_provider_output()
@@ -448,6 +450,7 @@ def create_app():
                     chunks.append(evidence.notice)
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
                 provider_active = True
+                phase = 'provider'
                 with provider_retry_scope(run_id, on_retry=report_retry) as provider_state:
                     events = stream_agent(conversation_context(agent_history()), http_client=app.state.model_http,
                                           agent_options={'tools': tool_list, 'tool_hooks': [guarded_tool],
@@ -493,6 +496,7 @@ def create_app():
                     contents, clarification = [text], None
                     await emit('event: token\ndata: ' + json.dumps({'content': text[len(evidence.notice):] if evidence.notice else text}) + '\n\n')
                 chunks = contents
+                phase = 'persistence'
                 rows = await fenced.complete_many(conversation_id, contents, clarification=clarification)
                 await recovery.finish(run_id,lease_id,completed=True)
                 await observe('recovered' if retry else 'draft_ready')
@@ -519,6 +523,9 @@ def create_app():
                     except Exception:
                         pass
             except Exception as error:
+                failure_phase = ('tool' if tool_guard and tool_guard.failed else
+                                 'persistence' if isinstance(error, PersistenceAdmissionFailure) else phase)
+                logging.getLogger('ady.chat').warning('chat_run_failure phase=%s', failure_phase)
                 await observe('failed')
                 request_budget_error = is_model_request_budget_error(error)
                 if provider_active and not (tool_guard and tool_guard.failed) and not isinstance(error, (RunExpired, ContextBudgetExceeded, ToolFailure, PersistenceAdmissionFailure)) and not request_budget_error:

@@ -54,6 +54,8 @@ def runtime(monkeypatch):
     class Fence:
         def __init__(self, *_): pass
         async def complete_many(self, _, contents, **kwargs):
+            if state.get('completion_error'):
+                raise RuntimeError('private database error')
             completions.extend(contents)
             return [{'id': str(uuid4()), 'role': 'assistant', 'content': content} for content in contents]
 
@@ -136,6 +138,19 @@ def test_runtime_routes_turn_through_multi_provider_core(runtime, monkeypatch):
     assert completions == ['Resposta do núcleo.']
     assert calls[0][1]['agent_options']['tools']
     assert calls[0][1]['agent_options']['tool_hooks']
+
+
+def test_database_completion_failure_has_sanitized_layer_diagnostic(runtime, monkeypatch, caplog):
+    client, cid, _, _, _, state = runtime
+    async def stream(*_args, **_kwargs):
+        yield SimpleNamespace(content='Resposta.')
+    monkeypatch.setattr(chat, 'stream_agent', stream)
+    state['completion_error'] = True
+    response = client.post(f'/conversations/{cid}/messages',
+                           headers={'Authorization': 'Bearer synthetic'}, json={'content': 'Olá'})
+    assert 'event: error' in response.text
+    assert 'phase=persistence' in caplog.text
+    assert 'private database error' not in caplog.text
 
 
 def test_recovery_exposes_uncertain_journal_without_mutation_tools(runtime):
