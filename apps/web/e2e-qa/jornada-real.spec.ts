@@ -10,6 +10,8 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
     E ao final (sucesso ou falha) a campanha é pausada e arquivada e a imagem arquivada
 */
 import { expect, test, type Page, type Response } from '@playwright/test';
+// @ts-expect-error módulo compartilhado com os testes Node do CI
+import { checkReadiness } from '../../../scripts/ci/qa-readiness.mjs';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
@@ -105,6 +107,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
   let token = '';
   let campaignId: string | undefined;
   let assetId: string | undefined;
+  let creationStarted = false;
   const api = apiClient(page, () => token);
 
   // banner de cookies pode cobrir botões a qualquer momento
@@ -129,6 +132,19 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       token = (await page.evaluate(() => localStorage.getItem('token'))) ?? '';
       expect(token, 'token salvo após login').not.toBe('');
+    });
+
+    await test.step('Pré-voo de assinatura e cota', async () => {
+      const result = await checkReadiness(
+        { margin: process.env.QA_QUOTA_MARGIN, owner: process.env.QA_QUOTA_OWNER },
+        () => page.request.get(`${apiURL}/billing/subscription`, {
+          headers: { Authorization: `Bearer ${token}` }, timeout: 15_000,
+        }),
+      );
+      if (!result.ok) {
+        throw new Error(`PRÉ-VOO QA BLOQUEADO (${result.reason}). Consulte docs/operations/qa-quota-readiness.md para responsável, reposição e verificação.`);
+      }
+      log('Pré-voo de assinatura e cota aprovado.');
     });
 
     await test.step('Criar campanha (wizard)', async () => {
@@ -174,6 +190,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await expect(page.getByRole('heading', { name: 'Revisão e Publicação' }).last()).toBeVisible();
       const publish = page.getByRole('button', { name: 'Publicar Campanha' });
       await expect(publish, 'Publicar habilitado (público configurado)').toBeEnabled({ timeout: 30_000 });
+      creationStarted = true;
       const creationRequest = page.waitForRequest((request) =>
         request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/campaigns/create-wizard'),
       );
@@ -223,16 +240,6 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
     });
 
     await test.step('Gerar imagem (Estúdio)', async () => {
-      // sem cota o botão fica desabilitado: falha clara em vez de esperar
-      const { remaining, limit } = await api.quota();
-      log(`Cota de imagens: ${remaining ?? 'ilimitada'} de ${limit ?? 'ilimitada'} restantes`);
-      if (remaining !== null && remaining <= 0) {
-        throw new Error(
-          `SEM COTA DE IMAGEM: a conta ${email} usou ${limit} de ${limit} criativos do mês. ` +
-            'Não é possível gerar a imagem até a cota renovar ou o plano ser ampliado.',
-        );
-      }
-
       await page.goto('/estudio');
       const quickCreate = page.getByRole('button', { name: 'Criação rápida' });
       await expect(quickCreate, 'Criação rápida habilitado').toBeEnabled({ timeout: 30_000 });
@@ -265,7 +272,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
   } finally {
     // limpeza sempre roda: pausa se ativa, arquiva campanha e imagem
     const cleanupErrors: string[] = [];
-    if (token) {
+    if (token && creationStarted) {
       try {
         const local = (await api.campaigns()).find((c) =>
           campaignId ? c.id === campaignId : c.name === label && c.status !== 'archived',
