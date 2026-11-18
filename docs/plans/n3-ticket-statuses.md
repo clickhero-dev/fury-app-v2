@@ -120,3 +120,14 @@ acontecimentos anteriores. Especificação para encerramento:
 - A investigação histórica continua aberta: sem IDs/timestamps individuais e acesso
   aos logs, não é possível produzir oito correlações verificáveis nem afirmar que
   as fontes foram esgotadas. A PR deve manter essa limitação explícita.
+
+## Apuração adicional do check Chatbot
+
+- O artefato `chatbot-evidence-1` do [run 44348145984](https://github.com/clickhero-dev/fury-app-v2/actions/runs/44348145984)
+  registra falha em `chat-real.spec.ts`: a busca parcial por `Vídeo gerado`
+  encontrou quatro elementos, inclusive o vídeo com o `src` esperado. O teste
+  agora usa correspondência exata para o vídeo gerado e editado, preservando a
+  asserção de `src` e as demais verificações; o check completo deve ser reexecutado.
+- Plano pendente: obter eventos e logs históricos para apuração por ocorrência;
+  executar os checks no head final, confirmar resultados e ausência de conflitos.
+  A falta de acesso nesta sessão não constitui esgotamento das fontes históricas.
