@@ -185,7 +185,8 @@ test('Dado modo escuro e falha no roteiro, quando usa teclado e tenta novamente,
   page,
 }, info) => {
   await open(page, '/estudio?criar=rapida');
-  await page.locator('html').evaluate((el) => el.classList.add('dark'));
+  await page.getByRole('button', { name: 'Ativar modo escuro', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'escuro');
   const summary = page.locator('summary').filter({ hasText: 'Referências de imagem' });
   await summary.focus();
   await page.keyboard.press('Enter');
