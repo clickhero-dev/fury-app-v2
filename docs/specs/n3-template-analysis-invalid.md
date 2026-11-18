@@ -27,3 +27,9 @@ ADR-0001 lido; ADR-0002 mencionado pela skill não está presente no checkout hm
 - Builds shared/db/API e web passaram com dependências próprias da worktree. Primeiro build com dependências emprestadas apontou tipos antigos de outro checkout; descartado e repetido isoladamente.
 - Configurar APP_ENV=hmg ou APP_ENV=production no deploy para distinguir ambientes que compartilham NODE_ENV=production. Este trabalho não muda configurações remotas nem atribui ambiente aos eventos históricos.
 - Consulta operacional: contar `studio_template_analysis` por `environment`, `model`, `outcome` (`recovered` e `failed`) e `failureReason`; `attempts` indica recuperação na segunda chamada. O evento conta a análise, não a geração/revisão posterior.
+
+## Validação integrada browser → API deste SHA
+- Servir frontend local e controller/service reais do checkout, com provedor, cota e repositórios isolados em memória. A fixture de análise retorna JSON com schema inválido; nenhuma requisição de geração é interceptada pelo navegador.
+- Verificar HTTP 502 e mensagem segura; a análise acontece uma vez por envio, a cota é devolvida, e os contadores de geração e persistência permanecem zero.
+- Ao escolher tentar novamente, preservar modelo e texto sem uma nova chamada; após edição e envio explícito, verificar segunda chamada, mesmo erro seguro e mesmos invariantes.
+- Executar a jornada em Chromium no CI, sem credenciais, conta remota, deploy ou dados reais. Autenticação e persistência são fixtures, portanto não comprovam o deployment HMG.

@@ -159,6 +159,10 @@ jobs:
         working-directory: apps/web
         run: npx playwright test -c playwright.rating.config.ts
 
+      - name: Run template analysis browser-to-API integration
+        working-directory: apps/web
+        run: npx playwright test -c playwright.template-integrated.config.ts
+
       - name: Generate coverage badge
         if: github.event_name == 'push'
         run: npm run coverage:badge
