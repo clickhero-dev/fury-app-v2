@@ -49,11 +49,15 @@ def test_perfil_chat_tem_rede_e_configuracao_local():
         ['docker', 'compose', '-f', str(root / 'infra/docker-compose.yml'), '--profile', 'chat', 'config', '--format', 'json'],
         capture_output=True, text=True, check=True,
         env={**os.environ, 'ADY_API_URL': 'http://host.docker.internal:3000',
-             'MODEL_CHATBOT': 'deepseek/deepseek-v4-pro-0813'},
+             'OPENAI_API_KEY': 'synthetic-openai',
+             'ANTHROPIC_API_KEY': 'synthetic-anthropic',
+             'OPENROUTER_API_KEY': 'synthetic-openrouter'},
     )
     service = json.loads(result.stdout)['services']['chat']
     assert service['environment']['DATABASE_URL'].startswith('postgresql://')
     assert service['environment']['ADY_API_URL'] == 'http://host.docker.internal:3000'
-    assert service['environment']['MODEL_CHATBOT'] == 'deepseek/deepseek-v4-pro-0813'
+    assert service['environment']['OPENAI_API_KEY'] == 'synthetic-openai'
+    assert service['environment']['ANTHROPIC_API_KEY'] == 'synthetic-anthropic'
+    assert service['environment']['OPENROUTER_API_KEY'] == 'synthetic-openrouter'
     assert service['ports'][0]['host_ip'] == '127.0.0.1'
     assert 'postgres' in service['depends_on']
