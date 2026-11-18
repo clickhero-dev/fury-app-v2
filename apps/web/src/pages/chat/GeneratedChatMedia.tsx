@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ChatMediaViewer } from './ChatMediaViewer';
+import { InstagramShare } from './InstagramShare';
 
-export function GeneratedChatMedia({src, kind}: {src: string; kind: 'image' | 'video'}) {
+export function GeneratedChatMedia({src, kind, mediaKey}: {src: string; kind: 'image' | 'video'; mediaKey: string}) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const name = kind === 'image' ? 'Imagem gerada' : 'Vídeo gerado';
@@ -24,6 +25,7 @@ export function GeneratedChatMedia({src, kind}: {src: string; kind: 'image' | 'v
     } finally { setLoading(false); }
   }
   return <div><ChatMediaViewer src={src} kind={kind} name={name} onDownload={() => void download()}/>
+    <InstagramShare src={src} kind={kind} mediaKey={mediaKey}/>
     {loading && <p role="status">Baixando mídia…</p>}
     {error && <p role="alert">{error}</p>}
   </div>;
