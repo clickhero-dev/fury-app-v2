@@ -57,6 +57,28 @@ Eles não incluem prompt, ferramentas, headers ou credenciais.
 O cliente Agno/OpenAI deve manter retries próprios em zero para não multiplicar
 as tentativas fora deste transporte.
 
+O runtime aplica também o orçamento **persistido por mensagem original**:
+duas retomadas, deadline de dez minutos, dezoito envios e 180.000 tokens
+reservados. Cada tentativa principal/fallback e cada resumo conta antes do I/O.
+Os três retries locais nunca ampliam esse orçamento global. Após saída entregue,
+o worker pode retomar o turno a partir de seu checkpoint somente em modo leitura,
+sem repetir efeitos confirmados ou incertos.
+
+## Rascunhos do executor de planos
+
+O adapter Node usa as mesmas variáveis opt-in, mas tem outro limite: **uma chamada
+por tentativa persistida da tarefa, máximo duas**. A primeira usa o principal
+existente do gerador de rascunhos; a segunda usa o primeiro candidato homologado
+compatível ou retenta o principal. Não há retry adicional escondido no adapter.
+Homologação de texto exige `temperature` e `max_tokens`; não expõe ferramentas.
+Configuração inválida não habilita fallback nessa via. Configure ambos os serviços
+quando quiser homologar a cadeia conversacional e a geração de textos dos planos.
+
+Falhas transitórias admitem a segunda tentativa; auth, entrada ou orçamento não.
+O contexto é JSON limitado, com `omittedTaskKeys` explícito, sem truncar resultados
+originais no banco. Todo payload/modelo escolhido passa pelo guard conservador.
+Critérios editoriais e coleta: `docs/operations/ady-editorial-evaluation.md`.
+
 ## Verificação
 
 `PYTHONPATH=apps/chat python -m pytest apps/chat/tests/test_provider_fallback.py

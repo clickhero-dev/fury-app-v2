@@ -6,19 +6,18 @@ verification, currentIdentity SQL, causal checkpoints and run fences are real.
 import asyncio
 import json
 import os
-from pathlib import Path
 import socket
+from pathlib import Path
 from types import SimpleNamespace
 
 import agno.agent
+import app as chat
 import pytest
 import uvicorn
-
-import app as chat
 from assistant_policy import POLICY_VERSION
 from checkpoints import CheckpointRepository
 from conversation_repository import ConversationRepository
-from test_attachments_postgres import database, URL
+from test_attachments_postgres import URL, database
 
 pytestmark=pytest.mark.skipif(not URL,reason='CHAT_MEDIA_TEST_DATABASE_URL isolado ausente')
 ROOT=Path(__file__).resolve().parents[3]

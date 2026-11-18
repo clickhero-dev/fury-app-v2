@@ -106,6 +106,10 @@ não oferece idempotência transacional. Se o efeito ocorreu, mas o processo mor
 antes de obter qualquer referência, manter `unknown`, consultar o recurso ou
 encaminhar revisão operacional — **não inferir falha e reenviar**.
 
+A recuperação legada de vídeos não pode reenviar aprovações que já tenham claim
+em `chat_approval_effects`. A consulta da conversa ainda reconcilia os jobs por
+leitura; o journal, não um GET concorrente, é o dono do dispatch dessas ações.
+
 ## Encadeamento tipado de resultados
 
 Campos permitidos podem apontar para tarefa anterior com dependência direta:

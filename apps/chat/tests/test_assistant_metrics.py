@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-
 from assistant_metrics import report_assistant_event
 
 

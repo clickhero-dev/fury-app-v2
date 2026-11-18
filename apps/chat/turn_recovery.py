@@ -95,28 +95,27 @@ class TurnRecovery:
             run_id,lease_id,transient,completed,self.tenant_id,self.user_id)
 
     async def cancel(self, conversation_id, run_id):
-        async with self.db.acquire() as conn:
-            async with conn.transaction():
-                owned = await conn.fetchval('''SELECT id FROM chat_conversations
-                    WHERE id=$1 AND tenant_id=$2 AND user_id=$3 FOR UPDATE''',
-                    conversation_id,self.tenant_id,self.user_id)
-                if not owned:
-                    raise ConversationError(404, 'Conversa não encontrada')
-                message_id = await conn.fetchval('SELECT user_message_id FROM chat_response_runs WHERE id=$1 AND conversation_id=$2',run_id,conversation_id)
-                if message_id is None:
-                    raise ConversationError(404, 'Resposta não encontrada')
-                completed = await conn.fetchval('''SELECT EXISTS (
-                    SELECT 1 FROM chat_response_runs WHERE user_message_id=$1
-                    AND conversation_id=$2 AND status='completed')''',message_id,conversation_id)
-                if completed:
-                    # Completion and cancellation serialize on the conversation
-                    # lock. Report the winner, including the metadata commit gap.
-                    await conn.execute('''UPDATE chat_turn_recovery SET status='completed'
-                        WHERE user_message_id=$1 AND conversation_id=$2''',message_id,conversation_id)
-                    return {'status':'completed'}
-                await conn.execute('''UPDATE chat_turn_recovery SET status='cancelled'
-                    WHERE user_message_id=$1 AND status<>'completed' ''',message_id)
-                await conn.execute('''UPDATE chat_response_runs SET status='interrupted',
-                    lease_until=clock_timestamp(),updated_at=clock_timestamp()
-                    WHERE user_message_id=$1 AND conversation_id=$2 AND status='running' ''',message_id,conversation_id)
+        async with self.db.acquire() as conn, conn.transaction():
+            owned = await conn.fetchval('''SELECT id FROM chat_conversations
+                WHERE id=$1 AND tenant_id=$2 AND user_id=$3 FOR UPDATE''',
+                conversation_id,self.tenant_id,self.user_id)
+            if not owned:
+                raise ConversationError(404, 'Conversa não encontrada')
+            message_id = await conn.fetchval('SELECT user_message_id FROM chat_response_runs WHERE id=$1 AND conversation_id=$2',run_id,conversation_id)
+            if message_id is None:
+                raise ConversationError(404, 'Resposta não encontrada')
+            completed = await conn.fetchval('''SELECT EXISTS (
+                SELECT 1 FROM chat_response_runs WHERE user_message_id=$1
+                AND conversation_id=$2 AND status='completed')''',message_id,conversation_id)
+            if completed:
+                # Completion and cancellation serialize on the conversation
+                # lock. Report the winner, including the metadata commit gap.
+                await conn.execute('''UPDATE chat_turn_recovery SET status='completed'
+                    WHERE user_message_id=$1 AND conversation_id=$2''',message_id,conversation_id)
+                return {'status':'completed'}
+            await conn.execute('''UPDATE chat_turn_recovery SET status='cancelled'
+                WHERE user_message_id=$1 AND status<>'completed' ''',message_id)
+            await conn.execute('''UPDATE chat_response_runs SET status='interrupted',
+                lease_until=clock_timestamp(),updated_at=clock_timestamp()
+                WHERE user_message_id=$1 AND conversation_id=$2 AND status='running' ''',message_id,conversation_id)
         return {'status': 'cancelled'}

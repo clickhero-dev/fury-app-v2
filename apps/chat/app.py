@@ -188,7 +188,11 @@ def create_app():
         attachments = await AttachmentRepository(db, user['tenantId'], user['userId']).by_message(conversation_id)
         await reconcile_stale_approvals(db, conversation_id, user['tenantId'], user['userId'])
         await reconcile_stale_video_jobs(db, conversation_id, user['tenantId'], user['userId'])
-        approvals = await db.fetch("SELECT id,path,body,display,status,created_at,expires_at,result FROM chat_approvals WHERE conversation_id=$1 AND tenant_id=$2 AND user_id=$3 ORDER BY created_at", conversation_id, user['tenantId'], user['userId'])
+        approvals = await db.fetch("""SELECT a.id,a.path,a.body,a.display,a.status,a.created_at,a.expires_at,a.result,
+            EXISTS (SELECT 1 FROM chat_approval_effects e WHERE e.approval_id=a.id
+                AND e.tenant_id=a.tenant_id AND e.user_id=a.user_id) AS effect_claimed
+            FROM chat_approvals a WHERE a.conversation_id=$1 AND a.tenant_id=$2 AND a.user_id=$3
+            ORDER BY a.created_at""", conversation_id, user['tenantId'], user['userId'])
         runs = await db.fetch("""SELECT r.id,r.user_message_id,r.assistant_message_id,r.client_key,
             CASE WHEN r.status='running' AND r.lease_until<=now() THEN 'interrupted' ELSE r.status END AS status,
             CASE WHEN t.user_message_id IS NULL THEN NULL ELSE jsonb_build_object(
@@ -207,7 +211,7 @@ def create_app():
             if status == 'pending' and not campaign_currency_confirmable(a['path'], json.loads(a['display']) if a['display'] else None, json.loads(a['body'])):
                 status = 'expired'
             job_id = recoverable_job_id(a['path'], status, str(a['id']), result)
-            if job_id and not result and a['status'] == 'approved' and a['id'] not in app.state.recovering:
+            if job_id and not result and a['status'] == 'approved' and not a.get('effect_claimed', False) and a['id'] not in app.state.recovering:
                 app.state.recovering.add(a['id'])
                 task = asyncio.create_task(resume_approved_video(app.state.http, db, os.environ['ADY_API_URL'], request.headers['authorization'][7:], a['id'], user['tenantId'], user['userId'], a['path'], json.loads(a['body'])))
                 app.state.tasks.add(task)

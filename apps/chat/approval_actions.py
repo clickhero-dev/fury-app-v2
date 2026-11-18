@@ -5,21 +5,19 @@ model/tool traffic. A claim in this journal never replaces Node's consume:
 chat_approvals is left approved until Node atomically consumes the exact action.
 An interrupted/ambiguous dispatch is never automatically repeated.
 """
-import asyncio
 import hashlib
 import inspect
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from action_outcomes import ActionOutcomes
 from approval_repository import ApprovalRepository
 from approvals import campaign_currency_confirmable
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from streaming import safe_video_job
 
 UNKNOWN = {'code': 'CHAT_OUTCOME_UNCONFIRMED', 'error': 'Não foi possível confirmar o resultado. Confira a ação antes de tentar novamente.'}
@@ -151,7 +149,7 @@ class ApprovalActions:
         return [indexed[aid] for aid in ids]
 
     def validate_pending(self, rows):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if any(row['status'] != 'pending' or row['expires_at'] <= now
                or not allowed_action(row['method'], row['path'])
                or not campaign_currency_confirmable(row['path'], decoded(row['display']), decoded(row['body']))
@@ -159,82 +157,79 @@ class ApprovalActions:
             raise HTTPException(409, 'Proposta alterada, indisponível ou expirada. Revise novamente.')
 
     async def review(self, conversation_id, ids):
-        async with self.pool.acquire() as db:
-            async with db.transaction():
-                await self.require_conversation(db, conversation_id)
-                rows = await self.rows(db, conversation_id, ids)
-                self.validate_pending(rows)
-                items = snapshot(rows)
-                digest, token = digest_for(items), uuid4()
-                expiry = min(datetime.now(timezone.utc) + timedelta(minutes=10), *(row['expires_at'] for row in rows))
-                await db.execute("""INSERT INTO chat_approval_reviews
-                    (id,conversation_id,tenant_id,user_id,digest,snapshot,expires_at)
-                    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)""",
-                    token, conversation_id, self.tenant, self.user, digest, json.dumps(items), expiry)
+        async with self.pool.acquire() as db, db.transaction():
+            await self.require_conversation(db, conversation_id)
+            rows = await self.rows(db, conversation_id, ids)
+            self.validate_pending(rows)
+            items = snapshot(rows)
+            digest, token = digest_for(items), uuid4()
+            expiry = min(datetime.now(UTC) + timedelta(minutes=10), *(row['expires_at'] for row in rows))
+            await db.execute("""INSERT INTO chat_approval_reviews
+                (id,conversation_id,tenant_id,user_id,digest,snapshot,expires_at)
+                VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)""",
+                token, conversation_id, self.tenant, self.user, digest, json.dumps(items), expiry)
         return {'reviewToken': str(token), 'version': 1, 'digest': digest,
                 'approvalIds': [str(i) for i in ids], 'expiresAt': expiry.isoformat(),
                 'items': [public_item(item) for item in items]}
 
     async def claim(self, conversation_id, data):
-        async with self.pool.acquire() as db:
-            async with db.transaction():
-                await self.require_conversation(db, conversation_id)
-                review = await db.fetchrow("""SELECT * FROM chat_approval_reviews
-                    WHERE id=$1 AND conversation_id=$2 AND tenant_id=$3 AND user_id=$4 FOR UPDATE""",
-                    data.reviewToken, conversation_id, self.tenant, self.user)
-                if review is None:
-                    raise HTTPException(404, 'Revisão não encontrada')
-                items = decoded(review['snapshot'])
-                if (data.version != review['version'] or data.digest != review['digest']
-                        or digest_for(items) != review['digest']
-                        or [str(i) for i in data.approvalIds] != [item['id'] for item in items]):
-                    raise HTTPException(409, 'A confirmação não corresponde à revisão.')
-                if review['confirmed_at'] is not None:
-                    return None
-                if review['expires_at'] <= datetime.now(timezone.utc):
-                    raise HTTPException(409, 'Revisão expirada.')
-                rows = await self.rows(db, conversation_id, data.approvalIds)
-                self.validate_pending(rows)
-                if digest_for(snapshot(rows)) != review['digest']:
-                    raise HTTPException(409, 'Proposta alterada. Revise novamente.')
-                for aid in data.approvalIds:
-                    claimed = await db.fetchval("""INSERT INTO chat_approval_effects
-                        (approval_id,review_id,tenant_id,user_id,state) VALUES($1,$2,$3,$4,'claimed')
-                        ON CONFLICT(approval_id) DO NOTHING RETURNING approval_id""",
-                        aid, data.reviewToken, self.tenant, self.user)
-                    if claimed is None:
-                        raise HTTPException(409, 'Ação já confirmada. Confira seu resultado.')
-                await db.execute("""UPDATE chat_approvals SET status='approved'
-                    WHERE id=ANY($1::uuid[]) AND tenant_id=$2 AND user_id=$3""",
-                    data.approvalIds, self.tenant, self.user)
-                await db.execute('UPDATE chat_approval_reviews SET confirmed_at=now() WHERE id=$1', data.reviewToken)
+        async with self.pool.acquire() as db, db.transaction():
+            await self.require_conversation(db, conversation_id)
+            review = await db.fetchrow("""SELECT * FROM chat_approval_reviews
+                WHERE id=$1 AND conversation_id=$2 AND tenant_id=$3 AND user_id=$4 FOR UPDATE""",
+                data.reviewToken, conversation_id, self.tenant, self.user)
+            if review is None:
+                raise HTTPException(404, 'Revisão não encontrada')
+            items = decoded(review['snapshot'])
+            if (data.version != review['version'] or data.digest != review['digest']
+                    or digest_for(items) != review['digest']
+                    or [str(i) for i in data.approvalIds] != [item['id'] for item in items]):
+                raise HTTPException(409, 'A confirmação não corresponde à revisão.')
+            if review['confirmed_at'] is not None:
+                return None
+            if review['expires_at'] <= datetime.now(UTC):
+                raise HTTPException(409, 'Revisão expirada.')
+            rows = await self.rows(db, conversation_id, data.approvalIds)
+            self.validate_pending(rows)
+            if digest_for(snapshot(rows)) != review['digest']:
+                raise HTTPException(409, 'Proposta alterada. Revise novamente.')
+            for aid in data.approvalIds:
+                claimed = await db.fetchval("""INSERT INTO chat_approval_effects
+                    (approval_id,review_id,tenant_id,user_id,state) VALUES($1,$2,$3,$4,'claimed')
+                    ON CONFLICT(approval_id) DO NOTHING RETURNING approval_id""",
+                    aid, data.reviewToken, self.tenant, self.user)
+                if claimed is None:
+                    raise HTTPException(409, 'Ação já confirmada. Confira seu resultado.')
+            await db.execute("""UPDATE chat_approvals SET status='approved'
+                WHERE id=ANY($1::uuid[]) AND tenant_id=$2 AND user_id=$3""",
+                data.approvalIds, self.tenant, self.user)
+            await db.execute('UPDATE chat_approval_reviews SET confirmed_at=now() WHERE id=$1', data.reviewToken)
         return items
 
     async def persist(self, approval_id, state, result):
-        async with self.pool.acquire() as db:
-            async with db.transaction():
-                row = await db.fetchrow("""SELECT status,result FROM chat_approvals
-                    WHERE id=$1 AND tenant_id=$2 AND user_id=$3 FOR UPDATE""", approval_id, self.tenant, self.user)
-                # Node may finish after a network timeout; never destroy that evidence.
-                if row['status'] == 'completed' and state in ('unknown', 'failed'):
-                    state, result = 'completed', decoded(row['result'])
-                if state in ('completed', 'processing') and (
-                        not isinstance(result, dict) or explicit_action_failure(result)):
-                    state, result = 'unknown', UNKNOWN
-                if state == 'failed' and ActionOutcomes.classify(403, {'error': result}) is not None:
-                    # Node may have stored its generic failure before Python
-                    # receives the typed refusal. Enrich only that known safe
-                    # placeholder, never a completed or unrelated result.
-                    await ApprovalRepository(db, self.tenant, self.user).record_failure(approval_id, result)
-                await db.execute("""UPDATE chat_approval_effects SET state=$1,result=$2::jsonb,finished_at=now()
-                    WHERE approval_id=$3 AND tenant_id=$4 AND user_id=$5""",
-                    state, json.dumps(result), approval_id, self.tenant, self.user)
-                await db.execute("""UPDATE chat_approvals SET
-                    status=CASE WHEN status IN ('approved','executing') THEN $1 ELSE status END,
-                    result=CASE WHEN result IS NULL THEN $2::jsonb ELSE result END
-                    WHERE id=$3 AND tenant_id=$4 AND user_id=$5""",
-                    'completed' if state == 'processing' else state, json.dumps(result),
-                    approval_id, self.tenant, self.user)
+        async with self.pool.acquire() as db, db.transaction():
+            row = await db.fetchrow("""SELECT status,result FROM chat_approvals
+                WHERE id=$1 AND tenant_id=$2 AND user_id=$3 FOR UPDATE""", approval_id, self.tenant, self.user)
+            # Node may finish after a network timeout; never destroy that evidence.
+            if row['status'] == 'completed' and state in ('unknown', 'failed'):
+                state, result = 'completed', decoded(row['result'])
+            if state in ('completed', 'processing') and (
+                    not isinstance(result, dict) or explicit_action_failure(result)):
+                state, result = 'unknown', UNKNOWN
+            if state == 'failed' and ActionOutcomes.classify(403, {'error': result}) is not None:
+                # Node may have stored its generic failure before Python
+                # receives the typed refusal. Enrich only that known safe
+                # placeholder, never a completed or unrelated result.
+                await ApprovalRepository(db, self.tenant, self.user).record_failure(approval_id, result)
+            await db.execute("""UPDATE chat_approval_effects SET state=$1,result=$2::jsonb,finished_at=now()
+                WHERE approval_id=$3 AND tenant_id=$4 AND user_id=$5""",
+                state, json.dumps(result), approval_id, self.tenant, self.user)
+            await db.execute("""UPDATE chat_approvals SET
+                status=CASE WHEN status IN ('approved','executing') THEN $1 ELSE status END,
+                result=CASE WHEN result IS NULL THEN $2::jsonb ELSE result END
+                WHERE id=$3 AND tenant_id=$4 AND user_id=$5""",
+                'completed' if state == 'processing' else state, json.dumps(result),
+                approval_id, self.tenant, self.user)
 
     async def dispatch(self, item, authorization):
         state, result = 'unknown', UNKNOWN
@@ -258,7 +253,7 @@ class ApprovalActions:
                 if not isinstance(result, dict) or explicit_action_failure(result):
                     raise ValueError('Invalid action result')
                 state = 'processing' if response.status_code == 202 else 'completed'
-        except (httpx.HTTPError, ValueError, asyncio.TimeoutError):
+        except (httpx.HTTPError, ValueError, TimeoutError):
             state, result = 'unknown', UNKNOWN
         await self.persist(UUID(item['id']), state, result)
 
@@ -273,7 +268,7 @@ class ApprovalActions:
     def outcome(row):
         state, result = row['state'], decoded(row['result'])
         if state == 'claimed':
-            state = ('unknown' if row['claimed_at'] < datetime.now(timezone.utc)-timedelta(minutes=5)
+            state = ('unknown' if row['claimed_at'] < datetime.now(UTC)-timedelta(minutes=5)
                      else 'processing')
         if row['approval_status'] == 'completed' and row['state'] in ('claimed', 'unknown'):
             state, result = 'completed', decoded(row['approval_result'])
@@ -342,7 +337,7 @@ class ApprovalActions:
 def create_approval_router(pool_getter, http_client_getter, identity_dependency, base_url_getter):
     router = APIRouter()
 
-    async def human(user=Depends(identity_dependency)):
+    async def human(user=Depends(identity_dependency)):  # noqa: B008 - FastAPI dependency declaration.
         if user.get('humanIntent') is not True:
             raise HTTPException(403, 'Confirmação humana delegada obrigatória.')
         return user
@@ -352,11 +347,11 @@ def create_approval_router(pool_getter, http_client_getter, identity_dependency,
                                await resolve(base_url_getter), user)
 
     @router.post('/conversations/{conversation_id}/approvals/review')
-    async def review(conversation_id: UUID, body: ReviewInput, user=Depends(human)):
+    async def review(conversation_id: UUID, body: ReviewInput, user=Depends(human)):  # noqa: B008 - FastAPI dependency.
         return await (await service(user)).review(conversation_id, body.approvalIds)
 
     @router.post('/conversations/{conversation_id}/approvals/confirm-batch')
-    async def confirm(conversation_id: UUID, body: ConfirmInput, request: Request, user=Depends(human)):
+    async def confirm(conversation_id: UUID, body: ConfirmInput, request: Request, user=Depends(human)):  # noqa: B008 - FastAPI dependency.
         authorization = request.headers.get('authorization', '')
         if not authorization.lower().startswith('bearer '):
             raise HTTPException(401, 'Credencial obrigatória')

@@ -6,8 +6,8 @@ by the candidate itself. Structural checks are safety gates, not editorial truth
 import argparse
 import json
 import math
-from pathlib import Path
 import re
+from pathlib import Path
 from statistics import mean
 
 from response_messages import parse_response

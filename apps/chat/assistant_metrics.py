@@ -1,6 +1,6 @@
 """Optional lifecycle observations; never send prompts, identity or diagnostics."""
-from hashlib import sha256
 import logging
+from hashlib import sha256
 from uuid import UUID
 
 import httpx

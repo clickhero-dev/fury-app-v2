@@ -2,7 +2,6 @@
 import json
 
 import pytest
-
 from editorial_evaluation import evaluate_samples, load_cases, main
 
 

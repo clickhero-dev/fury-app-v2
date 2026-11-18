@@ -225,9 +225,10 @@ Runbooks: `docs/operations/ady-recovery-and-approvals.md` e
 ### Evidência técnica local — segunda implementação
 
 - PostgreSQL descartável com todas as migrations aplicadas, incluindo `0080`–`0082`.
-- Suíte Python completa: **1.022 testes passando**; cobertura de **93,46%** nos
+- Suíte Python completa: **1.025 testes passando**; cobertura de **93,44%** nos
   módulos de runtime, recuperação, journal, checkpoints, fallback e avaliação.
-- API/chat: **394 passando / 37 ignorados por configuração**; cobertura do escopo
+- API/chat com fixtures PG adicionais: **427 passando / 4 ignorados por ausência
+  de Redis dedicado**. Rodada de cobertura com 394 passando: escopo
   Node medido: statements **84,27%**, branches **81,84%**, functions **83,33%**.
 - Teste cross-service real: processo Node → PostgreSQL/identidade atual → delegação
   curta → HTTP/FastAPI → checkpoint → resposta persistida. Segundo processo não
@@ -236,9 +237,14 @@ Runbooks: `docs/operations/ady-recovery-and-approvals.md` e
 - Testes PostgreSQL de concorrência: novo pedido vencendo reconciliador,
   cancelamento/conclusão, claims single/lote e sucesso tardio após timeout.
 - Builds shared/db/API/web e lint dos módulos Node alterados passaram.
-- Gate frontend anterior ao merge: 335 testes de chat; 74 E2E mocked passando,
-  1 jornada real ignorada nesse gate. A apresentação legível do lote e a
-  incorporação das sugestões contextuais da `hmg` têm verificação complementar.
+- Interface após incorporar `hmg` (`58f11031`): **386 testes de chat**, com
+  typecheck/lint direcionado aprovados. Três atalhos imediatos foram mantidos;
+  sugestões contextuais opcionais consultam contexto somente após clique e
+  descartam respostas atrasadas de outro usuário/tenant.
+- Revisão apresenta total de consumo conhecido, itens desconhecidos, valores
+  BRL confirmados, objetivos legíveis e prévias corretas de imagens/Reels.
+- A evolução de tickets incorporada da `hmg` foi preservada e suas 33 regressões
+  de status/telemetria passaram.
 
 Cobertura é do escopo explicitado, não do monorepo inteiro. Estes resultados não
 são evidência de deploy, qualidade com empresários ou homologação paga de modelos.

@@ -98,3 +98,78 @@ def test_confirmation_persists_actor_scoped_cause_and_suppresses_replay(monkeypa
             assert len(calls) == 1
     finally:
         asyncio.run(cleanup())
+
+
+@pytest.mark.parametrize('scenario', ['journal_inflight', 'journal_crashed', 'legacy'])
+def test_conversation_poll_never_redispatches_a_journal_claim_but_legacy_can_resume(monkeypatch, scenario):
+    """A read must not race the normal dispatcher for Node's one-shot consume."""
+    from app import identity
+    from approval_actions import ApprovalActions, ConfirmInput
+    from test_attachments_postgres import database
+
+    monkeypatch.setenv('ADY_API_URL', 'https://ady.invalid')
+
+    async def run():
+        async with database() as (pool, tenant, user, cid):
+            await pool.execute((Path(__file__).parents[3] / 'packages/db/migrations/0082_chat_batch_approvals.sql').read_text())
+            aid = await pool.fetchval("""INSERT INTO chat_approvals
+                (conversation_id,tenant_id,user_id,method,path,body,status,expires_at)
+                VALUES($1,$2,$3,'POST','/api/studio/video/jobs','{}','pending',now()+interval '1 hour')
+                RETURNING id""", cid, tenant, user)
+            claims = {'tenantId': tenant, 'userId': user, 'humanIntent': True}
+            calls = []
+            accepted = {'jobId': str(aid)}
+
+            async def node(request):
+                calls.append((request.method, request.url.path))
+                if request.method == 'GET':
+                    row = await pool.fetchrow('SELECT status FROM chat_approvals WHERE id=$1', aid)
+                    if row['status'] == 'completed':
+                        return httpx.Response(200, json={'jobId': str(aid), 'status': 'pending'})
+                    return httpx.Response(404, json={'error': 'not submitted'})
+                assert request.method == 'POST'
+                consumed = await pool.fetchval("""UPDATE chat_approvals SET status='executing',execution_started_at=now()
+                    WHERE id=$1 AND status='approved' RETURNING id""", aid)
+                assert consumed == aid, 'GET stole the consume from the durable dispatcher'
+                # Model Node's authoritative completion of submission, not media.
+                await pool.execute("UPDATE chat_approvals SET status='completed',result=$1::jsonb WHERE id=$2",
+                                   json.dumps(accepted), aid)
+                return httpx.Response(202, json=accepted)
+
+            application = create_app()
+            application.dependency_overrides[identity] = lambda: claims
+            async with application.router.lifespan_context(application):
+                application.state.pool = pool
+                application.state.http._transport = httpx.MockTransport(node)
+                actions = ApprovalActions(pool, application.state.http, 'https://ady.invalid', claims)
+                items = None
+                if scenario == 'legacy':
+                    await pool.execute("UPDATE chat_approvals SET status='approved' WHERE id=$1", aid)
+                else:
+                    review = await actions.review(cid, [aid])
+                    body = ConfirmInput(**{key: review[key] for key in ('reviewToken', 'version', 'digest', 'approvalIds')})
+                    items = await actions.claim(cid, body)
+                    if scenario == 'journal_crashed':
+                        await pool.execute("UPDATE chat_approval_effects SET claimed_at=now()-interval '6 minutes'")
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
+                                             base_url='https://chat.invalid',
+                                             headers={'Authorization': 'Bearer delegated'}) as client:
+                    response = await client.get(f'/conversations/{cid}')
+                    assert response.status_code == 200, response.text
+                    await asyncio.sleep(0.02)
+                    if application.state.tasks:
+                        await asyncio.gather(*tuple(application.state.tasks))
+                    posts = [call for call in calls if call[0] == 'POST']
+                    assert len(posts) == (1 if scenario == 'legacy' else 0)
+                    assert any(method == 'GET' for method, _ in calls), 'Job status reads must remain allowed'
+                    if scenario == 'journal_inflight':
+                        assert await pool.fetchval('SELECT status FROM chat_approvals WHERE id=$1', aid) == 'approved'
+                        await actions.dispatch(items[0], 'Bearer delegated')
+                        assert (await actions.results(body.reviewToken))[str(aid)]['status'] == 'processing'
+                    polled = await client.get(f'/conversations/{cid}')
+                    assert polled.status_code == 200, polled.text
+                    await asyncio.sleep(0.02)
+                    assert len([call for call in calls if call[0] == 'POST']) == (0 if scenario == 'journal_crashed' else 1)
+                    if scenario == 'journal_crashed':
+                        assert await pool.fetchval('SELECT state FROM chat_approval_effects WHERE approval_id=$1', aid) == 'claimed'
+    asyncio.run(run())

@@ -4,7 +4,6 @@ import json
 import os
 
 import pytest
-
 from attachment_repository import AttachmentRepository
 from checkpoints import CheckpointRepository
 from conversation_repository import ConversationRepository

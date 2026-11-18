@@ -1,10 +1,10 @@
 """Single and batch routes share the durable effect journal, never legacy dispatch."""
 from uuid import uuid4
 
+import app as chat
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-import pytest
-import app as chat
 
 
 @pytest.fixture
