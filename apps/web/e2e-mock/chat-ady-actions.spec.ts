@@ -1,19 +1,15 @@
 import { expect, test } from '@playwright/test';
 
 const actions = [
-  ['Criar post para o Instagram', 'Qual é o tema do post e para qual público?', 'post para o Instagram'],
-  ['Agendar posts da semana', 'Qual semana e quais conteúdos você quer agendar?', 'agendar os posts da semana'],
-  ['Criar Reels para o Instagram', 'Qual é o tema e o objetivo do Reels?', 'Reels para o Instagram'],
-  ['Criar vídeo para o negócio', 'O que seu vídeo deve apresentar sobre o negócio?', 'vídeo para meu negócio'],
-  ['Aumentar seguidores no Instagram', 'Qual perfil você quer divulgar e qual público deseja alcançar?', 'aumentar seguidores'],
-  ['Atrair clientes pelo WhatsApp', 'Qual oferta e qual público você quer atrair pelo WhatsApp?', 'clientes pelo WhatsApp'],
+  ['Não sei o que postar', 'próximo post'],
+  ['Organizar minha semana', 'semana'],
+  ['Usar uma foto minha', 'foto'],
 ];
 // Funcionalidade: iniciar ações úteis com segurança em telas pequenas e desktop.
-// Dado o chat isolado, Quando toca num atalho, Então abre a pergunta específica
-// sem executar ações; Quando cancela, Então volta sem envio; Quando continua,
-// Então usa o endpoint de conversa existente com briefing e confirmação exigida.
+// Dado o chat isolado, nada é enviado até o clique. O clique prepara o entregável
+// sem briefing nem autorização de publicação, mídia paga ou geração com custo.
 for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844,height:390},{width:1440,height:900}]) {
-  test(`encaixe e seis fluxos específicos ${viewport.width}x${viewport.height}`, async ({page}) => {
+  test(`encaixe e três pedidos diretos ${viewport.width}x${viewport.height}`, async ({page}) => {
     test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     const requests: string[] = [];
@@ -48,26 +44,23 @@ for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844
     };
     await expect(page.getByRole('heading',{name:'Assistente do Ady'})).toBeVisible();
     await fit();
-    for (const [label,question,prompt] of actions) {
-      await page.getByRole('button',{name:label,exact:true}).click();
-      await expect(page.getByRole('group',{name:question,exact:true})).toBeVisible();
-      await expect(page.locator('.ady-chat-main').getByRole('textbox')).toHaveCount(1);
-      await expect(page.getByRole('textbox',{name:'Mensagem',exact:true})).toHaveValue('');
-      await expect(page.getByRole('button',{name:'Continuar com Ady'})).toHaveCount(0);
+    for (const [label,prompt] of actions) {
+      await expect(page.getByRole('group',{name:'Ações para começar'}).getByRole('button')).toHaveCount(3);
       expect(requests).toEqual([]);
-      await page.getByRole('button',{name:'Cancelar',exact:true}).click();
       await page.getByRole('button',{name:label,exact:true}).click();
-      await page.getByRole('textbox',{name:'Mensagem',exact:true}).fill('Meu negócio de flores');
-      await fit();
-      await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
       await expect(page.getByText('Conecte sua conta nas integrações para continuar. Nenhuma ação executada.',{exact:true})).toBeVisible();
+      await expect(page.getByRole('textbox',{name:'Mensagem',exact:true})).toHaveValue('');
+      await expect(page.getByRole('button',{name:'Anexar arquivos'})).toBeEnabled();
+      await expect(page.getByRole('button',{name:'Continuar com Ady'})).toHaveCount(0);
       expect(sends.at(-1)).toContain(prompt);
       expect(sends.at(-1)).toContain('confirmação explícita');
+      expect(sends.at(-1)).toContain('não autoriza publicar, agendar, investir em mídia paga');
       expect(requests).toEqual(['/api/chat/conversations','/api/chat/conversations/c1/messages']);
       await fit();
       // Start each action from an independent empty conversation.
       await page.evaluate(() => sessionStorage.clear());
       await page.reload();
+      await expect(page.getByRole('button',{name:'Não sei o que postar',exact:true})).toBeVisible();
       requests.length=0;
     }
   });

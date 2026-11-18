@@ -1,0 +1,31 @@
+.ady-chat-batch,
+.ady-chat-recovery {
+  min-width: 0;
+  max-width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--border-main);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  overflow-wrap: anywhere;
+}
+.ady-chat-batch h3,
+.ady-chat-batch h4 { margin: 0; font-weight: 650; }
+.ady-chat-batch p,
+.ady-chat-recovery p { margin: .4rem 0; line-height: 1.6; }
+.ady-chat-batch > p,
+.ady-chat-recovery > p { color: var(--text-secondary); font-size: .875rem; }
+.ady-chat-batch ul { list-style: none; padding: 0; margin: .75rem 0; }
+.ady-chat-batch li,
+.ady-chat-batch article { padding: .65rem 0; border-bottom: 1px solid var(--border-main); }
+.ady-chat-batch label { display: flex; align-items: center; gap: .65rem; min-height: 44px; font-weight: 600; cursor: pointer; }
+.ady-chat-batch input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; accent-color: var(--color-brand); }
+.ady-chat-batch [data-status=uncertain],
+.ady-chat-batch [role=alert] { border-left: 3px solid var(--color-brand); padding-left: .75rem; }
+.ady-chat-batch button,
+.ady-chat-recovery button { min-height: 44px; max-width: 100%; white-space: normal; }
+@media (max-width: 767px) {
+  .ady-chat-batch,
+  .ady-chat-recovery { padding: .8rem; }
+  .ady-chat-batch button,
+  .ady-chat-recovery button { width: 100%; }
+}
