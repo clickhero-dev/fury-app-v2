@@ -100,8 +100,9 @@ def mark_provider_output():
 
 
 class SanitizedEventStream(httpx.AsyncByteStream):
-    def __init__(self, inner, state):
+    def __init__(self, inner, state, *, tool_followup=False):
         self.inner, self.state = inner, state
+        self.tool_followup = tool_followup
         self.events = self.parse_events()
         self.first = None
         self.error_code = None
@@ -174,7 +175,7 @@ class SanitizedEventStream(httpx.AsyncByteStream):
         # calls; after a bounded number of preambles fall back to streaming.
         for _ in range(32):
             self.first = await anext(self.events, None)
-            if self.first is None or self.state is None or self.state['unsafe']:
+            if self.first is None or self.state is None or (self.state['unsafe'] and not self.tool_followup):
                 return
             try:
                 payload = json.loads(self.first.removeprefix(b'data: '))
@@ -229,6 +230,13 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
         payload = json.loads(request.content)
         candidates = self.policy.candidates(payload)
         original_request = request
+        messages = payload.get('messages')
+        # A new completion after a tool result may retry its HTTP request before
+        # any response bytes are delivered. This does not rerun the tool.
+        tool_followup = (
+            isinstance(messages, list) and bool(messages)
+            and isinstance(messages[-1], dict) and messages[-1].get('role') == 'tool'
+        )
 
         async def retry(attempt, status=None, headers=None, *, retryable=True):
             nonlocal waited
@@ -251,7 +259,7 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                     # below rejects an excessive hint instead of silently
                     # retrying earlier than OpenRouter requested.
                     delay = max(delay, seconds)
-            if (not retryable or state is None or state['unsafe']
+            if (not retryable or state is None or (state['unsafe'] and not tool_followup)
                     or attempt >= MAX_PROVIDER_ATTEMPTS - 1
                     or waited + delay >= MAX_RETRY_WAIT_SECONDS
                     or time.monotonic() - started + delay > MAX_REQUEST_RETRY_SECONDS):
@@ -310,7 +318,7 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                 raise httpx.ConnectError('Model provider connection failed', request=request) from None
             if response.status_code < 400:
                 if 'text/event-stream' in response.headers.get('content-type', '').lower():
-                    stream = SanitizedEventStream(response.stream, state)
+                    stream = SanitizedEventStream(response.stream, state, tool_followup=tool_followup)
                     try:
                         await stream.prime()
                     except httpx.TimeoutException:
@@ -320,7 +328,7 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                         raise httpx.ReadTimeout('Model provider timeout', request=request) from None
                     except httpx.ReadError:
                         await response.aclose()
-                        if await retry(attempt):
+                        if await retry(attempt, retryable=not state or state.get('error_kind') != 'invalid'):
                             continue
                         raise httpx.ReadError('Model provider stream failed', request=request) from None
                     except BaseException:

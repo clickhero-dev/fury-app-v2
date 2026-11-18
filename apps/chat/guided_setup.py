@@ -26,6 +26,7 @@ class SetupState:
 def question_for(step: str) -> dict[str, Any]:
     questions = {
         INVITATION: {'question': 'Posso fazer algumas perguntas sobre seu negócio para dar sugestões mais úteis?', 'choices': ['Sim', 'Não']},
+        DECLINED: {'question': 'Tudo bem! Podemos continuar sem essas perguntas.', 'choices': []},
         BUSINESS_NAME: {'question': 'Qual é o nome do seu negócio?', 'choices': []},
         LOGO: {'question': 'Você tem uma logomarca?', 'choices': ['Sim, vou enviar', 'Não tenho', 'Pular por enquanto']},
         LOGO_CREATION: {'question': 'Gostaria de criar uma logomarca agora?', 'choices': ['Criar logomarca', 'Continuar sem logo']},
@@ -40,6 +41,11 @@ def question_for(step: str) -> dict[str, Any]:
 
 def normalize(value: str) -> str:
     return ' '.join(value.strip().casefold().split())
+
+
+def matches_question(step: str, text: str | None) -> bool:
+    """Only bind an answer to the question actually shown, never current state alone."""
+    return isinstance(text, str) and normalize(question_for(step)['question']) == normalize(text)
 
 
 def advance(state: SetupState, answer: str) -> SetupState:
@@ -106,7 +112,12 @@ class GuidedSetup:
             COMPANY_PHOTOS, TEAM_PHOTOS, PRODUCT_PHOTOS, DONE,
         }:
             return SetupState()
-        return SetupState(row['step'], dict(row['answers'] or {}))
+        answers = row['answers']
+        if isinstance(answers, str):
+            answers = json.loads(answers)
+        if not isinstance(answers, dict):
+            raise TypeError('Invalid guided setup answers')
+        return SetupState(row['step'], dict(answers))
 
     async def save_answer(self, answer: str) -> dict[str, Any]:
         state = await self.current()
@@ -128,8 +139,9 @@ class GuidedSetup:
 
 
 class GuidedSetupTools:
-    def __init__(self, setup: GuidedSetup, context_writer=None):
+    def __init__(self, setup: GuidedSetup, context_writer=None, *, expected_answer=None):
         self.setup, self.context_writer = setup, context_writer
+        self.expected_answer = expected_answer
 
     async def guided_setup_status(self) -> dict[str, Any]:
         """Consultar a etapa atual da ajuda de configuração do negócio."""
@@ -144,10 +156,14 @@ class GuidedSetupTools:
         """
         if not isinstance(answer, str):
             return {'error': 'Resposta inválida.'}
+        if self.expected_answer is not None and answer.strip() != self.expected_answer.strip():
+            return {'error': 'Use exatamente a resposta enviada pela pessoa.'}
         try:
             result = await self.setup.save_answer(answer)
             update = result.get('profileUpdate')
-            if update and self.context_writer:
+            if update and not self.context_writer:
+                return {**result, 'contextSaved': False, 'contextError': 'A atualização do perfil não foi confirmada.'}
+            if update:
                 saved = await self.context_writer(update['tenantName'], update['businessContext'])
                 if saved.get('error'):
                     return {**result, 'contextSaved': False, 'contextError': saved['error']}

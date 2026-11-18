@@ -1,6 +1,24 @@
 """Read-only tool checkpoints; external effects remain outside replay."""
+import logging
+
 from checkpoints import CACHE_MISS, READ_ARGUMENTS, redact_checkpoint_data
+from chat_read_tools import ProfileSyncTransient
 from tool_budget import budget_tool_result
+
+
+class SafeToolFailure(RuntimeError):
+    """A tool or its checkpoint failed; never expose its original exception."""
+
+
+async def guarded_checkpointed_tool(checkpoints, function, args, *, name=None):
+    try:
+        return await checkpointed_tool(checkpoints, function, args, name=name)
+    except ProfileSyncTransient:
+        raise
+    except Exception as error:
+        # Do not log exception messages, arguments, tracebacks, or tool output.
+        logging.getLogger('ady.chat').error('tool_or_checkpoint_failure type=%s', type(error).__name__)
+        raise SafeToolFailure('Não foi possível preservar o trabalho desta resposta.') from None
 
 
 def _confirmed(value):

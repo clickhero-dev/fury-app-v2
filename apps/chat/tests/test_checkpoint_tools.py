@@ -105,6 +105,33 @@ def test_database_failure_propagates_without_claiming_saved_result():
     asyncio.run(run())
 
 
+def test_guarded_failure_is_classified_and_logged_without_sensitive_details(caplog):
+    from checkpoint_tools import SafeToolFailure, guarded_checkpointed_tool
+
+    async def run():
+        async def broken(**_kwargs):
+            raise RuntimeError('sensitive provider token and user content')
+        with pytest.raises(SafeToolFailure) as error:
+            await guarded_checkpointed_tool(Store(), broken, {}, name='guided_setup_answer')
+        assert 'sensitive' not in str(error.value)
+
+    asyncio.run(run())
+    assert 'RuntimeError' in caplog.text
+    assert 'sensitive' not in caplog.text
+
+
+def test_guard_preserves_transient_profile_reconciliation_for_recovery():
+    from checkpoint_tools import guarded_checkpointed_tool
+    from chat_read_tools import ProfileSyncTransient
+
+    async def run():
+        async def broken(**_kwargs):
+            raise ProfileSyncTransient('Não foi possível confirmar o contexto.')
+        with pytest.raises(ProfileSyncTransient):
+            await guarded_checkpointed_tool(Store(), broken, {}, name='guided_setup_answer')
+    asyncio.run(run())
+
+
 def test_real_agno_hook_reuses_confirmed_read_after_provider_failure():
     import json
     import httpx

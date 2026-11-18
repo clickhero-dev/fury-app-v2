@@ -6,7 +6,21 @@ import pytest
 
 
 @pytest.fixture
-def checkpoint_store(monkeypatch):
+def guided_setup_unavailable(monkeypatch):
+    import app as chat
+    from guided_setup import SetupState
+    from guided_setup_persistence import SnapshotMissing
+
+    class Setup:
+        def __init__(self, *args): pass
+        async def capture_snapshot(self): raise SnapshotMissing()
+        async def current(self): return SetupState()
+
+    monkeypatch.setattr(chat, 'GuidedSetupPersistence', Setup)
+
+
+@pytest.fixture
+def checkpoint_store(monkeypatch, guided_setup_unavailable):
     import app as chat
     from checkpoints import CACHE_MISS
 

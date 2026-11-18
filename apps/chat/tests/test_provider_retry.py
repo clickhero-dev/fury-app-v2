@@ -193,7 +193,7 @@ def test_streamed_provider_error_does_not_leak(capfd):
     assert 'stream-secret' not in captured.out + captured.err + str(events)
 
 
-def test_agno_tool_side_effect_prevents_retry_after_provider_failure():
+def test_exhausted_followup_retries_never_reexecute_tool():
     import json
     from model_request_budget import provider_retry_scope, mark_provider_output
     async def run():
@@ -217,10 +217,84 @@ def test_agno_tool_side_effect_prevents_retry_after_provider_failure():
             agent = Agent(model=OpenRouter(id='test', api_key='test', http_client=client, max_retries=0, retries=0), tools=[perform_action], tool_hooks=[hook], telemetry=False)
             with provider_retry_scope():
                 events = [e async for e in agent.arun('act', stream=True)]
-        assert len(calls) == 2
+        assert 2 < len(calls) <= 12
         assert effects == [1]
         assert any(getattr(e, 'event', None) == 'RunError' for e in events)
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('failure', ['http', 'preamble'])
+def test_transient_followup_request_recovers_without_reexecuting_tool(failure):
+    import json
+    from model_request_budget import provider_retry_scope, mark_provider_output
+    from streaming import checked_agent_events
+
+    async def run():
+        requests, effects, output = [], [], []
+        def chunk(delta, reason=None):
+            return 'data: ' + json.dumps({'id': '1', 'object': 'chat.completion.chunk', 'choices': [
+                {'index': 0, 'delta': delta, 'finish_reason': reason},
+            ]}) + '\n\n'
+        def handler(request):
+            messages = json.loads(request.content)['messages']
+            requests.append(messages)
+            if len(requests) == 1:
+                data = chunk({'tool_calls': [{'index': 0, 'id': 't1', 'type': 'function',
+                    'function': {'name': 'perform_action', 'arguments': '{}'}}]}) + chunk({}, 'tool_calls')
+            elif len(requests) == 2:
+                if failure == 'http':
+                    return httpx.Response(503, json={'error': {'message': 'private'}})
+                data = chunk({'role': 'assistant'}) + 'data: {"error":{"code":503,"message":"private"}}\n\n'
+                return httpx.Response(200, headers={'content-type': 'text/event-stream'}, content=data)
+            else:
+                data = chunk({'content': 'Feito.'}) + chunk({}, 'stop')
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'}, content=data + 'data: [DONE]\n\n')
+        async def perform_action():
+            """Perform an action."""
+            effects.append(1)
+            return 'done'
+        async def hook(function, args):
+            mark_provider_output()
+            return await function(**args)
+        async with create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
+            agent = Agent(model=OpenRouter(id='test', api_key='test', http_client=client,
+                          max_retries=0, retries=0), tools=[perform_action], tool_hooks=[hook], telemetry=False)
+            with provider_retry_scope() as state:
+                async for event in checked_agent_events(agent.arun('act', stream=True), state):
+                    if isinstance(getattr(event, 'content', None), str):
+                        output.append(event.content)
+        assert len(requests) == 3
+        assert requests[1] == requests[2]
+        assert effects == [1]
+        assert ''.join(output) == 'Feito.'
+    asyncio.run(run())
+
+
+def test_followup_stream_is_not_retried_after_content_is_delivered():
+    from model_request_budget import provider_retry_scope, mark_provider_output
+
+    async def scenario():
+        calls = []
+        class Partial(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b'data: {"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}\n\n'
+                raise httpx.ReadError('private')
+        def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'}, stream=Partial())
+        async with create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
+            with provider_retry_scope():
+                mark_provider_output()
+                with pytest.raises(httpx.ReadError):
+                    async with client.stream('POST', 'https://example.invalid/chat/completions',
+                                             json={'model': 'x', 'stream': True,
+                                                   'messages': [{'role': 'tool', 'content': 'done'}]}) as response:
+                        chunks = response.aiter_bytes()
+                        assert b'partial' in await anext(chunks)
+                        async for _ in chunks:
+                            pass
+        assert calls == [1]
+    asyncio.run(scenario())
 
 
 def test_multiline_sse_error_is_sanitized_across_chunks():
@@ -261,6 +335,26 @@ def test_stream_read_timeout_is_classified_and_retried():
                 except httpx.TimeoutException as exc: return len(calls), state['error_kind'], str(exc)
     calls, kind, message = asyncio.run(run())
     assert calls == 11 and kind == 'timeout' and 'read-secret' not in message
+
+
+@pytest.mark.parametrize('reason', ['length', 'content_filter'])
+def test_terminal_invalid_finish_reason_does_not_retry(reason):
+    import json
+    from model_request_budget import provider_retry_scope
+
+    async def run():
+        calls = []
+        def handler(_request):
+            calls.append(1)
+            body = 'data: ' + json.dumps({'choices': [{'index': 0, 'delta': {}, 'finish_reason': reason}]}) + '\n\n'
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'}, content=body)
+        async with create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
+            with provider_retry_scope() as state:
+                with pytest.raises(httpx.ReadError):
+                    await client.post('https://example.com/chat/completions', json={'model': 'x', 'stream': True})
+                return len(calls), state['error_kind']
+
+    assert asyncio.run(run()) == (1, 'invalid')
 
 
 def test_transient_sse_error_retries_before_output():

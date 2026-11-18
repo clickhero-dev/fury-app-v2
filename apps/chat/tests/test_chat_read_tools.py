@@ -5,6 +5,130 @@ from uuid import uuid4
 from chat_read_tools import ChatReadTools
 
 
+def test_guided_profile_retry_uses_same_fenced_operation(monkeypatch):
+    import chat_read_tools
+
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr(chat_read_tools.asyncio, 'sleep', no_wait)
+
+    async def run():
+        conversation, run_id, lease = map(str, (uuid4(), uuid4(), uuid4()))
+        requests = []
+        async def backend(request):
+            requests.append(json.loads(request.content))
+            if len(requests) == 1:
+                raise httpx.ReadTimeout('private', request=request)
+            return httpx.Response(200, json={'data': {'tenantName': 'Loja', 'businessContext': 'Café'}})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=conversation, run_id=run_id, lease_id=lease)
+            assert await tool.save_guided_business_context('Loja', 'Café') == {'tenantName': 'Loja', 'businessContext': 'Café'}
+        assert len(requests) == 2
+        assert requests[0] == requests[1] == {
+            'tenantName': 'Loja', 'businessContext': 'Café',
+            'conversationId': conversation, 'runId': run_id, 'leaseId': lease,
+        }
+    asyncio.run(run())
+
+
+def test_guided_profile_conflict_is_not_retried_and_does_not_leak():
+    async def run():
+        ids = tuple(str(uuid4()) for _ in range(3))
+        calls = []
+        async def backend(request):
+            calls.append(request)
+            return httpx.Response(409, text='private detail')
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=ids[0], run_id=ids[1], lease_id=ids[2])
+            result = await tool.save_guided_business_context('Loja', 'Café')
+        assert len(calls) == 1
+        assert 'error' in result and 'private' not in str(result)
+    asyncio.run(run())
+
+
+def test_guided_profile_exhausted_transient_error_can_schedule_recovery(monkeypatch):
+    import pytest
+    from chat_read_tools import ProfileSyncTransient
+
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr(asyncio, 'sleep', no_wait)
+
+    async def run():
+        ids = tuple(str(uuid4()) for _ in range(3))
+        calls = []
+        async def backend(request):
+            calls.append(request)
+            raise httpx.ReadTimeout('private token', request=request)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=ids[0], run_id=ids[1], lease_id=ids[2])
+            with pytest.raises(ProfileSyncTransient) as error:
+                await tool.save_guided_business_context('Loja', 'Café')
+        assert len(calls) == 3
+        assert 'private' not in str(error.value)
+    asyncio.run(run())
+
+
+def test_guided_profile_reconciles_malformed_success_response(monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr(asyncio, 'sleep', no_wait)
+
+    async def run():
+        ids = tuple(str(uuid4()) for _ in range(3))
+        calls = []
+        async def backend(request):
+            calls.append(request)
+            return (httpx.Response(200, text='incomplete') if len(calls) == 1
+                    else httpx.Response(200, json={'data': {'tenantName': 'Loja', 'businessContext': 'Café'}}))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=ids[0], run_id=ids[1], lease_id=ids[2])
+            assert await tool.save_guided_business_context('Loja', 'Café') == {'tenantName': 'Loja', 'businessContext': 'Café'}
+        assert len(calls) == 2
+    asyncio.run(run())
+
+
+def test_guided_profile_never_accepts_unconfirmed_success(monkeypatch):
+    import pytest
+    from chat_read_tools import ProfileSyncTransient
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr(asyncio, 'sleep', no_wait)
+    async def run():
+        ids = tuple(str(uuid4()) for _ in range(3))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json={'data': {}}))) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=ids[0], run_id=ids[1], lease_id=ids[2])
+            with pytest.raises(ProfileSyncTransient):
+                await tool.save_guided_business_context('Loja', 'Café')
+    asyncio.run(run())
+
+
+def test_guided_profile_rollout_retries_legacy_validation_error(monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr(asyncio, 'sleep', no_wait)
+    async def run():
+        ids = tuple(str(uuid4()) for _ in range(3))
+        calls = []
+        async def backend(request):
+            calls.append(request)
+            if len(calls) == 1:
+                return httpx.Response(400, json={'error': {'code': 'VALIDATION_ERROR'}})
+            return httpx.Response(200, json={'data': {'tenantName': 'Loja', 'businessContext': 'Café'}})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend)) as client:
+            tool = ChatReadTools('https://ady.test', 'delegated', client,
+                                 conversation_id=ids[0], run_id=ids[1], lease_id=ids[2])
+            assert (await tool.save_guided_business_context('Loja', 'Café'))['tenantName'] == 'Loja'
+        assert len(calls) == 2
+    asyncio.run(run())
+
+
 def test_promote_attachment_uses_only_the_owned_private_attachment_path():
     async def run():
         conversation, attachment = str(uuid4()), str(uuid4())

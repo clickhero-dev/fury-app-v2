@@ -26,6 +26,43 @@ function setup(initial='queued'){
   return{state,fetcher};
 }
 describe('Recuperação durável na conversa',()=>{
+  it('erro SSE consulta estado persistido correspondente e acompanha recuperação sem novo envio',async()=>{
+    const {state,fetcher}=setup('completed');
+    const original=fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async(url,init)=>{
+      if(url.endsWith('/messages')&&init?.method==='POST'){
+        const key=JSON.parse(String(init.body)).clientKey;
+        state.runs=[{...run('new-run'),user_message_id:'user-new',client_key:key} as typeof state.runs[number]];
+        state.messages=[{id:'user-new',role:'user',content:'Uma nova pergunta'}];
+        return new Response('event: run\ndata: {"run_id":"new-run","user_message_id":"user-new"}\n\nevent: error\ndata: {"message":"Falha temporária"}\n\n');
+      }
+      return original(url,init);
+    });
+    fireEvent.click(await screen.findByRole('button',{name:'Ideia de café'}));
+    await screen.findByText('Uma ideia para meu negócio');
+    fireEvent.change(screen.getByRole('textbox',{name:'Mensagem'}),{target:{value:'Uma nova pergunta'}});
+    fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
+    expect(await screen.findByText(/Recuperando o andamento/)).toBeVisible();
+    expect(screen.queryByText('Falha temporária')).toBeNull();
+    expect(fetcher.mock.calls.filter(([,init])=>init?.method==='POST')).toHaveLength(1);
+    state.runs=[{...run('new-run','completed'),assistant_message_id:'answer'}];
+    state.messages=[...state.messages,{id:'answer',role:'assistant',content:'Resposta recuperada'}];
+    expect(await screen.findByText('Resposta recuperada',{}, {timeout:5000})).toBeVisible();
+  });
+  it('não oculta erro SSE quando fila pertence a outra execução',async()=>{
+    const {fetcher}=setup();
+    const original=fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async(url,init)=>{
+      if(url.endsWith('/messages')&&init?.method==='POST')
+        return new Response('event: run\ndata: {"run_id":"new-run","user_message_id":"user-new"}\n\nevent: error\ndata: {"message":"Falha terminal"}\n\n');
+      return original(url,init);
+    });
+    fireEvent.click(await screen.findByRole('button',{name:'Ideia de café'}));
+    await screen.findByText('Uma ideia para meu negócio');
+    fireEvent.change(screen.getByRole('textbox',{name:'Mensagem'}),{target:{value:'Pergunta'}});
+    fireEvent.click(screen.getByRole('button',{name:'Enviar mensagem'}));
+    expect(await screen.findByText('Falha terminal')).toBeVisible();
+  });
   it('conclusão vence cancelamento e GET hidrata resultado sem afirmar cancelado',async()=>{
     const {state,fetcher}=setup('running');
     state.cancelResponse={status:'completed'};
