@@ -162,6 +162,17 @@ jobs:
       - name: Run template analysis browser-to-API integration
         working-directory: apps/web
         run: npx playwright test -c playwright.template-integrated.config.ts
+      - name: Run isolated Home E2E (desktop and mobile, mock API)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.home.config.ts
+
+      - name: Upload Home browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-e2e-failure
+          path: apps/web/test-results-qa/home
+          if-no-files-found: ignore
 
       - name: Generate coverage badge
         if: github.event_name == 'push'
