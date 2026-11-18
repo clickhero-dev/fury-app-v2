@@ -1,5 +1,32 @@
 import { expect, test } from '@playwright/test';
 
+test('mantém o erro terminal do provedor sem exibir queda de conexão', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('token', 'isolated-retry');
+    localStorage.setItem('refreshToken', 'isolated-retry-refresh');
+    localStorage.setItem('user', JSON.stringify({name:'QA',role:'admin',tenantId:'isolated',email:'qa@example.invalid'}));
+  });
+  await page.route('http://127.0.0.1:3100/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith('/rbac/blocked-views')) return route.fulfill({json:{data:{blocked:[]}}});
+    if (path.endsWith('/plans')) return route.fulfill({json:{plans:[]}});
+    if (path === '/api/chat/conversations' && request.method() === 'GET') return route.fulfill({json:[]});
+    if (path === '/api/chat/conversations' && request.method() === 'POST') return route.fulfill({json:{id:'conv',title:'Nova conversa'}});
+    if (path === '/api/chat/conversations/conv/messages') {
+      return route.fulfill({contentType:'text/event-stream', body:'event: error\ndata: {"message":"Não foi possível gerar a resposta agora. Tente retomar."}\n\n'});
+    }
+    return route.fulfill({status:404, json:{error:'not found'}});
+  });
+  await page.goto('/chat');
+  await page.getByRole('button', {name:'Somente essenciais'}).click();
+  await page.getByRole('button', {name:/nova conversa/i}).click();
+  await page.getByRole('textbox', {name:'Mensagem'}).fill('Preciso de ajuda');
+  await page.getByRole('textbox', {name:'Mensagem'}).press('Enter');
+  await expect(page.getByText('Não foi possível gerar a resposta agora. Tente retomar.')).toBeVisible();
+  await expect(page.getByText(/A conexão foi interrompida/)).toHaveCount(0);
+});
+
 for (const width of [375,1280]) {
   test(`recupera sem reenviar e cancela próximas etapas antes de outra ideia — ${width}`,async({page})=>{
     await page.setViewportSize({width,height:812});

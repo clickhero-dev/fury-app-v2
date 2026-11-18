@@ -624,6 +624,44 @@ describe('Assistente', () => {
     expect(await screen.findByText('Recuperada')).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+  it('preserva erro terminal do provedor em vez de tratá-lo como conexão interrompida', async () => {
+    const stream = new ReadableStream({start(c) {
+      c.enqueue(new TextEncoder().encode('event: error\ndata: {"message":"Não foi possível gerar a resposta agora. Tente retomar."}\n\n'));
+      c.close();
+    }});
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([])))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'1',title:'Nova conversa'})))
+      .mockResolvedValueOnce(new Response(stream)));
+    render(<ChatPage />);
+    fireEvent.click(await screen.findByRole('button', {name: /nova conversa/i}));
+    await waitFor(() => expect(screen.getByLabelText('Mensagem').hasAttribute('disabled')).toBe(false));
+    fireEvent.change(screen.getByLabelText('Mensagem'), {target:{value:'Oi'}});
+    fireEvent.click(screen.getByRole('button', {name:'Enviar mensagem'}));
+    expect(await screen.findByText('Não foi possível gerar a resposta agora. Tente retomar.')).toBeTruthy();
+    expect(screen.queryByText(/A conexão foi interrompida/)).toBeNull();
+  });
+  it('mostra a tentativa de recuperação e a remove quando a resposta conclui', async () => {
+    let controller!: ReadableStreamDefaultController;
+    const stream = new ReadableStream({start(c) { controller = c; }});
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([])))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'1',title:'Nova conversa'})))
+      .mockResolvedValueOnce(new Response(stream)));
+    render(<ChatPage />);
+    fireEvent.click(await screen.findByRole('button', {name: /nova conversa/i}));
+    await waitFor(() => expect(screen.getByLabelText('Mensagem').hasAttribute('disabled')).toBe(false));
+    fireEvent.change(screen.getByLabelText('Mensagem'), {target:{value:'Oi'}});
+    fireEvent.click(screen.getByRole('button', {name:'Enviar mensagem'}));
+    await act(async () => controller.enqueue(new TextEncoder().encode('event: retrying\ndata: {"attempt":2,"maxAttempts":11,"retryInMs":1000}\n\n')));
+    expect(await screen.findByText('Reconectando ao modelo — tentativa 2 de 11…')).toBeTruthy();
+    await act(async () => {
+      controller.enqueue(new TextEncoder().encode('event: done\ndata: {"message":{"content":"Resposta recuperada"}}\n\n'));
+      controller.close();
+    });
+    expect(await screen.findByText('Resposta recuperada')).toBeTruthy();
+    expect(screen.queryByText('Reconectando ao modelo — tentativa 2 de 11…')).toBeNull();
+  });
   it('confirma somente a ação apresentada', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[],approvals:[{id:'a1',action:'Agendar',parameters:{data:'amanhã'},status:'pending'}]}))).mockResolvedValueOnce(new Response(JSON.stringify({status:'completed',result:{imageUrl:'https://example.com/image.png'}})));
     vi.stubGlobal('fetch', fetchMock); render(<ChatPage />);

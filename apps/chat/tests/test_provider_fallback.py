@@ -33,7 +33,9 @@ def test_fallback_preserves_payload_and_global_attempt_limit(configured):
         async with budget.create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
             with budget.provider_retry_scope():
                 assert (await client.post(URL, json=body)).status_code == 503
-        assert [p['model'] for p in sent] == ['vendor/main', 'vendor/backup', 'vendor/last']
+        assert [p['model'] for p in sent] == (
+            ['vendor/main', 'vendor/backup'] + ['vendor/last'] * (budget.MAX_PROVIDER_ATTEMPTS - 2)
+        )
         assert all({**p, 'model': body['model']} == body for p in sent)
     asyncio.run(run())
 
@@ -92,7 +94,7 @@ def test_unhomologated_capabilities_do_not_change_models(configured, monkeypatch
         async with budget.create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
             with budget.provider_retry_scope():
                 await client.post(URL, json={'model': 'vendor/main', **extra})
-        assert sent == ['vendor/main'] * 3
+        assert sent == ['vendor/main'] * budget.MAX_PROVIDER_ATTEMPTS
     asyncio.run(run())
 
 
@@ -207,7 +209,7 @@ def test_fallback_respects_elapsed_deadline(configured, monkeypatch):
         sent = []
         def handler(request):
             sent.append(1)
-            monkeypatch.setattr(budget.time, 'monotonic', lambda: 201)
+            monkeypatch.setattr(budget.time, 'monotonic', lambda: 301)
             return httpx.Response(503)
         monkeypatch.setattr(budget.time, 'monotonic', lambda: 0)
         async with budget.create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:

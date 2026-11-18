@@ -18,7 +18,7 @@ interface UploadFile {
   mimetype: string;
 }
 
-export const BRAND_KIT_PHOTO_KINDS = ['modelo', 'produto', 'equipe'] as const;
+export const BRAND_KIT_PHOTO_KINDS = ['modelo', 'produto', 'equipe', 'empresa'] as const;
 
 function toResponse(photo: BrandKitPhoto) {
   return { id: photo.id, kind: photo.kind, url: photo.url, created_at: photo.createdAt, hidden_from_reference_panel: photo.hiddenFromReferencePanel ?? false };

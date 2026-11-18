@@ -22,7 +22,8 @@ export function createDelegationGuard(options: { secret: string; repository: (te
     // Exact method/path pairs only; delegated callers cannot upload, transcribe or download bytes.
     const mediaRead = req.method === 'POST' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/read\/?$/i.test(path);
     const mediaCleanup = req.method === 'DELETE' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/?$/i.test(path);
-    if (mediaRead || mediaCleanup) {
+    const mediaPromotion = req.method === 'POST' && /^\/api\/chat\/conversations\/[0-9a-f-]{36}\/attachments\/[0-9a-f-]{36}\/promote\/?$/i.test(path);
+    if (mediaRead || mediaCleanup || mediaPromotion) {
       identities.set(req, { userId: claims.userId, tenantId: claims.tenantId, role: claims.role, email: claims.email });
       return next();
     }
@@ -40,11 +41,12 @@ export function createDelegationGuard(options: { secret: string; repository: (te
     const createAd = /^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ads-create\/?$/.test(path);
     const checkedCampaign = /^\/api\/campaigns\/[a-zA-Z0-9-]+\/(?:chat-update|chat-ads\/\d{1,32})\/?$/.test(path);
     const checkedProfile = /^\/api\/auth\/me\/chat-update\/?$/.test(path);
-    if (!['GET', 'HEAD'].includes(req.method) && !(req.method === 'POST' && (creation || versionedVideo || createAd)) && !(req.method === 'PATCH' && (versionedCancel || versionedBrand || checkedCampaign || checkedProfile))) {
+    const guidedProfile = /^\/api\/auth\/me\/chat-guided-update\/?$/.test(path);
+    if (!['GET', 'HEAD'].includes(req.method) && !(req.method === 'POST' && (creation || versionedVideo || createAd || guidedProfile)) && !(req.method === 'PATCH' && (versionedCancel || versionedBrand || checkedCampaign || checkedProfile))) {
       return next(new AppError(403, 'CHAT_SCOPE_DENIED', 'Ação não permitida'));
     }
     const user: User = { userId: claims.userId, tenantId: claims.tenantId, role: claims.role, email: claims.email };
-    if (!['GET', 'HEAD'].includes(req.method)) {
+    if (!['GET', 'HEAD'].includes(req.method) && !guidedProfile) {
       const approvalId = req.get('X-Chat-Approval-Id') ?? '';
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(approvalId)) {
         return next(new AppError(403, 'CHAT_APPROVAL_REQUIRED', 'Aprovação necessária'));

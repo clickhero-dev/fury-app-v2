@@ -3,6 +3,7 @@ import { CampaignRepository } from '../../repository/campaign.repository.js';
 import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import { ChatBrandRepository, type ChatBrandValues } from '../../repository/chat-brand.repository.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { extractLogoColors } from './logo-colors.js';
 
 type BrandKitRow = { [key: string]: any };
 type BrandKitRepo = Pick<
@@ -78,6 +79,26 @@ export class BrandKitService {
     const fileName = `brand-kit/${tenantId}/logo/${randomUUID()}.${extension}`;
     const url = await this.storage.uploadAsset(file.buffer, fileName, file.mimetype);
     return { url };
+  }
+
+  /** Salva logo enviada pelo chat e só preenche cores que ainda não existem. */
+  async importChatLogo(tenantId: string, file: UploadFile): Promise<{ url: string; colors: { primaryColor: string; secondaryColor: string | null } | null }> {
+    if (!['image/png', 'image/jpeg'].includes(file.mimetype)) throw new AppError(400, 'LOGO_INVALID_IMAGE', 'Envie uma logomarca em PNG ou JPG.');
+    const colors = await extractLogoColors(file.buffer);
+    const existing = await this.repo(tenantId).findBrandKit();
+    const extension = file.mimetype === 'image/png' ? 'png' : 'jpg';
+    const url = await this.storage.uploadAsset(file.buffer, `brand-kit/${tenantId}/logo/${randomUUID()}.${extension}`, file.mimetype);
+    try {
+      await this.repo(tenantId).upsertTenantBrandKit({
+        logoUrl: url,
+        ...(existing?.primaryColor ? {} : colors?.primaryColor ? { primaryColor: colors.primaryColor } : {}),
+        ...(existing?.secondaryColor ? {} : colors?.secondaryColor ? { secondaryColor: colors.secondaryColor } : {}),
+      } as any);
+    } catch (error) {
+      await this.storage.deleteAsset(url).catch(() => {});
+      throw error;
+    }
+    return { url, colors };
   }
 
   /** Faz upload das fotos — sem limite de quantidade na biblioteca do tenant. */
