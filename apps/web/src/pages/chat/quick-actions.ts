@@ -45,6 +45,9 @@ export function buildQuickActionPrompt(action: QuickAction, answer: string, cont
   if (!answer.trim()) return '';
   return [action.prompt, answer.trim(), contextData(context), safeguards].filter(Boolean).join('\n');
 }
+export function buildSpecificQuickActionPrompt(action: QuickAction, context: QuickActionContext): string {
+  return [action.prompt, contextData(context), safeguards].filter(Boolean).join('\n');
+}
 function contextData(context: QuickActionContext): string {
   const known = normalizeQuickActionContext({
     tenantName:context.tenantName,businessContext:context.businessContext,audienceDefaults:{city:context.city},

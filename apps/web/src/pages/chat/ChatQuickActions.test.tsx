@@ -5,6 +5,22 @@ import { ChatQuickActions } from './ChatQuickActions';
 
 const actions=[['Não sei o que postar','próximo post'],['Organizar minha semana','semana'],['Usar uma foto minha','foto']];
 describe('Pedidos diretos com sugestões contextuais opcionais',()=>{
+  it.each([
+    ['Criar post para o Instagram','post para o Instagram'],
+    ['Agendar posts da semana','agendar os posts da semana'],
+    ['Criar Reels para o Instagram','Reels para o Instagram'],
+    ['Criar vídeo para o negócio','vídeo para meu negócio'],
+    ['Aumentar seguidores no Instagram','aumentar seguidores'],
+    ['Atrair clientes pelo WhatsApp','clientes pelo WhatsApp'],
+  ])('oferece ação específica %s com confirmação', async (label, expected)=>{
+    const onSelect=vi.fn().mockResolvedValue(undefined);
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    expect(onSelect).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button',{name:label,exact:true}));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onSelect.mock.calls[0][0]).toContain(expected);
+    expect(onSelect.mock.calls[0][0]).toContain('confirmação explícita');
+  });
   it('preserva três pedidos, um principal; montagem não envia nem abre briefing',()=>{
     const onSelect=vi.fn();
     const view=render(<ChatQuickActions onSelect={onSelect}/>);
