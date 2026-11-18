@@ -30,3 +30,19 @@ def test_policy_is_repeatable_and_does_not_depend_on_user_prompt():
 ])
 def test_policy_preserves_boundaries_and_low_effort(phrase):
     assert phrase in editorial_instructions().lower()
+
+
+def test_guided_help_respects_user_choice_and_tool_capabilities():
+    policy = editorial_instructions().lower()
+    for phrase in (
+        'posso fazer algumas perguntas',
+        'sim e não',
+        'uma pergunta por vez',
+        'não repita o convite',
+        'não interrompa uma tarefa',
+        'não interprete falha de consulta como ausência',
+        'guided_setup_status',
+        'guided_setup_answer',
+        'não prometa salvar',
+    ):
+        assert phrase in policy

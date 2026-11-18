@@ -148,9 +148,9 @@ class AdyTools:
 
 
     async def brand_photos(self, kind: str = '', page: int = 1, limit: int = 20) -> dict:
-        """Consultar fotos da marca por tipo (produto, equipe ou modelo), página e limite até 50; confira hasMore. Para vídeo, use apenas fotos produto ou equipe."""
+        """Consultar fotos da marca por tipo (empresa, produto, equipe ou modelo), página e limite até 50; confira hasMore. Para vídeo, use apenas fotos produto ou equipe."""
         try:
-            if kind not in ('', 'produto', 'equipe', 'modelo') or isinstance(page, bool) or isinstance(limit, bool) or page < 1 or not 1 <= limit <= 50:
+            if kind not in ('', 'empresa', 'produto', 'equipe', 'modelo') or isinstance(page, bool) or isinstance(limit, bool) or page < 1 or not 1 <= limit <= 50:
                 raise ValueError()
             params = {'page':page, 'limit':limit}
             if kind: params['kind'] = kind
