@@ -97,7 +97,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await page.reload(); await page.getByRole('button',{name:'Proposta isolada'}).click();
     const video = page.getByRole('article').filter({hasText:'Criar vídeo'});
     await video.getByRole('button',{name:'Confirmar ação'}).click();
-    await expect(video.getByLabel('Vídeo gerado')).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
+    await expect(video.getByLabel('Vídeo gerado', { exact: true })).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     const videoStatus = await db`select status,result from chat_approvals where id=${videoApproval}`;
     expect(videoStatus[0].status).toBe('completed'); expect(videoStatus[0].result.job.status).toBe('done');
     const imageEditApproval = randomUUID(), imageAsset = randomUUID();
