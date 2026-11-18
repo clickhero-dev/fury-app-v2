@@ -16,8 +16,17 @@ No período 10–17/11/2026 UTC foram observados três eventos web 503: legenda 
 - [x] Implementar executor limitado, diagnósticos e proteção de UI; confirmar GREEN.
 - [ ] Revisar diff, validar builds, abrir PR e acompanhar CI/base.
 
-## Investigação futura de produção
-Buscar cada timestamp acima em request_logs e PostHog, pelo x-request-id e ambiente quando disponíveis; associar uma requisição web ao evento backend, sem deduplicação por contagem presumida. Novos eventos suggestion_attempt permitem separar timeout, status upstream e contrato inválido; eventos legados sem esses dados permanecem inconclusivos.
+## Investigação e pendência histórica
+Em 18/11, as ferramentas disponíveis nesta sessão não incluem acesso ao PostHog, logs ou traces de produção; tampouco há credenciais de observabilidade ou banco no ambiente do processo. Isso não demonstra expiração nem inexistência dos registros. IR-2 permanece aberto: gateway OpenRouter foi identificado no código, mas status upstream, timeout, provedor efetivo, ambiente dos eventos backend e correspondência individual permanecem desconhecidos. Não inferir causa ou somar as contagens das duas fontes.
+
+Para reproduzir a investigação com acesso autorizado, consultar PostHog e `request_logs` nos três instantes UTC acima, filtrando método e caminho exatos e uma janela curta; registrar intervalo e ambiente consultados, retenção e resultado de cada fonte. Associar eventos somente por requestId comprovado e conferir logs/traces do gateway pelo mesmo identificador e horário. Se ausentes, documentar a consulta e política de retenção antes de concluir que não existem. Para eventos posteriores ao deploy, juntar o `x-request-id` da resposta ao evento `suggestion_attempt` e à exceção backend: `endpoint`, `environment`, `provider`, `model`, `outcome` e `upstreamStatus` discriminam o que foi observado; provider identifica o gateway, não o fornecedor real do modelo. Nunca registrar prompts ou corpos de resposta.
+
+O teste `suggestion-runner.bdd.test.ts` simula 503 nos dois caminhos e verifica requestId, endpoint, ambiente, gateway e status; `request-context.bdd.test.ts` verifica o mesmo ID no header e contexto; `suggestion-telemetry.bdd.test.ts` verifica a exceção e isolamento concorrente. São evidências sintéticas reprodutíveis, não provas sobre os incidentes históricos.
+
+## Reconciliação de 18/11
+- [x] Incorporar `origin/hmg`, preservar o contrato `OpenRouterChatError` usado pelo executor de planos e os campos de exceção existentes na base.
+- [x] Acrescentar `endpoint` explícito aos eventos, com regressões RED/GREEN para ambos os caminhos.
+- [ ] Confirmar PR atualizada, sem conflitos e checks verdes no SHA remoto; IR-2 depende das evidências históricas acima.
 
 ## Validação local
 - API: 8 arquivos focados, 79 testes passaram (antes das duas regressões adicionais do envelope; reexecutar adaptador).

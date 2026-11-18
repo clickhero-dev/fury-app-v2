@@ -32,7 +32,8 @@ export async function runSuggestion<T>(client: Client, messages: ChatMessage[], 
         return null;
       }
     } finally {
-      captureServerEvent('suggestion_attempt', { ...requestContext.getStore(), environment: analyticsEnvironment(), provider: 'openrouter', model, attempt: index + 1, outcome, upstreamStatus, durationMs: Date.now() - started });
+      const context = requestContext.getStore();
+      captureServerEvent('suggestion_attempt', { ...context, endpoint: context?.path, environment: analyticsEnvironment(), provider: 'openrouter', model, attempt: index + 1, outcome, upstreamStatus, durationMs: Date.now() - started });
     }
     if (retryable && index === 0 && models.length > 1) await new Promise(resolve => setTimeout(resolve, 250));
   }

@@ -54,7 +54,11 @@ def test_provider_failure_is_visible_and_retry_preserves_turn(monkeypatch, failu
                     assert 'event: done' not in failed.text
                     first=await pool.fetchrow('SELECT * FROM chat_response_runs WHERE conversation_id=$1',cid)
                     assert first['status']=='failed'
-                    resumed=await client.post(f'/conversations/{cid}/retry?run_id={first["id"]}',json={})
+                    durable=await pool.fetchrow('SELECT * FROM chat_turn_recovery WHERE user_message_id=$1',first['user_message_id'])
+                    assert durable['status']=='queued'
+                    assert durable['provider_requests']==1
+                    await pool.execute('UPDATE chat_turn_recovery SET next_attempt_at=clock_timestamp()')
+                    resumed=await client.post(f'/conversations/{cid}/retry?run_id={first["id"]}',json={'automatic':True})
                     assert 'event: done' in resumed.text
                     assert 'event: error' not in resumed.text
                     rows=await pool.fetch('SELECT * FROM chat_response_runs WHERE conversation_id=$1',cid)
@@ -63,6 +67,8 @@ def test_provider_failure_is_visible_and_retry_preserves_turn(monkeypatch, failu
                     assert await pool.fetchval('SELECT count(*) FROM chat_messages WHERE conversation_id=$1',cid)==2
                     assert await pool.fetchval('SELECT count(*) FROM chat_approvals WHERE conversation_id=$1',cid)==0
                     assert len(requests)==2
+                    durable=await pool.fetchrow('SELECT * FROM chat_turn_recovery WHERE user_message_id=$1',first['user_message_id'])
+                    assert durable['status']=='completed' and durable['attempts']==1 and durable['provider_requests']==2
                     assert 'Planeje novembro' in json.dumps(requests[-1]['messages'])
                     names=[tool['function']['name'] for tool in requests[-1]['tools']]
                     assert not any(name.startswith('propose_') for name in names)

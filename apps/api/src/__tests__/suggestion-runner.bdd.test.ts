@@ -6,8 +6,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { runSuggestion, SuggestionProviderError } from '../services/llms/suggestion-runner.js';
 vi.mock('../lib/analytics.js', () => ({ captureServerEvent: vi.fn() }));
 import { captureServerEvent } from '../lib/analytics.js';
+import { requestContext } from '../lib/request-context.js';
 const parse = (raw: string) => { try { return JSON.parse(raw).text || null; } catch { return null; } };
 describe('BDD: execução de sugestão', () => {
+  it.each(['/api/planner/posts/suggest-caption', '/api/campaigns/suggest-text'])('Cenário: 503 em %s → evento correlacionável e sanitizado', async endpoint => {
+    const chat = vi.fn().mockRejectedValue(new SuggestionProviderError('http', 503));
+    await requestContext.run({ requestId: 'simulated-request', path: endpoint }, () => runSuggestion({ chat }, [], ['a'], parse));
+    expect(captureServerEvent).toHaveBeenCalledWith('suggestion_attempt', expect.objectContaining({ endpoint, requestId: 'simulated-request', provider: 'openrouter', outcome: 'http', upstreamStatus: 503, environment: expect.any(String) }));
+  });
   it.each(['timeout', '503'])('Cenário: %s transitório → fallback limitado e diagnóstico seguro', async kind => {
     const chat = vi.fn().mockRejectedValueOnce(new SuggestionProviderError(kind === '503' ? 'http' : 'timeout', kind === '503' ? 503 : undefined)).mockResolvedValueOnce('{"text":"ok"}');
     expect(await runSuggestion({ chat }, [], ['a', 'b'], parse)).toBe('ok');

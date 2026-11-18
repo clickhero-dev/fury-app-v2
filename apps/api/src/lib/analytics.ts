@@ -32,6 +32,10 @@ export function captureServerException(
     path?: string;
     statusCode?: number;
     code?: string;
+    requestId?: string;
+    reason?: string;
+    environment?: string;
+    providerStatus?: number;
   } = {}
 ) {
   if (!client) return;
@@ -44,8 +48,10 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
-      environment: analyticsEnvironment(),
-      requestId: requestContext.getStore()?.requestId,
+      environment: context.environment?.trim() || analyticsEnvironment(),
+      requestId: context.requestId ?? requestContext.getStore()?.requestId,
+      reason: context.reason,
+      providerStatus: context.providerStatus,
       method: context.method,
       path: context.path,
       statusCode: context.statusCode,

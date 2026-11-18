@@ -46,6 +46,12 @@ export type ChatMessage = {
   content: string | ChatContentPart[];
 };
 
+export class OpenRouterChatError extends SuggestionProviderError {
+  constructor(readonly providerStatus: number) {
+    super('http', providerStatus);
+  }
+}
+
 // ─── Estado de créditos OpenRouter ───────────────────────────────────────────
 // A API guarda em memória (com TTL) o estado do saldo para checá-lo ANTES de
 // chamar o OpenRouter e devolver erro apropriado (402) ao frontend, em vez de
@@ -143,7 +149,7 @@ export const openrouterService = {
       if (!response.ok) {
         await response.body?.cancel();
         console.error('[openrouter] chat error', response.status);
-        throw new SuggestionProviderError('http', response.status);
+        throw new OpenRouterChatError(response.status);
       }
       // Timer remains active through body consumption, not only response headers.
       const data = (await response.json()) as any;

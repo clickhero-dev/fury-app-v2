@@ -48,7 +48,7 @@ def test_retry_limit_and_no_replay_after_output(unsafe, monkeypatch):
                 if unsafe: budget.mark_provider_output()
                 response=await client.post(URL, json={})
         assert response.status_code == 503
-        assert len(calls) == (1 if unsafe else 3)
+        assert len(calls) == (1 if unsafe else budget.MAX_PROVIDER_ATTEMPTS)
     asyncio.run(run())
 
 @pytest.mark.parametrize('ending', ['eof', 'error', 'length', 'content_filter', 'done', 'stop'])
@@ -110,7 +110,7 @@ def test_retry_after_date_and_invalid_values(hint, monkeypatch):
         async with budget.create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
             with budget.provider_retry_scope(): await client.post(URL,json={})
         assert len(calls) == (1 if hint.startswith('Wed') else 2)
-        assert all(0.1 <= delay <= 0.2 for delay in delays)
+        assert all(1 <= delay <= 1.2 for delay in delays)
     asyncio.run(run())
 
 # Cenário: Agno real não considera a mensagem de intenção uma resposta completa
@@ -197,5 +197,5 @@ def test_concurrent_turn_retry_scopes_are_isolated(monkeypatch):
                     await client.post(URL,json={'model':key})
                     assert state['unsafe'] == unsafe
             await asyncio.gather(turn('read',False),turn('confirmed',True))
-        assert calls == {'read':3,'confirmed':1}
+        assert calls == {'read': budget.MAX_PROVIDER_ATTEMPTS, 'confirmed':1}
     asyncio.run(run())

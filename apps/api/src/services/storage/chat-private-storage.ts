@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { configuredR2Storage } from './chat-private-r2-storage.js';
 
 export interface ChatPrivateStorage {
+  newKey?(mimeType: string): string;
   put(key: string, bytes: Buffer, mimeType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;

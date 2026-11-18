@@ -17,4 +17,13 @@ export class ChatProfileController {
       res.json({success:true,data:await this.service.update(req.tenant!.tenantId,req.user!.userId,userVersion,tenantVersion,values)});
     } catch (err) { next(err); }
   };
+  guidedUpdate = async (req: Request,res: Response,next: NextFunction) => {
+    try {
+      const body = z.object({
+        tenantName: z.string().min(1).max(255),
+        businessContext: z.string().min(1).max(5000),
+      }).strict().parse(req.body);
+      res.json({ success: true, data: await this.service.applyGuidedBusinessContext(req.tenant!.tenantId, req.user!.userId, body) });
+    } catch (err) { next(err); }
+  };
 }
