@@ -38,7 +38,7 @@ class Connection:
         if 'chat_guided_setups' in sql:
             return self.state
         if 'FROM users u JOIN tenants t' in sql:
-            return {'userVersion': '1', 'tenantVersion': '2'}
+            return getattr(self, 'versions', {'userVersion': '1', 'tenantVersion': '2'})
         raise AssertionError(sql)
 
     async def execute(self, sql, *args):
@@ -46,7 +46,9 @@ class Connection:
             if self.state is None:
                 self.state = {'step': 'invitation', 'answers': '{}'}
         elif 'UPDATE chat_guided_setups' in sql:
-            self.state = {'step': args[2], 'answers': args[3]}
+            self.state = {**self.state, 'step': args[2], 'answers': args[3]}
+            if len(args) > 4:
+                self.state.update(profile_user_version=args[4], profile_tenant_version=args[5])
             self.writes += 1
         elif 'INSERT INTO chat_guided_setup_receipts' in sql:
             self.receipts[args[1]] = {'result': args[2]}
@@ -128,7 +130,8 @@ def test_invalid_input_rejected():
 def test_profile_update_is_replayed_without_an_external_effect_claim():
     async def scenario():
         pool = Pool()
-        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'}),
+                           'profile_user_version': '1', 'profile_tenant_version': '2'}
         setup = repo(pool)
         await setup.capture_snapshot()
         first = await setup.save_answer('Café')
@@ -146,7 +149,8 @@ def test_profile_update_is_replayed_without_an_external_effect_claim():
 def test_pending_profile_update_can_be_reconciled_without_invoking_model():
     async def scenario():
         pool = Pool()
-        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'}),
+                           'profile_user_version': '1', 'profile_tenant_version': '2'}
         setup = repo(pool)
         await setup.capture_snapshot()
         assert await setup.pending_profile_update() is None
@@ -161,8 +165,6 @@ def test_pending_profile_update_can_be_reconciled_without_invoking_model():
 
 
 def test_old_offering_snapshot_without_versions_cannot_update_profile():
-    from guided_setup_persistence import SnapshotMissing
-
     async def scenario():
         pool = Pool()
         pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
@@ -170,8 +172,82 @@ def test_old_offering_snapshot_without_versions_cannot_update_profile():
         await setup.capture_snapshot()
         snapshot = next(iter(pool.conn.snapshots.values()))
         snapshot['profile_user_version'] = None
-        with pytest.raises(SnapshotMissing):
-            await setup.save_answer('Café')
-        assert not pool.conn.receipts
-        assert pool.conn.writes == 0
+        result = await setup.save_answer('Café')
+        assert result['contextSaved'] is False
+        assert result['contextError']
+        assert 'profileUpdate' not in result
+        assert result['answers']['offering'] == 'Café'
+        assert (await setup.save_answer('Café')) == {**result, 'replayed': True}
+    asyncio.run(scenario())
+
+
+def test_offering_uses_business_name_snapshot_versions():
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'business_name', 'answers': '{}'}
+        first = repo(pool)
+        await first.capture_snapshot()
+        await first.save_answer('Loja')
+        pool.conn.versions = {'userVersion': '3', 'tenantVersion': '4'}
+        pool.conn.state['step'] = 'offering'
+        offering = repo(pool)
+        await offering.capture_snapshot()
+        result = await offering.save_answer('Café')
+        assert result['profileExpected'] == {'userVersion': '1', 'tenantVersion': '2'}
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('baseline', [
+    {},
+    {'profile_user_version': '1', 'profile_tenant_version': None},
+])
+def test_legacy_offering_preserves_answer_without_profile_intent(baseline):
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'}), **baseline}
+        setup = repo(pool)
+        await setup.capture_snapshot()
+        result = await setup.save_answer('Café')
+        assert result['contextSaved'] is False
+        assert 'perfil' in result['contextError']
+        assert 'profileUpdate' not in result
+        assert 'profileExpected' not in result
+        assert result['answers'] == {'businessName': 'Loja', 'offering': 'Café'}
+        assert await setup.pending_profile_update() is None
+    asyncio.run(scenario())
+
+
+def test_pre_migration_offering_snapshot_cannot_authorize_profile_update():
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        setup = repo(pool)
+        await setup.capture_snapshot()
+        snapshot = next(iter(pool.conn.snapshots.values()))
+        snapshot.update(profile_user_version='1', profile_tenant_version='2')
+        result = await setup.save_answer('Café')
+        assert result['contextSaved'] is False
+        assert 'profileUpdate' not in result
+    asyncio.run(scenario())
+
+
+def test_legacy_offering_tool_does_not_invoke_profile_writer():
+    from guided_setup import GuidedSetupTools
+
+    async def scenario():
+        pool = Pool()
+        pool.conn.state = {'step': 'offering', 'answers': json.dumps({'businessName': 'Loja'})}
+        setup = repo(pool)
+        await setup.capture_snapshot()
+        calls = []
+
+        async def writer(*args):
+            calls.append(args)
+            return {}
+
+        result = await GuidedSetupTools(setup, writer).guided_setup_answer('Café')
+        assert result['contextSaved'] is False
+        assert result['contextError']
+        assert result['answers']['offering'] == 'Café'
+        assert not calls
     asyncio.run(scenario())

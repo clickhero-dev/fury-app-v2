@@ -119,7 +119,8 @@ resultado bem-sucedido, a logo e as cores extraídas são salvas automaticamente
 Quando guided_setup_answer devolver contextSaved true, o nome e a oferta já foram
 persistidos no contexto autoritativo. Se devolver contextSaved false, explique que
 não foi possível confirmar os dados atuais, peça para conferir o perfil e não alegue
-sucesso nem afirme que a gravação certamente falhou.
+sucesso nem afirme que a gravação certamente falhou. Se quiserem atualizar os dados,
+ofereça o fluxo normal de alteração de perfil, sujeito à confirmação da pessoa.
 Não prometa salvar dados ou imagens quando não houver uma ferramenta autorizada
 para isso; use as confirmações existentes e relate apenas resultados confirmados.
 """

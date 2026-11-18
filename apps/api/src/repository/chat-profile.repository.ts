@@ -21,7 +21,7 @@ export class ChatProfileRepository extends TenantScopedRepository {
         };
         const messageId = await checkFence();
         const receipts = await tx.execute(sql`SELECT result FROM chat_guided_setup_receipts WHERE conversation_id=${fence.conversationId}::uuid AND user_message_id=${messageId}::uuid`);
-        const result = receipts[0]?.result as { profileUpdate?: GuidedValues; profileExpected?: { userVersion?: unknown; tenantVersion?: unknown } } | undefined;
+        const result = receipts[0]?.result as { profileUpdate?: GuidedValues; profileExpected?: { userVersion?: unknown; tenantVersion?: unknown }; nameVersionConfirmed?: unknown } | undefined;
         const expected = result?.profileExpected;
         if (result?.profileUpdate?.tenantName !== values.tenantName || result?.profileUpdate?.businessContext !== values.businessContext ||
             typeof expected?.userVersion !== 'string' || !/^\d{1,10}$/.test(expected.userVersion) ||
@@ -38,6 +38,9 @@ export class ChatProfileRepository extends TenantScopedRepository {
             throw new AppError(409, 'CHAT_GUIDED_PROFILE_SUPERSEDED', 'O perfil foi alterado após a atualização guiada. Consulte os dados atuais.');
           }
           return saved;
+        }
+        if (result?.nameVersionConfirmed !== true) {
+          throw new AppError(409, 'CHAT_GUIDED_RECEIPT_MISMATCH', 'Não foi possível confirmar os dados do fluxo guiado.');
         }
         if (rows[0].userVersion !== expected.userVersion || rows[0].tenantVersion !== expected.tenantVersion) throw new AppError(409,'PROFILE_CHANGED','O perfil ou negócio mudou. Consulte novamente antes de confirmar.');
         const slug = slugify(values.tenantName);

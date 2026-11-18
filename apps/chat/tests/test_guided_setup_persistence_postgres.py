@@ -16,12 +16,19 @@ MIGRATIONS = Path(__file__).resolve().parents[3] / 'packages/db/migrations'
 
 async def prepare(pool, tenant, user, cid):
     for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
-                 '0086_chat_guided_profile_effects.sql'):
+                 '0086_chat_guided_profile_effects.sql', '0087_chat_guided_name_versions.sql'):
         await pool.execute((MIGRATIONS / name).read_text())
     await pool.execute('ALTER TABLE users ADD COLUMN tenant_id uuid')
     await pool.execute('UPDATE users SET tenant_id=$1 WHERE id=$2', tenant, user)
     run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Sim')
     return GuidedSetupPersistence(pool, tenant, user, cid, run, lease, mid), run, mid
+
+
+async def seed_name_versions(pool, tenant, user):
+    await pool.execute('''UPDATE chat_guided_setups SET
+        profile_user_version=(SELECT xmin::text FROM users WHERE id=$2),
+        profile_tenant_version=(SELECT xmin::text FROM tenants WHERE id=$1)
+        WHERE tenant_id=$1 AND user_id=$2''', tenant, user)
 
 
 def test_retry_after_commit_and_before_commit_are_idempotent():
@@ -171,6 +178,7 @@ def test_retry_before_offering_write_updates_profile_once():
             original, run, mid = await prepare(pool, tenant, user, cid)
             await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
                 VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_name_versions(pool, tenant, user)
             await original.capture_snapshot()
             await pool.execute("UPDATE chat_response_runs SET status='failed' WHERE id=$1", run)
             new_run, lease, _ = await ConversationRepository(pool, tenant, user).begin_run(cid, retry=True)
@@ -193,6 +201,7 @@ def test_offering_receipt_freezes_profile_versions_across_retry():
             original, run, mid = await prepare(pool, tenant, user, cid)
             await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
                 VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_name_versions(pool, tenant, user)
             versions = await pool.fetchrow('''SELECT u.xmin::text AS "userVersion",
                 t.xmin::text AS "tenantVersion" FROM users u JOIN tenants t ON u.tenant_id=t.id
                 WHERE u.id=$1 AND t.id=$2''', user, tenant)
@@ -204,6 +213,45 @@ def test_offering_receipt_freezes_profile_versions_across_retry():
             resumed_run, lease, _ = await ConversationRepository(pool, tenant, user).begin_run(cid, retry=True)
             resumed = GuidedSetupPersistence(pool, tenant, user, cid, resumed_run, lease, mid)
             assert (await resumed.save_answer('Café'))['profileExpected'] == dict(versions)
+    asyncio.run(scenario())
+
+
+def test_offering_uses_versions_from_when_business_name_was_confirmed():
+    async def scenario():
+        async with database() as (pool, tenant, user, cid):
+            first, run, _ = await prepare(pool, tenant, user, cid)
+            await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
+                VALUES($1,$2,'business_name','{}'::jsonb)''', tenant, user)
+            versions = await pool.fetchrow('''SELECT u.xmin::text AS "userVersion",
+                t.xmin::text AS "tenantVersion" FROM users u JOIN tenants t ON u.tenant_id=t.id
+                WHERE u.id=$1 AND t.id=$2''', user, tenant)
+            await first.capture_snapshot()
+            await first.save_answer('Loja antiga')
+            await pool.execute('UPDATE tenants SET id=id WHERE id=$1', tenant)
+            await pool.execute("UPDATE chat_guided_setups SET step='offering' WHERE tenant_id=$1 AND user_id=$2", tenant, user)
+            await pool.execute("UPDATE chat_response_runs SET status='completed' WHERE id=$1", run)
+            next_run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Café')
+            next_setup = GuidedSetupPersistence(pool, tenant, user, cid, next_run, lease, mid)
+            await next_setup.capture_snapshot()
+            result = await next_setup.save_answer('Café')
+            assert result['profileExpected'] == dict(versions)
+            assert result['nameVersionConfirmed'] is True
+    asyncio.run(scenario())
+
+
+def test_legacy_offering_preserves_answer_without_writing_profile():
+    async def scenario():
+        async with database() as (pool, tenant, user, cid):
+            setup, _, _ = await prepare(pool, tenant, user, cid)
+            await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
+                VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Nome anterior"}')
+            await setup.capture_snapshot()
+            result = await setup.save_answer('Café')
+            assert result['step'] == 'company_photos'
+            assert result['answers']['offering'] == 'Café'
+            assert result['contextSaved'] is False
+            assert 'profileUpdate' not in result
+            assert await pool.fetchval('SELECT count(*) FROM chat_guided_setup_receipts') == 1
     asyncio.run(scenario())
 
 
@@ -248,4 +296,21 @@ def test_missing_profile_fence_migration_cannot_create_an_unsafe_snapshot():
                 await setup.capture_snapshot()
             assert (await setup.current()).step == 'invitation'
             assert await pool.fetchval('SELECT count(*) FROM chat_guided_setup_snapshots') == 0
+    asyncio.run(scenario())
+
+
+def test_missing_name_version_migration_cannot_create_an_unsafe_snapshot():
+    import asyncpg
+
+    async def scenario():
+        async with database() as (pool, tenant, user, cid):
+            for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
+                         '0086_chat_guided_profile_effects.sql'):
+                await pool.execute((MIGRATIONS / name).read_text())
+            run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Sim')
+            setup = GuidedSetupPersistence(pool, tenant, user, cid, run, lease, mid)
+            with pytest.raises(asyncpg.UndefinedColumnError):
+                await setup.capture_snapshot()
+            assert (await setup.current()).step == 'invitation'
+            assert await pool.fetchval('SELECT count(*) FROM chat_guided_setups') == 0
     asyncio.run(scenario())

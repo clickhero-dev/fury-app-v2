@@ -30,7 +30,7 @@ async function turn(expected?: Record<string, string>) {
   const [versions] = await pg`SELECT u.xmin::text AS "userVersion",t.xmin::text AS "tenantVersion" FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=${user}`;
   await pg`INSERT INTO chat_messages(id,conversation_id,role,content) VALUES(${message},${conversationId},'user','Flores')`;
   await pg`INSERT INTO chat_response_runs(id,conversation_id,user_message_id,lease_id,status,lease_until) VALUES(${runId},${conversationId},${message},${leaseId},'running',clock_timestamp()+interval '1 minute')`;
-  await pg`INSERT INTO chat_guided_setup_receipts(conversation_id,user_message_id,result) VALUES(${conversationId},${message},${JSON.stringify({ profileUpdate: values, profileExpected: expected ?? { userVersion: versions.userVersion, tenantVersion: versions.tenantVersion } })}::jsonb)`;
+  await pg`INSERT INTO chat_guided_setup_receipts(conversation_id,user_message_id,result) VALUES(${conversationId},${message},${JSON.stringify({ profileUpdate: values, profileExpected: expected ?? { userVersion: versions.userVersion, tenantVersion: versions.tenantVersion }, nameVersionConfirmed: true })}::jsonb)`;
   return { conversationId, runId, leaseId };
 }
 suite('guided profile transaction in PostgreSQL', () => {
@@ -77,6 +77,28 @@ suite('guided profile transaction in PostgreSQL', () => {
   it('fails closed when receipt lacks versions', async () => {
     const fence = await turn({});
     await expect(repo.applyGuided(user,values,fence)).rejects.toMatchObject({statusCode:409});
+    await pg`UPDATE chat_response_runs SET status='completed' WHERE id=${fence.runId}`;
+  });
+  it('rejects a legacy pending receipt without changing the profile or recording an effect', async () => {
+    const fence = await turn();
+    await pg`UPDATE chat_guided_setup_receipts SET result=result-'nameVersionConfirmed' WHERE user_message_id=(SELECT user_message_id FROM chat_response_runs WHERE id=${fence.runId})`;
+    const before = await repo.snapshot(user);
+    await expect(repo.applyGuided(user,values,fence)).rejects.toMatchObject({code:'CHAT_GUIDED_RECEIPT_MISMATCH'});
+    expect(await repo.snapshot(user)).toEqual(before);
+    expect(await pg`SELECT * FROM chat_guided_profile_effects WHERE user_message_id=(SELECT user_message_id FROM chat_response_runs WHERE id=${fence.runId})`).toHaveLength(0);
+    await pg`UPDATE chat_response_runs SET status='completed' WHERE id=${fence.runId}`;
+  });
+  it('replays a legacy applied receipt only while authorization and existing checks remain valid', async () => {
+    const fence = await turn();
+    const applied = await repo.applyGuided(user,values,fence);
+    await pg`UPDATE chat_guided_setup_receipts SET result=result-'nameVersionConfirmed' WHERE user_message_id=(SELECT user_message_id FROM chat_response_runs WHERE id=${fence.runId})`;
+    expect(await repo.applyGuided(user,values,fence)).toEqual(applied);
+    expect(await repo.snapshot(user)).toEqual(applied);
+    await expect(repo.applyGuided(user,{...values,tenantName:'Outro'},fence)).rejects.toMatchObject({code:'CHAT_GUIDED_RECEIPT_MISMATCH'});
+    await expect(repo.applyGuided(randomUUID(),values,fence)).rejects.toMatchObject({statusCode:404});
+    await pg`UPDATE tenants SET business_context='Edição posterior' WHERE id=${tenant}`;
+    await expect(repo.applyGuided(user,values,fence)).rejects.toMatchObject({code:'CHAT_GUIDED_PROFILE_SUPERSEDED'});
+    expect((await repo.snapshot(user))?.businessContext).toBe('Edição posterior');
     await pg`UPDATE chat_response_runs SET status='completed' WHERE id=${fence.runId}`;
   });
   it('rejects slug collisions and leaves no effect', async () => {

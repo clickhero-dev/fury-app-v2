@@ -230,7 +230,7 @@ do transporte após retry; falha posterior do stream segue a telemetria de falha
 A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
 operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.
 
-O setup guiado requer as migrations `0084`, `0085` e `0086`. Cada turno captura a etapa
+O setup guiado requer as migrations `0084` a `0087`. Cada turno captura a etapa
 antes do modelo e registra o avanço com um recibo atômico por mensagem; uma
 retomada devolve o recibo e não avança novamente. Uma etapa alterada por outra
 execução após a captura é rejeitada. A ferramenta de resposta só fica disponível
@@ -238,12 +238,14 @@ quando a pergunta exibida corresponde à pergunta canônica da etapa, e aceita
 apenas o texto enviado pela pessoa; caso contrário, é preciso confirmar novamente.
 Se a tabela ou o snapshot estiverem
 indisponíveis, o chat normal continua, mas a resposta guiada não é aplicada.
-O recibo guarda as versões do perfil observadas antes do modelo. A API valida
+O recibo guarda as versões do perfil observadas quando o nome foi confirmado,
+antes do modelo. A API valida
 o recibo e o lease, confere essas versões e registra o efeito na mesma transação
 da atualização. A chave do efeito é a mensagem original, não o run; uma
 retomada pode reconciliar com segurança inclusive uma resposta HTTP perdida.
 Se o perfil mudou, o serviço recusa a atualização e solicita conferência;
-snapshots antigos sem versões exigem nova confirmação. Uma falha transitória
+configurações antigas sem versões preservam as respostas, mas exigem revisão
+e confirmação pelo fluxo normal de perfil. Uma falha transitória
 de sincronização esgotada agenda recuperação do turno, dentro dos limites
 duráveis existentes, em vez de declarar a atualização concluída.
 

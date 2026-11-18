@@ -15,6 +15,7 @@ import pytest
 import app as chat
 from guided_setup import BUSINESS_NAME, INVITATION, question_for
 from test_attachments_postgres import database
+from test_guided_setup_persistence_postgres import seed_name_versions
 
 
 pytestmark = pytest.mark.skipif(
@@ -26,7 +27,7 @@ MIGRATIONS = Path(__file__).resolve().parents[3] / 'packages/db/migrations'
 
 async def install_guided_migrations(pool):
     for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
-                 '0086_chat_guided_profile_effects.sql'):
+                 '0086_chat_guided_profile_effects.sql', '0087_chat_guided_name_versions.sql'):
         await pool.execute((MIGRATIONS / name).read_text())
 
 
@@ -162,9 +163,14 @@ def test_model_cannot_replace_the_users_confirmed_answer(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_missing_guided_migrations_do_not_block_chat(monkeypatch):
+@pytest.mark.parametrize('partial_migrations', [False, True])
+def test_missing_guided_migrations_do_not_block_chat(monkeypatch, partial_migrations):
     async def scenario():
         async with database() as (pool, tenant, user, cid):
+            if partial_migrations:
+                for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
+                             '0086_chat_guided_profile_effects.sql'):
+                    await pool.execute((MIGRATIONS / name).read_text())
             await seed_question(pool, cid, question_for(INVITATION)['question'])
             calls = []
             application = configure_runtime(monkeypatch, tenant, user, calls)
@@ -182,7 +188,7 @@ def test_missing_guided_migrations_do_not_block_chat(monkeypatch):
             assert 'guided_setup_status' in calls[0]['tools']
             assert 'guided_setup_answer' not in calls[0]['tools']
             assert any('indisponível neste turno' in text for text in calls[0]['instructions'])
-            assert await pool.fetchval("SELECT to_regclass('chat_guided_setups')") is None
+            assert bool(await pool.fetchval("SELECT to_regclass('chat_guided_setups')")) is partial_migrations
 
     asyncio.run(scenario())
 
@@ -199,6 +205,7 @@ def test_retry_reconciles_profile_receipt_before_model(monkeypatch):
             await pool.execute('UPDATE users SET tenant_id=$1 WHERE id=$2', tenant, user)
             await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
                 VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_name_versions(pool, tenant, user)
             await seed_question(pool, cid, question_for(OFFERING)['question'])
             run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Café')
             setup = GuidedSetupPersistence(pool, tenant, user, cid, run, lease, mid)
@@ -234,6 +241,7 @@ def test_profile_timeout_queues_turn_and_reconciles_on_retry(monkeypatch):
             await pool.execute('UPDATE users SET tenant_id=$1 WHERE id=$2', tenant, user)
             await pool.execute('''INSERT INTO chat_guided_setups(tenant_id,user_id,step,answers)
                 VALUES($1,$2,'offering',$3::jsonb)''', tenant, user, '{"businessName":"Loja"}')
+            await seed_name_versions(pool, tenant, user)
             await seed_question(pool, cid, question_for(OFFERING)['question'])
             calls, requests = [], []
             application = configure_runtime(monkeypatch, tenant, user, calls, tool_answer='Café')

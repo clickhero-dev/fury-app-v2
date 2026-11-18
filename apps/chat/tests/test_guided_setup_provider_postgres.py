@@ -29,7 +29,7 @@ def test_provider_failure_after_answer_recovers_without_advancing_twice(monkeypa
         async with database() as (pool, tenant, user, cid):
             migrations = Path(__file__).resolve().parents[3] / 'packages/db/migrations'
             for name in ('0084_chat_guided_setups.sql', '0085_chat_guided_setup_receipts.sql',
-                         '0086_chat_guided_profile_effects.sql'):
+                         '0086_chat_guided_profile_effects.sql', '0087_chat_guided_name_versions.sql'):
                 await pool.execute((migrations / name).read_text())
             run, lease, mid = await ConversationRepository(pool, tenant, user).begin_run(cid, 'Sim')
             repository = GuidedSetupPersistence(pool, tenant, user, cid, run, lease, mid)
