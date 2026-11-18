@@ -3,10 +3,10 @@
 
 Funcionalidade: renovação proativa da sessão
 
-  Cenário: sessão autenticada renova os dois tokens a cada cinco minutos
+  Cenário: sessão autenticada renova o acesso a cada cinco minutos
     Dado uma sessão persistida
     Quando passam cinco minutos
-    Então o cliente chama o endpoint de refresh e persiste os tokens rotacionados
+    Então o cliente chama o endpoint de refresh e persiste os tokens retornados
 
   Cenário: refresh inválido encerra a sessão
     Dado uma sessão persistida cujo refresh token foi revogado
@@ -31,7 +31,7 @@ vi.mock('../store/slices/authSlice', () => ({
 }));
 vi.mock('./query-client', () => ({ queryClient: { clear } }));
 
-import { startSessionRefresh, stopSessionRefresh } from './session-refresh.js';
+import { refreshSession, startSessionRefresh, stopSessionRefresh } from './session-refresh.js';
 
 describe('BDD: renovação proativa da sessão', () => {
   beforeEach(() => {
@@ -51,14 +51,16 @@ describe('BDD: renovação proativa da sessão', () => {
     vi.useRealTimers();
   });
 
-  it('Cenário: sessão autenticada renova os dois tokens a cada cinco minutos', async () => {
+  it('Cenário: sessão autenticada renova o acesso a cada cinco minutos', async () => {
     startSessionRefresh();
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-    expect(post).toHaveBeenCalledWith(expect.stringContaining('/auth/refresh'), {
-      refreshToken: 'refresh-antigo',
-    });
+    expect(post).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/refresh'),
+      { refreshToken: 'refresh-antigo' },
+      { timeout: 15_000 },
+    );
     expect(localStorage.getItem('token')).toBe('access-novo');
     expect(localStorage.getItem('refreshToken')).toBe('refresh-novo');
     expect(dispatch).toHaveBeenCalledWith({
@@ -76,8 +78,8 @@ describe('BDD: renovação proativa da sessão', () => {
     expect(clear).not.toHaveBeenCalled();
   });
 
-  it('Cenário: refresh inválido encerra a sessão', async () => {
-    post.mockRejectedValueOnce({ response: { status: 401 } });
+  it.each(['INVALID_REFRESH_TOKEN', 'REFRESH_TOKEN_EXPIRED', 'USER_NOT_FOUND'])('refresh rejeitado com %s encerra a sessão', async (code) => {
+    post.mockRejectedValueOnce({ response: { status: 401, data: { error: { code } } } });
     startSessionRefresh();
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
@@ -86,5 +88,50 @@ describe('BDD: renovação proativa da sessão', () => {
     expect(localStorage.getItem('refreshToken')).toBeNull();
     expect(clear).toHaveBeenCalledOnce();
     expect(dispatch).toHaveBeenCalledWith({ type: 'auth/logout' });
+  });
+
+  it.each([
+    new Error('sem rede'),
+    { response: { status: 500 } },
+    { response: { status: 429 } },
+    { response: { status: 401, data: { error: { code: 'OTHER_ERROR' } } } },
+  ])('preserva a sessão diante de erro temporário %#', async (error) => {
+    post.mockRejectedValueOnce(error);
+    startSessionRefresh();
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(localStorage.getItem('token')).toBe('access-antigo');
+    expect(localStorage.getItem('refreshToken')).toBe('refresh-antigo');
+    expect(clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(localStorage.getItem('token')).toBe('access-novo');
+  });
+
+  it('não apaga nem sobrescreve uma nova sessão quando o refresh anterior falha', async () => {
+    let reject!: (error: unknown) => void;
+    post.mockReturnValueOnce(new Promise((_resolve, rejectPromise) => { reject = rejectPromise; }));
+    const pending = refreshSession();
+    localStorage.setItem('token', 'outro-acesso');
+    localStorage.setItem('refreshToken', 'outra-sessao');
+    reject({ response: { status: 401, data: { error: { code: 'INVALID_REFRESH_TOKEN' } } } });
+    await expect(pending).rejects.toBeDefined();
+    expect(localStorage.getItem('token')).toBe('outro-acesso');
+    expect(localStorage.getItem('refreshToken')).toBe('outra-sessao');
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('propaga logout feito em outra aba', () => {
+    startSessionRefresh();
+    localStorage.removeItem('refreshToken');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'refreshToken', newValue: null }));
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(dispatch).toHaveBeenCalledWith({ type: 'auth/logout' });
+  });
+
+  it('ignora evento antigo de logout após novo login em outra aba', () => {
+    startSessionRefresh();
+    localStorage.setItem('refreshToken', 'sessao-nova');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'refreshToken', newValue: null }));
+    expect(localStorage.getItem('refreshToken')).toBe('sessao-nova');
+    expect(clear).not.toHaveBeenCalled();
   });
 });
