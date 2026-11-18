@@ -36,7 +36,7 @@ def runtime(monkeypatch):
         def __init__(self, *args, **kwargs):
             assert args[1:4] == (tenant, user, cid)
             assert args[-1] == mid
-            assert kwargs == {'policy_version': 'proactive-v1'}
+            assert kwargs == {'policy_version': 'proactive-v2'}
         async def load_context(self):
             events.append('load')
             return state['snapshot']

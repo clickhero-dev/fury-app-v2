@@ -4,10 +4,15 @@ import { AppError } from '../middleware/errorHandler.js';
 import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 import type { ChatTranscriptionService } from '../services/chat/chat-transcription.service.js';
 import type { ChatAttachmentService } from '../services/chat/chat-attachment.service.js';
+import type { ChatAttachmentPromotionService } from '../services/chat/chat-attachment-promotion.service.js';
 
 const conversationParams = z.object({ conversationId: z.string().uuid() });
 const attachmentParams = conversationParams.extend({ attachmentId: z.string().uuid() });
 const readBody = z.object({ attachmentIds: z.array(z.string().uuid()).min(1).max(3).refine(ids => new Set(ids).size === ids.length), question: z.string().max(20000) }).strict();
+const promoteBody = z.discriminatedUnion('target', [
+  z.object({ target: z.literal('logo') }).strict(),
+  z.object({ target: z.literal('library'), kind: z.enum(['empresa', 'produto', 'equipe', 'modelo']) }).strict(),
+]);
 function safeError(error: unknown): Error {
   return error instanceof AppError || error instanceof ZodError ? error : new AppError(503, 'CHAT_MEDIA_UNAVAILABLE', 'Mídia do assistente indisponível. Tente novamente.');
 }
@@ -19,7 +24,7 @@ function requestScope(req: Request, res: Response) {
   return { signal: controller.signal, done: () => { clearTimeout(timer); req.off('aborted', cancel); res.off('close', close); } };
 }
 export class ChatMediaController {
-  constructor(private readonly transcription: ChatTranscriptionService, private readonly attachments: ChatAttachmentService) {}
+  constructor(private readonly transcription: ChatTranscriptionService, private readonly attachments: ChatAttachmentService, private readonly promotion?: ChatAttachmentPromotionService) {}
   authorizeUpload = async (req: Request, _res: Response, next: NextFunction) => {
     try { const { conversationId } = conversationParams.parse(req.params); await this.attachments.assertOwned(req.user!.tenantId, req.user!.userId, conversationId); next(); }
     catch (error) { next(safeError(error)); }
@@ -44,6 +49,17 @@ export class ChatMediaController {
       res.set({ 'Content-Type': attachment.mimeType, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'none'; sandbox", 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(attachment.filename)}` });
       res.send(bytes);
+    } catch (error) { next(safeError(error)); }
+  };
+  promote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!this.promotion) throw new AppError(503, 'CHAT_PROMOTION_UNAVAILABLE', 'Salvar mídia do chat na marca não está disponível.');
+      const { conversationId, attachmentId } = attachmentParams.parse(req.params);
+      const body = promoteBody.parse(req.body);
+      const data = body.target === 'logo'
+        ? await this.promotion.logo(req.user!.tenantId, req.user!.userId, conversationId, attachmentId)
+        : await this.promotion.library(req.user!.tenantId, req.user!.userId, conversationId, attachmentId, body.kind);
+      res.status(201).json({ success: true, data });
     } catch (error) { next(safeError(error)); }
   };
   remove = async (req: Request, res: Response, next: NextFunction) => {

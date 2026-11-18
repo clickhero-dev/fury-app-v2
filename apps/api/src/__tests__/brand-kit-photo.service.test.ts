@@ -73,6 +73,14 @@ describe('BrandKitPhotoService', () => {
     expect(out.every((p) => p.kind === 'produto')).toBe(true);
   });
 
+  it('aceita fotos da empresa sem classificá-las como produto ou equipe', async () => {
+    const svc = new BrandKitPhotoService(factory, storage as any);
+    const out = await svc.upload('t-1', 'empresa', [{ buffer: PNG, mimetype: 'image/png' }]);
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ kind: 'empresa' }));
+    expect(storage.uploadAsset).toHaveBeenCalledWith(expect.any(Buffer), expect.stringMatching(/\/empresa\/.+\.png$/), 'image/png');
+    expect(out).toEqual([expect.objectContaining({ kind: 'empresa' })]);
+  });
+
   it('upload cria brand kit vazio quando o tenant ainda não tem', async () => {
     repo = makeRepo({ findBrandKit: vi.fn(async () => undefined) });
     const svc = new BrandKitPhotoService(() => repo, storage as any);

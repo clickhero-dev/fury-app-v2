@@ -56,6 +56,7 @@ export function createChatMediaRouter(controller: ChatMediaController, options: 
   router.post('/transcriptions', budget, multipart(true), controller.transcribe);
   router.post('/conversations/:conversationId/attachments', controller.authorizeUpload, budget, multipart(false), controller.upload);
   router.post('/conversations/:conversationId/attachments/read', budget, controller.read);
+  router.post('/conversations/:conversationId/attachments/:attachmentId/promote', controller.promote);
   router.get('/conversations/:conversationId/attachments/:attachmentId', controller.download);
   router.delete('/conversations/:conversationId/attachments/:attachmentId', controller.remove);
   router.delete('/conversations/:conversationId/attachments', controller.cleanup);

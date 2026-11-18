@@ -70,6 +70,14 @@ function contextData(context: QuickActionContext): string {
 export function buildDirectQuickActionPrompt(action: DirectQuickAction, context: QuickActionContext = {}, suggestion?: string): string {
   return [action.prompt,suggestion ? `Ideia escolhida: ${suggestion}` : '',contextData(context),directSafeguards].filter(Boolean).join('\n');
 }
+
+export function guidedSetupPrompt(context: QuickActionContext = {}): string {
+  return [
+    'Quero iniciar a ajuda guiada para configurar meu negócio.',
+    'Consulte o estado da ajuda guiada e faça somente a pergunta atual. Não execute alterações nem gere mídia.',
+    contextData(context),
+  ].filter(Boolean).join('\n');
+}
 /** Optional next steps reuse PR465's business/city suggestions, never a required briefing. */
 export function contextualQuickActions(context: QuickActionContext): {action:DirectQuickAction; suggestion:string}[] {
   return [

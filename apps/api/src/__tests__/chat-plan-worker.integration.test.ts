@@ -95,12 +95,12 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
     });
     it('restart repete draft_text interno uma vez e persiste o resultado', async () => {
+        await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {
             Object.assign(p.tasks[0], { status: 'running', attempts: 1, fence: randomUUID(), leaseUntil: new Date(Date.now() - 1000).toISOString() });
         });
         const before = calls;
-        await Promise.all(workers.map(w => w.close()));
         workers = [createChatPlanWorker(connection, executor, q, recovery, { prefix })];
         await workers[0].waitUntilReady();
         await q.recover(recovery);
@@ -109,11 +109,14 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         expect((await repo.get(conversation, p.id)).tasks[0]).toMatchObject({ status: 'completed', attempts: 2, result: { summary: 'Resultado sintético verificável' } });
     });
     it('restart com limite esgotado não repete draft_text incerto', async () => {
+        await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {
             Object.assign(p.tasks[0], { status: 'running', attempts: 2, fence: randomUUID(), leaseUntil: new Date(Date.now() - 1000).toISOString() });
         });
         const before = calls;
+        workers = [createChatPlanWorker(connection, executor, q, recovery, { prefix })];
+        await workers[0].waitUntilReady();
         await q.recover(recovery);
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('failed'), { timeout: 10000 });
         expect(calls).toBe(before);
