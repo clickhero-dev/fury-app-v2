@@ -5,7 +5,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './e2e-mock',
-  testMatch: ['home.spec.ts', 'trial-login.spec.ts', 'trial-social-policy.spec.ts', 'public-trial-access.spec.ts'],
+  testMatch: ['home.spec.ts', 'trial-login.spec.ts', 'trial-social-policy.spec.ts', 'public-trial-access.spec.ts', 'qa-read-only.spec.ts'],
   outputDir: './test-results-qa/home',
   timeout: 30_000,
   workers: 2,
