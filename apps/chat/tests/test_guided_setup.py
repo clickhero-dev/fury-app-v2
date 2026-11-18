@@ -1,6 +1,6 @@
 from guided_setup import (
     BUSINESS_NAME, COMPANY_PHOTOS, DECLINED, DONE, INVITATION, LOGO,
-    LOGO_CREATION, OFFERING, PRODUCT_PHOTOS, TEAM_PHOTOS, GuidedSetup, SetupState, advance,
+    LOGO_CREATION, OFFERING, PRODUCT_PHOTOS, TEAM_PHOTOS, GuidedSetup, GuidedSetupTools, SetupState, advance,
     question_for,
 )
 import pytest
@@ -74,6 +74,29 @@ def test_offering_returns_the_versioned_profile_update_for_authoritative_context
             'tenantName': 'Loja da Ana',
             'businessContext': 'Produtos ou serviços: Flores e presentes',
         }
+    asyncio.run(exercise())
+
+
+def test_offering_persists_authoritative_context_before_returning_next_question():
+    import asyncio
+    class Db:
+        row = None
+        async def fetchrow(self, *_args): return self.row
+        async def execute(self, _sql, _tenant, _user, step, answers):
+            import json
+            self.row = {'step': step, 'answers': json.loads(answers)}
+    saved = []
+    async def writer(name, context):
+        saved.append((name, context))
+        return {'tenantName': name, 'businessContext': context}
+    async def exercise():
+        setup = GuidedSetupTools(GuidedSetup(Db(), 'tenant', 'user'), writer)
+        await setup.guided_setup_answer('Sim')
+        await setup.guided_setup_answer('Loja da Ana')
+        await setup.guided_setup_answer('Pular por enquanto')
+        result = await setup.guided_setup_answer('Flores e presentes')
+        assert result['contextSaved'] is True
+        assert saved == [('Loja da Ana', 'Produtos ou serviços: Flores e presentes')]
     asyncio.run(exercise())
 
 

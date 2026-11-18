@@ -122,8 +122,8 @@ class GuidedSetup:
 
 
 class GuidedSetupTools:
-    def __init__(self, setup: GuidedSetup):
-        self.setup = setup
+    def __init__(self, setup: GuidedSetup, context_writer=None):
+        self.setup, self.context_writer = setup, context_writer
 
     async def guided_setup_status(self) -> dict[str, Any]:
         """Consultar a etapa atual da ajuda de configuração do negócio."""
@@ -139,6 +139,13 @@ class GuidedSetupTools:
         if not isinstance(answer, str):
             return {'error': 'Resposta inválida.'}
         try:
-            return await self.setup.save_answer(answer)
+            result = await self.setup.save_answer(answer)
+            update = result.get('profileUpdate')
+            if update and self.context_writer:
+                saved = await self.context_writer(update['tenantName'], update['businessContext'])
+                if saved.get('error'):
+                    return {**result, 'contextSaved': False, 'contextError': saved['error']}
+                return {**result, 'contextSaved': True}
+            return result
         except ValueError as error:
             return {'error': str(error), **(await self.guided_setup_status())}

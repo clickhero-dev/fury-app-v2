@@ -99,3 +99,22 @@ class ChatReadTools:
             return data
         except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
             return {'error': 'Não foi possível salvar esta imagem na marca.'}
+
+    async def save_guided_business_context(self, tenant_name: str, business_context: str) -> dict:
+        """Persistir nome e oferta confirmados pelo fluxo guiado no contexto do negócio.
+
+        Use somente os valores retornados por guided_setup_answer.profileUpdate.
+        """
+        try:
+            if not 1 <= len(tenant_name.strip()) <= 255 or not 1 <= len(business_context.strip()) <= 5000:
+                raise ValueError()
+            response = await self.client.post(self.base_url + '/api/auth/me/chat-guided-update',
+                headers={'Authorization': 'Bearer ' + self.token},
+                json={'tenantName': tenant_name.strip(), 'businessContext': business_context.strip()}, timeout=15.0)
+            response.raise_for_status()
+            data = response.json().get('data')
+            if not isinstance(data, dict):
+                raise ValueError()
+            return data
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+            return {'error': 'Não foi possível salvar o contexto do negócio agora.'}

@@ -38,5 +38,6 @@ export function isChatToolPath(path: string): boolean {
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-ad-assets\/?$/.test(path)) return true;
   if (/^\/api\/campaigns\/[a-zA-Z0-9-]+\/chat-available-ad-assets\/?$/.test(path)) return true;
   if (/^\/api\/auth\/me\/chat-(?:snapshot|update)\/?$/.test(path)) return true;
+  if (/^\/api\/auth\/me\/chat-guided-update\/?$/.test(path)) return true;
   return /^\/api\/(brand-kit(?:\/chat-(?:snapshot|update))?|studio\/assets(?:\/[a-zA-Z0-9-]+)?|studio\/ai\/(?:generate-image|generate-video|regenerate|chat-edit|assets\/[a-zA-Z0-9-]+\/chat-snapshot)|studio\/video\/(jobs(?:\/[a-zA-Z0-9-]+)?|assets\/[a-zA-Z0-9-]+\/(?:adjust|chat-adjust))|planner\/(calendar|posts(?:\/[a-zA-Z0-9-]+(?:\/(?:move|chat-snapshot|chat-cancel))?)?)|campaigns(?:\/create|\/create-wizard|\/[a-zA-Z0-9-]+(?:\/(?:pause|status|budget|chat-ads|chat-snapshot|chat-update))?)?)\/?$/.test(path);
 }

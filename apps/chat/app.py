@@ -358,7 +358,7 @@ def create_app():
                 plans = PlanTools(os.environ.get('ADY_API_URL', ''), request.headers['authorization'][7:], app.state.http, str(conversation_id), run_id=str(run_id), lease_id=str(lease_id))
                 plan_tools = tools_for_agent(plans)
                 read_tools = ChatReadTools(os.environ['ADY_API_URL'], request.headers['authorization'][7:], app.state.http)
-                guided_setup = GuidedSetupTools(GuidedSetup(db, user['tenantId'], user['userId']))
+                guided_setup = GuidedSetupTools(GuidedSetup(db, user['tenantId'], user['userId']), read_tools.save_guided_business_context)
                 guided_setup_snapshot = await guided_setup.guided_setup_status()
                 read_tool_list = [ady.campaigns, ady.campaign_ads, ady.ad_details, ady.ad_assets, ady.available_ad_assets, ady.calendar, ady.brand, ady.brand_photos, ady.profile, ady.assets, read_tools.quotas, read_tools.meta_ads_diagnostic, read_tools.promote_attachment]
                 tool_list = read_tool_list + [guided_setup.guided_setup_status, guided_setup.guided_setup_answer] + available_proposal_tools(proposal) + plan_tools
