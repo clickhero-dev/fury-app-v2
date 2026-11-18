@@ -167,7 +167,7 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }
     await page.reload();
     await page.getByRole('button',{name:'Mostrar conversas'}).click();
     await page.getByRole('button',{name:'Vídeo',exact:true}).click();
-    const video = page.getByLabel('Vídeo gerado');
+    const video = page.getByLabel('Vídeo gerado', { exact: true });
     await expect(video).toBeVisible();
     const scroller = page.locator('.ady-chat-messages');
     await scroller.evaluate((element) => { const video = element.querySelector('video')!; element.scrollTop += video.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom; });
@@ -183,6 +183,8 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }
     await page.screenshot({path:testInfo.outputPath(`video-controls-${viewport.width}.png`)});
     const rect = (await video.boundingBox())!;
     await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height - 15);
+    await expect(page.getByRole('dialog', { name: 'Visualização de Vídeo gerado' })).toBeVisible();
+    await page.getByRole('button', { name: 'Fechar visualização' }).click();
     await latest.click();
     await expect(latest).toHaveCount(0);
   });
