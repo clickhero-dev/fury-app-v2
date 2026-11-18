@@ -32,3 +32,13 @@ O log da tentativa mais recente de jornada-real no SHA 5ccf879 mostra login bem-
 5. Integrar a base `hmg`, preservar ambas as variáveis de CI do conflito e os workers de chatbot após o bootstrap. Reavaliar a PR #427 se ela for integrada; executar testes focados, builds e todos os checks do SHA final. Aceite: PR sem conflitos e CI verde no SHA atual.
 
 Em 18/11, `hmg` avançou e a #435 passou a apresentar conflito no workflow de CI. A reconciliação preserva `PROBE_E2E_DATABASE_URL` e `TEST_RATING_DATABASE`; o worker de recuperação de turnos incorporado pela base permanece após `startupReady`. A #427 segue aberta. O acesso a PostHog e aos logs/configurações dos serviços não está disponível nesta sessão; os passos 1–4 continuam pendentes e não se deve concluir o card com base apenas em testes locais ou CI.
+
+## Revalidação do CI — 18/11, head a2466c59
+
+O artefato `chatbot-evidence-1` do run 44265082151 identifica falha de seletor estrito em `chat-real.spec.ts`: o rótulo parcial `Vídeo gerado` também encontra botões de abrir, baixar e tentar novamente. Ajustar os dois cenários de vídeo para correspondência exata, preservando a verificação do `src` e dos estados persistidos. Aceite: o cenário real passa com PostgreSQL e Redis descartáveis e o check completo passa no SHA final. O log de `jornada-real` confirma cota 0/20; a restauração da cota é pré-requisito para reexecutar essa jornada sem enfraquecer o teste.
+
+A correlação histórica e a validação operacional dos itens 1–4 continuam obrigatórias. Sem acesso aos seis eventos individuais e aos serviços implantados, não há evidência para determinar origem, ambiente, dimensionamento ou política de restart; nenhum desses critérios é considerado atendido por esta correção de CI.
+
+No reteste local, o cenário avançou além do vídeo e encontrou expectativa obsoleta para proposta sem moeda: a revisão atual retorna 409 para proposta existente não confirmável. O teste deve verificar esse conflito e que a proposta permanece pendente, sem despacho. A confirmação da suíte completa continua necessária.
+
+Reteste local: `chat-real.spec.ts` passou com PostgreSQL 16 e Redis 7 descartáveis após os ajustes, usando apenas a fase real do gate. Builds de shared/db e migrations também passaram. Não equivale à execução integral do gate nem aos checks remotos.
