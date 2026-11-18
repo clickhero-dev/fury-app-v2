@@ -61,6 +61,9 @@ describe('PartnersPage', () => {
     await user.type(screen.getByLabelText('Nome'), 'Dona');
     await user.type(screen.getByLabelText('E-mail'), 'dona@x.com');
     await user.type(screen.getByLabelText(/senha inicial/i), 'SenhaForte1');
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    expect(screen.getByLabelText(/senha inicial/i)).toHaveAttribute('type', 'text');
+    expect(mockPost).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Criar parceiro' }));
 
     expect(mockPost).toHaveBeenCalledWith('/admin/partners', {

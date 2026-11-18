@@ -56,7 +56,8 @@ export async function refreshSession(): Promise<string> {
       return tokens.accessToken;
     })
     .catch((error) => {
-      forceLogout();
+      // Erros de rede e falhas temporárias do servidor não invalidam a sessão.
+      if (error?.response?.status === 401) forceLogout();
       throw error;
     })
     .finally(() => {
@@ -95,8 +96,7 @@ async function refreshWithCrossTabLock() {
       if (lease?.owner === tabId) localStorage.removeItem(REFRESH_LEASE_KEY);
     }
   } catch {
-    // refreshSession já removeu a sessão local; um timer não deve virar uma
-    // rejeição não tratada no navegador.
+    // Um timer não deve produzir uma rejeição não tratada no navegador.
   }
 }
 

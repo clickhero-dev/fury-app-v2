@@ -49,6 +49,9 @@ describe('ClientesPage', () => {
     await userEvent.type(screen.getByLabelText('Nome'), 'Ana');
     await userEvent.type(screen.getByLabelText('E-mail'), 'ana@y.com');
     await userEvent.type(screen.getByLabelText(/Senha inicial/), 'Senha@123');
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    expect(screen.getByLabelText(/Senha inicial/)).toHaveAttribute('type', 'text');
+    expect(mockPost).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Criar cliente' }));
 
     // plano ativo mais antigo já vem marcado; desativado não aparece

@@ -497,6 +497,27 @@ describe('TicketsPage', () => {
     expect(within(screen.getByRole('tab', { name: /abertos/i })).getByText('0')).toBeInTheDocument();
   });
 
+  /** Dado falha transitória, quando tenta novamente no diálogo,
+   * então mantém a lista, não inventa opções e recupera os status reais. */
+  it('recupera status indisponíveis pelo diálogo sem usar opções dos filtros', async () => {
+    const user = setupUser();
+    const base = mockGet.getMockImplementation()!;
+    let unavailable = true;
+    mockGet.mockImplementation((url: string) => url === '/admin/tickets/statuses' && unavailable
+      ? Promise.reject(new Error('provider unavailable')) : base(url));
+    render(<TicketsPage />);
+    await user.click(await screen.findByRole('listitem', { name: 'Alterar status de [N2] Publicação falhou' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('combobox', { name: 'Novo status' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Confirmar alteração' })).toBeDisabled();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Não foi possível carregar os status');
+    unavailable = false;
+    await user.click(within(dialog).getByRole('button', { name: 'Tentar carregar status novamente' }));
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Novo status' })).toBeEnabled());
+    expect(within(dialog).getByRole('option', { name: 'triagem' })).toBeInTheDocument();
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
   it('abre o diálogo ao clicar no card e envia o status escolhido', async () => {
     mockPatch.mockResolvedValue({ data: { data: { id: 'open-1', status: 'triagem' } } });
     render(<TicketsPage />);

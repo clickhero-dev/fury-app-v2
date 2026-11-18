@@ -32,6 +32,8 @@ import publicTrialRoutes from './public-trial.routes.js';
 import { createChatProxy } from './chat.routes.js';
 import { createChatMediaRouter } from './chat-media.routes.js';
 import { createChatPlanRouter } from './chat-plan.routes.js';
+import { createChatReadRouter } from './chat-read.routes.js';
+import { createChatReadCapabilities } from '../services/chat/chat-read-runtime.js';
 import { chatDelegationGuard } from '../middleware/chat-delegation.middleware.js';
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
@@ -54,6 +56,7 @@ router.use('/chat', createChatPlanRouter(chatPlanRuntime.controller, {
 router.use(chatDelegationGuard);
 // RBAC global: bloqueia serviços por papel/parceiro (catálogo em lib/rbac-services.ts)
 router.use(rbacMiddleware);
+router.use(createChatReadRouter(createChatReadCapabilities));
 
 router.use("/health", healthRoutes);
 router.use("/public", publicTrialRoutes);

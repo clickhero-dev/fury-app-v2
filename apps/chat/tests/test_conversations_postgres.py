@@ -39,12 +39,14 @@ def test_cross_tenant_conversation_denied(monkeypatch):
     monkeypatch.setenv('DATABASE_URL', URL)
     monkeypatch.setenv('ADY_API_URL', 'https://ady.invalid')
     monkeypatch.setenv('CHAT_DELEGATION_SECRET', 'test-secret-with-at-least-32-characters')
-    def token(index):
-        return jwt.encode({'actor':'chatbot','userId':str(users[index]),'tenantId':str(tenants[index]),'iat':int(time.time()),'exp':int(time.time())+300,'email':'test@example.invalid','role':'admin','iss':'ady-api','aud':'ady-chat'}, os.environ['CHAT_DELEGATION_SECRET'], algorithm='HS256')
+    def token(index, *, human=False):
+        return jwt.encode({'actor':'chatbot','humanIntent':human,'userId':str(users[index]),'tenantId':str(tenants[index]),'iat':int(time.time()),'exp':int(time.time())+300,'email':'test@example.invalid','role':'admin','iss':'ady-api','aud':'ady-chat'}, os.environ['CHAT_DELEGATION_SECRET'], algorithm='HS256')
     try:
         with TestClient(create_app()) as client:
             first = {'Authorization':'Bearer '+token(0)}
             second = {'Authorization':'Bearer '+token(1)}
+            first_human = {'Authorization':'Bearer '+token(0, human=True)}
+            second_human = {'Authorization':'Bearer '+token(1, human=True)}
             created = client.post('/conversations', headers=first)
             assert created.status_code == 201
             cid = created.json()['id']
@@ -138,7 +140,8 @@ def test_cross_tenant_conversation_denied(monkeypatch):
                 first_run = executor.submit(client.post, '/conversations/'+cid+'/messages', headers=first, json={'content':'Primeira'})
                 assert started.wait(5)
                 concurrent_response = client.post('/conversations/'+cid+'/messages', headers=first, json={'content':'Segunda'})
-                assert concurrent_response.status_code == 409
+                assert concurrent_response.status_code == 200
+                assert 'event: done' in concurrent_response.text
                 assert 'event: done' in first_run.result().text
             async def proposal():
                 conn = await asyncpg.connect(URL)
@@ -152,9 +155,11 @@ def test_cross_tenant_conversation_denied(monkeypatch):
                 assert request.headers['x-chat-approval-id'] == approval_id
                 return httpx.Response(200, json={'url':'https://example.invalid/image.png'})
             client.app.state.http._transport = httpx.MockTransport(handler)
-            assert client.post('/approvals/'+approval_id+'/confirm', headers=second).status_code == 404
-            assert client.post('/approvals/'+approval_id+'/confirm', headers=first).status_code == 200
-            assert client.post('/approvals/'+approval_id+'/confirm', headers=first).status_code == 404
+            assert client.post('/approvals/'+approval_id+'/confirm', headers=first).status_code == 403
+            assert client.post('/approvals/'+approval_id+'/confirm', headers=second_human).status_code == 404
+            confirmed = client.post('/approvals/'+approval_id+'/confirm', headers=first_human)
+            assert confirmed.status_code == 200
+            assert client.post('/approvals/'+approval_id+'/confirm', headers=first_human).json() == confirmed.json()
             async def stale_proposal():
                 conn = await asyncpg.connect(URL)
                 try:
@@ -162,7 +167,7 @@ def test_cross_tenant_conversation_denied(monkeypatch):
                 finally: await conn.close()
             stale_id = str(asyncio.run(stale_proposal()))
             client.app.state.http._transport = httpx.MockTransport(lambda req: httpx.Response(409, json={'error':'changed'}))
-            stale_response = client.post('/approvals/'+stale_id+'/confirm', headers=first)
+            stale_response = client.post('/approvals/'+stale_id+'/confirm', headers=first_human)
             assert stale_response.status_code == 409
             assert 'nova proposta' in stale_response.json()['detail']
             assert len(calls) == 1
@@ -178,13 +183,13 @@ def test_cross_tenant_conversation_denied(monkeypatch):
             old_budget, valid_budget = asyncio.run(budget_proposals())
             state = client.get('/conversations/'+cid, headers=first).json()
             assert next(a for a in state['approvals'] if a['id']==old_budget)['status'] == 'expired'
-            assert client.post('/approvals/'+old_budget+'/confirm',headers=first).status_code == 404
+            assert client.post('/approvals/'+old_budget+'/confirm',headers=first_human).status_code == 409
             def budget_handler(request):
                 assert request.url.path == '/api/campaigns/create'
                 assert json.loads(request.content)['dailyBudget'] == 500
                 return httpx.Response(201,json={'success':True})
             client.app.state.http._transport = httpx.MockTransport(budget_handler)
-            assert client.post('/approvals/'+valid_budget+'/confirm',headers=first).status_code == 200
+            assert client.post('/approvals/'+valid_budget+'/confirm',headers=first_human).status_code == 200
             job_id = str(uuid.uuid4())
             async def saved_job():
                 conn = await asyncpg.connect(URL)
@@ -229,5 +234,6 @@ def test_cross_tenant_conversation_denied(monkeypatch):
                 finally: await conn.close()
             asyncio.run(expire())
             assert next(a for a in client.get('/conversations/'+cid, headers=first).json()['approvals'] if a['id'] == approval_id)['status'] == 'expired'
-            assert client.post('/approvals/'+approval_id+'/confirm', headers=first).status_code == 404
+            # The durable completed result wins over later expiry metadata.
+            assert client.post('/approvals/'+approval_id+'/confirm', headers=first_human).json() == confirmed.json()
     finally: asyncio.run(cleanup(tenants))

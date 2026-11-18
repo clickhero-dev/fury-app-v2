@@ -118,6 +118,10 @@ jobs:
       - name: Build db (workspace)
         run: pnpm --filter @fury/db run build
 
+      # O Planejador extrai áudio com o mesmo sandbox nativo da imagem de produção.
+      - name: Install media tools for Planner tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg util-linux
+
       # Gate unitário rápido: lista de testes sem banco (mesmo comando de sempre)
       - name: Run unit tests (API)
         run: npm run test:unit
@@ -140,6 +144,7 @@ jobs:
           --exclude '**/openrouter-video-http.integration.test.ts'
         env:
           TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
+          TEST_RATING_DATABASE: '1'
 
       # Suite de componentes WEB (runner próprio com jsdom) — install standalone,
       # igual ao Dockerfile do web
@@ -150,6 +155,14 @@ jobs:
       - name: Run web tests
         working-directory: apps/web
         run: npx vitest run
+
+      - name: Install Chromium for isolated rating E2E
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run isolated rating E2E (mock API, no real accounts)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.rating.config.ts
 
       - name: Generate coverage badge
         if: github.event_name == 'push'

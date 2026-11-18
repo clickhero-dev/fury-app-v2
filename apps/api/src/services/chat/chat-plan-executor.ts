@@ -29,7 +29,9 @@ export class PlanStepError extends Error {
 const LEASE_MS = 120000, WAIT_MS = 60000, MAX_WAIT_MS = 25 * 3600000;
 const unknownMessage = 'Não foi possível confirmar o resultado. Verifique a ação antes de tentar novamente.';
 function replaySafe(t: StoredTask) {
-    return t.capability.startsWith('read_') || t.capability.startsWith('propose_');
+    // Text generation is internal and has no publication/asset side effect.
+    // Recovery and transient retries share the same two-attempt budget.
+    return t.capability === 'draft_text' || t.capability.startsWith('read_') || t.capability.startsWith('propose_');
 }
 function fail(t: StoredTask, reason: StoredTask['failure']) {
     t.status = 'failed';

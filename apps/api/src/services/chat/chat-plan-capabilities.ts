@@ -1,8 +1,9 @@
 import { chatPlanActionErrorCode } from './chat-plan-errors.js';
+import { planTextContext } from './chat-plan-context.js';
 import { z } from 'zod';
 import type { AccessTokenPayload } from '../../lib/jwt.js';
 import type { ChatPlanStore } from '../../repository/chat-plan.repository.js';
-import { parameterSchemas, type PlanScope, type StoredTask, type StoredPlan } from './chat-plan.domain.js';
+import { parameterSchemas, parseTaskParameters, resultReferenceSchema, type PlanScope, type StoredTask, type StoredPlan } from './chat-plan.domain.js';
 import { PlanStepError, type PlanCapabilities, type StepOutcome } from './chat-plan-executor.js';
 export interface PlanResources {
     photos(ids: string[]): Promise<{
@@ -37,7 +38,7 @@ export interface PlanResources {
 }
 export interface PlanCapabilityDependencies {
     get(user: AccessTokenPayload, path: string): Promise<unknown>;
-    text(tenantId: string, prompt: string, context: string): Promise<string>;
+    text(tenantId: string, prompt: string, context: string, attempt?: number): Promise<string>;
     videoOptions(tenantId: string): Promise<{
         enabled: boolean;
         videosRemaining: number | null;
@@ -73,7 +74,7 @@ export class ChatPlanCapabilities implements PlanCapabilities {
     constructor(private readonly deps: PlanCapabilityDependencies) {
     }
     async execute(scope: PlanScope, plan: StoredPlan, task: StoredTask, user: AccessTokenPayload): Promise<StepOutcome> {
-        const params = parameterSchemas[task.capability].parse(task.parameters);
+        const params = await this.resolveParameters(scope, plan, task);
         if (task.capability === 'read_brand') {
             const r = body(await this.deps.get(user, '/api/brand-kit'));
             return { kind: 'completed', result: { summary: 'Marca consultada.', data: pick(r.data, ['id', 'primaryColor', 'secondaryColor', 'voiceTone']) } };
@@ -95,8 +96,8 @@ export class ChatPlanCapabilities implements PlanCapabilities {
         }
         if (task.capability === 'draft_text') {
             const p = parameterSchemas.draft_text.parse(params);
-            const context = JSON.stringify(plan.tasks.filter(t => task.dependsOn.includes(t.key) && t.status === 'completed').map(t => ({ title: t.title, result: t.result }))).slice(0, 16000);
-            const text = await this.deps.text(scope.tenantId, p.prompt, context);
+            const context = planTextContext(plan, task);
+            const text = await this.deps.text(scope.tenantId, p.prompt, context, task.attempts);
             if (typeof text !== 'string' || !text.trim() || text.length > 24000)
                 throw new PlanStepError('unknown');
             return { kind: 'completed', result: { summary: 'Rascunho gerado. Não foi publicado.', text: safeText(text) } };
@@ -145,6 +146,39 @@ export class ChatPlanCapabilities implements PlanCapabilities {
             return { kind: 'proposal', proposal: { path: proposalPaths.propose_campaign, body: payload, display: { ...payload, currency: 'BRL' } } };
         }
         throw new PlanStepError('invalid');
+    }
+    private async resolveParameters(scope: PlanScope, plan: StoredPlan, task: StoredTask): Promise<Record<string, unknown>> {
+        // Revalidate persisted references before reading any output/resource.
+        const parameters = parseTaskParameters(plan.tasks, task);
+        const entries: [string, unknown][] = [];
+        for (const [name, value] of Object.entries(parameters)) {
+            const ref = resultReferenceSchema.safeParse(value);
+            if (!ref.success) {
+                entries.push([name, value]);
+                continue;
+            }
+            const source = plan.tasks.find(t => t.key === ref.data.$result.task);
+            if (source?.status !== 'completed' || !source.result)
+                throw new PlanStepError('invalid');
+            let resolved: unknown;
+            if (ref.data.$result.field === 'text') {
+                resolved = source.result.text;
+                if (typeof resolved !== 'string' || !resolved.trim())
+                    throw new PlanStepError('invalid');
+            } else {
+                const reference = source.result.reference;
+                if (reference?.kind !== 'asset' || !uuid.safeParse(reference.id).success)
+                    throw new PlanStepError('invalid');
+                const asset = await this.deps.resources(scope.tenantId).asset(reference.id);
+                const type = source.capability === 'propose_video' ? 'video' : 'image';
+                if (!asset || asset.id !== reference.id || asset.type !== type || asset.deletedAt || !asset.url)
+                    throw new PlanStepError('invalid');
+                resolved = asset.url; // Never trust a URL in result.data or its summary.
+            }
+            entries.push([name, resolved]);
+        }
+        // All deferred length, HTTPS, media and scheduling constraints are authoritative here.
+        return parameterSchemas[task.capability].parse(Object.fromEntries(entries));
     }
     private async photos(resources: PlanResources, ids: string[]) {
         if (!ids.length)
