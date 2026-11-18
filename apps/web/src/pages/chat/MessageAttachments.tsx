@@ -2,15 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, Eye, FileText, Film, Image as ImageIcon } from 'lucide-react';
 import { chatRequest, mediaError } from './chat-request';
 import { formatBytes, formatDuration, isAttachment, type Attachment } from './chat-media';
+import { ChatMediaViewer } from './ChatMediaViewer';
 
 function PrivateAttachment({conversationId, attachment}: {conversationId:string; attachment:Attachment}) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const resource = useRef<{url?:string; request?:AbortController; timeout?:ReturnType<typeof setTimeout>}>({});
-  useEffect(() => () => { clearTimeout(resource.current.timeout); resource.current.request?.abort(); if (resource.current.url) URL.revokeObjectURL(resource.current.url); }, []);
-  async function preview() {
-    if (resource.current.request || resource.current.url) return;
+  useEffect(() => () => {
+    clearTimeout(resource.current.timeout);
+    resource.current.request?.abort();
+    resource.current.request = undefined;
+    if (resource.current.url) URL.revokeObjectURL(resource.current.url);
+    resource.current.url = undefined;
+  }, []);
+  async function preview(download = false) {
+    if (resource.current.request) return;
+    if (resource.current.url) {
+      if (download) save(resource.current.url);
+      return;
+    }
     const controller = new AbortController();
     resource.current.request = controller;
     setLoading(true); setError('');
@@ -30,19 +41,28 @@ function PrivateAttachment({conversationId, attachment}: {conversationId:string;
       const objectUrl = URL.createObjectURL(blob);
       resource.current.url = objectUrl;
       setUrl(objectUrl);
+      if (download) save(objectUrl);
     } catch (err) { if (!controller.signal.aborted) setError(mediaError(err,'preview')); }
     finally { clearTimeout(timeout); if (resource.current.request === controller && !controller.signal.aborted) { resource.current.request = undefined; setLoading(false); } }
   }
+  function save(objectUrl: string) {
+    const link = document.createElement('a');
+    link.href = objectUrl; link.download = attachment.filename;
+    link.click();
+  }
   const image = attachment.mimeType.startsWith('image/');
   const video = attachment.mimeType.startsWith('video/');
+  useEffect(() => { if (image || video) void preview(); }, [conversationId, attachment.id]);
   const Icon = image ? ImageIcon : video ? Film : FileText;
   return <div className="ady-chat-saved-attachment">
     <div className="ady-chat-file-summary"><Icon size={20} aria-hidden="true"/><div><strong>{attachment.filename}</strong><small>{formatBytes(attachment.sizeBytes)}{attachment.pageCount ? ` · ${attachment.pageCount} páginas` : ''}{attachment.durationSeconds ? ` · ${formatDuration(attachment.durationSeconds)}` : ''}</small></div></div>
     {url ? <>
-      {image && <img src={url} alt={attachment.filename}/>}
-      {video && <video src={url} aria-label={attachment.filename} controls preload="metadata"/>}
-      <a href={url} download={attachment.filename} aria-label={`Baixar ${attachment.filename}`}><Download size={16} aria-hidden="true"/>Baixar arquivo</a>
-    </> : <button type="button" aria-label={`Visualizar ${attachment.filename}`} onClick={() => void preview()} disabled={loading}><Eye size={16} aria-hidden="true"/>Visualizar</button>}
+      {(image || video) ? <ChatMediaViewer src={url} kind={image ? 'image' : 'video'} name={attachment.filename} onDownload={() => save(url)}/> :
+        <a href={url} download={attachment.filename} aria-label={`Baixar ${attachment.filename}`}><Download size={16} aria-hidden="true"/>Baixar arquivo</a>}
+    </> : <>
+      <button type="button" aria-label={`Visualizar ${attachment.filename}`} onClick={() => void preview()} disabled={loading}><Eye size={16} aria-hidden="true"/>Visualizar</button>
+      {(image || video) && <button type="button" aria-label={`Baixar ${attachment.filename}`} onClick={() => void preview(true)} disabled={loading}><Download size={16} aria-hidden="true"/>Baixar</button>}
+    </>}
     {loading && <span role="status" aria-label={`Abrindo ${attachment.filename}`}>Abrindo arquivo…</span>}
     {error && <p role="alert">{error}</p>}
   </div>;
