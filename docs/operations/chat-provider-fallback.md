@@ -1,5 +1,11 @@
 # Fallback OpenRouter do chat
 
+> **Atualização para o serviço Python de chat:** as seções abaixo sobre fallback
+> conversacional no OpenRouter descrevem a implementação anterior e não se
+> aplicam ao novo runtime multiprovedor. Consulte `apps/chat/README.md` para a
+> ordem OpenAI → Anthropic → OpenRouter, chaves, limites e segurança atuais.
+> A seção “Rascunhos do executor de planos” continua documentando o adapter Node.
+
 Fallback é **desativado por padrão**. Não existe modelo candidato automático.
 Configure e homologue modelos explicitamente no ambiente do serviço chat:
 

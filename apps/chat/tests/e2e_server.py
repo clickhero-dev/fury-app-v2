@@ -1,5 +1,6 @@
 """Servidor de teste E2E: substitui apenas o provedor de modelo, nunca usado em produção."""
 from pathlib import Path
+import os
 import sys
 from types import SimpleNamespace
 
@@ -17,6 +18,9 @@ class FakeAgent:
         return stream()
 
 agno.agent.Agent = FakeAgent
+os.environ['OPENAI_API_KEY'] = 'synthetic-e2e-only'
+os.environ['ANTHROPIC_API_KEY'] = ''
+os.environ['OPENROUTER_API_KEY'] = ''
 
 import uvicorn
 from app import app
