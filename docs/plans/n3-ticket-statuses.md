@@ -40,7 +40,7 @@ ADR-0002 ausente na base; aplicar externalFetch, timeout e erros sanitizados.
    retornar erro imediatamente, sem antecipar Retry-After.
 4. Falha final continua HTTP 502 TICKET_PROVIDER_UNAVAILABLE e mensagem segura.
    Diagnóstico interno: razão em enum, status externo quando disponível, ambiente
-   APP_ENV (ou NODE_ENV, ou unknown) e requestId do request logger, com UUID quando
+   APP_ENV (ou unknown quando ausente ou vazio) e requestId do request logger, com UUID quando
    ausente. Não inferir produção de NODE_ENV=production; configurar APP_ENV com
    o ambiente de implantação. Nenhum token, body ou erro bruto do provedor.
 5. Evento ticket_clickup_statuses_failed e exceção backend compartilham diagnóstico.
@@ -109,3 +109,14 @@ acontecimentos anteriores. Especificação para encerramento:
   login, criação, pausa e limpeza da campanha passaram. A falha não valida o novo
   head nem substitui um resultado verde. Não se altera a cota ou o teste para
   mascarar esse impedimento.
+
+## Correção do diagnóstico de ambiente — 18/11/2026
+
+- Aceitação: evento e exceção usam APP_ENV explicitamente configurado; se ausente
+  ou vazio, usam `unknown`, independentemente de NODE_ENV. A resposta HTTP continua
+  sanitizada e conserva apenas requestId público.
+- Passos: reproduzir com APP_ENV ausente e NODE_ENV=production; corrigir a origem
+  comum do diagnóstico; validar evento e exceção e executar a suíte focada.
+- A investigação histórica continua aberta: sem IDs/timestamps individuais e acesso
+  aos logs, não é possível produzir oito correlações verificáveis nem afirmar que
+  as fontes foram esgotadas. A PR deve manter essa limitação explícita.
