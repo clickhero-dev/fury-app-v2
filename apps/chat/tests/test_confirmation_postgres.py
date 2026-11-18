@@ -9,6 +9,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+from pathlib import Path
 from uuid import uuid4
 
 import asyncpg
@@ -29,17 +30,22 @@ def test_confirmation_persists_actor_scoped_cause_and_suppresses_replay(monkeypa
     monkeypatch.setenv('CHAT_DELEGATION_SECRET', SECRET)
     monkeypatch.setenv('ADY_API_URL', 'https://ady.invalid')
     schema = 'chat_confirm_' + uuid4().hex
-    approval, tenant, user = uuid4(), uuid4(), uuid4()
+    approval, tenant, user, conversation = uuid4(), uuid4(), uuid4(), uuid4()
     app, calls = create_app(), []
 
     async def setup():
         conn = await asyncpg.connect(URL)
         try:
             await conn.execute('CREATE SCHEMA ' + schema)
-            await conn.execute('CREATE TABLE ' + schema + '''.chat_approvals(
+            await conn.execute('SET search_path TO ' + schema)
+            await conn.execute('CREATE TABLE chat_conversations(id uuid PRIMARY KEY,tenant_id uuid,user_id uuid)')
+            await conn.execute('INSERT INTO chat_conversations VALUES($1,$2,$3)', conversation, tenant, user)
+            await conn.execute('''CREATE TABLE chat_approvals(
                 id uuid PRIMARY KEY,tenant_id uuid,user_id uuid,method text,path text,
-                body jsonb,display jsonb,status text,expires_at timestamptz,result jsonb)''')
-            await conn.execute('INSERT INTO ' + schema + ".chat_approvals VALUES($1,$2,$3,'POST','/api/studio/video/jobs','{}',NULL,'pending',now()+interval '1 hour',NULL)", approval, tenant, user)
+                body jsonb,display jsonb,status text,expires_at timestamptz,result jsonb,
+                conversation_id uuid REFERENCES chat_conversations(id))''')
+            await conn.execute("INSERT INTO chat_approvals VALUES($1,$2,$3,'POST','/api/studio/video/jobs','{}',NULL,'pending',now()+interval '1 hour',NULL,$4)", approval, tenant, user, conversation)
+            await conn.execute((Path(__file__).parents[3] / 'packages/db/migrations/0082_chat_batch_approvals.sql').read_text())
         finally:
             await conn.close()
         return await asyncpg.create_pool(URL, min_size=1, max_size=3, server_settings={'search_path': schema})
@@ -78,7 +84,9 @@ def test_confirmation_persists_actor_scoped_cause_and_suppresses_replay(monkeypa
             with ThreadPoolExecutor(max_workers=2) as executor:
                 requests = [executor.submit(client.post, endpoint, headers=auth) for _ in range(2)]
                 responses = [future.result(timeout=10) for future in requests]
-            assert sorted(response.status_code for response in responses) == [403, 404]
+            assert all(response.status_code in (403, 502) for response in responses)
+            # The second request can observe the durable in-flight claim; it
+            # must never be treated as a missing proposal or resend the POST.
             refused = next(response for response in responses if response.status_code == 403)
             assert refused.json() == {'detail': {'status': 'failed', 'code': 'VIDEO_NOT_IN_PLAN', 'message': 'A criação de vídeos não está disponível no seu plano atual.'}}
             if not node_fail_first:
@@ -86,7 +94,7 @@ def test_confirmation_persists_actor_scoped_cause_and_suppresses_replay(monkeypa
             row = client.portal.call(app.state.pool.fetchrow, 'SELECT status,result FROM chat_approvals WHERE id=$1', approval)
             assert row['status'] == 'failed'
             assert json.loads(row['result']) == {'code': 'VIDEO_NOT_IN_PLAN', 'error': refused.json()['detail']['message']}
-            assert client.post(endpoint, headers=auth).status_code == 404
+            assert client.post(endpoint, headers=auth).status_code == 403
             assert len(calls) == 1
     finally:
         asyncio.run(cleanup())

@@ -10,7 +10,7 @@ entregáveis concretos. O usuário revisa decisões relevantes; não coordena o 
 Baixa carga cognitiva é requisito funcional, não apenas preferência de linguagem.
 Proatividade não é autorização para gastar, publicar ou alterar o negócio.
 
-### Padrões desta entrega
+### Padrões do produto
 
 - Iniciativa após uma escolha simples ou mensagem vaga, sem briefing obrigatório.
 - Próximo post em rascunho e visão breve dos próximos sete dias, não um mês de mídia.
@@ -159,19 +159,27 @@ só qualidade editorial. Exigir avaliação humana e testes de fluxo.
 
 ## Entregas e limites
 
-Esta primeira implementação prioriza a entrada sem briefing, política editorial,
-fallback limitado e snapshots seguros. A entrega integral só está concluída após:
+A segunda implementação estende a primeira com:
 
-1. Recuperação agendada de turnos sem depender de nova visita, com autorização
-   renovada pelo backend e orçamento persistido entre tentativas.
-2. Journal atômico de todas as ferramentas, incluindo mutações; referências
-   tipadas entre resultados e etapas do plano.
-3. Revisão/aprovação em lote e cancelamento integrado.
-4. Homologação dos modelos com avaliações reais e metas baseadas em linha de base.
+1. Recuperação automática cujo estado/limites vivem no PostgreSQL; scan recorrente
+   e bootstrap/shutdown na API, identidade/assinatura revalidadas e delegação JIT.
+2. Claim durável de efeitos e resultado autoritativo persistido antes de responder
+   sucesso, sem reenvio de ações cujo resultado seja incerto.
+3. Referências tipadas entre artefatos e etapas do plano, sem eval ou URLs do LLM.
+4. Revisão/confirmacão consolidada, consumo explícito, invalidação de revisão e
+   controles de execução com estado confirmado.
+5. Métricas sanitizadas e gate offline de qualidade para comparar modelos a partir
+   de amostras reais revisadas por humanos.
 
-Não declarar essas etapas prontas com base apenas em política textual ou cache
-de consultas. Falhas de banco, Redis, armazenamento e Instagram requerem testes
-próprios; fallback de modelo não as resolve.
+Essas implementações não substituem homologação com empresários, avaliação paga
+dos modelos, baseline de custo/abandono ou rollout no ambiente real. Não declarar
+essas atividades concluídas com fixtures sintéticas. Falhas de banco, Redis,
+armazenamento e Instagram requerem evidência própria; fallback não as resolve.
+
+A garantia de efeitos é não reenviar cegamente: um provedor sem idempotência
+transacional pode permanecer em `unknown` após uma queda no instante do efeito.
+Preservar a intenção e os resultados disponíveis, reconciliar referências quando
+existirem e exigir revisão operacional quando não houver prova do resultado.
 
 ### Rastreabilidade desta implementação
 
@@ -187,8 +195,53 @@ próprios; fallback de modelo não as resolve.
 
 Revalidar uma consulta pode repetir a leitura HTTP: o resultado congelado não é
 uma credencial nem um bypass de RBAC. Dados de cotas/jobs não usam esse cache.
-Retomada continua somente leitura e explícita; não equivale a concluir
-automaticamente etapas de mutação que faltaram.
+Retomada conversacional continua somente leitura, agora iniciada automaticamente;
+não repete mutações que faltaram. Planos persistidos continuam por seu executor
+após as aprovações específicas. Cancelar um run não desfaz efeitos já iniciados.
+
+### Contratos adicionais da segunda implementação
+
+- `chat_turn_recovery`: estado por mensagem original, até duas retomadas,
+  deadline de dez minutos, dezoito requisições HTTP e 180.000 tokens reservados.
+  Charge antes do envio cobre principal/fallback/resumos sem multiplicação oculta.
+- `chat_approval_reviews` / `chat_approval_effects`: IDs, digest e snapshot exato,
+  claims atômicos por aprovação; confirmação individual e em lote compartilham o
+  journal e exigem intenção humana assinada pelo proxy.
+- `CHAT_OUTCOME_UNCONFIRMED`: estado reservado compartilhado Python/Node, não
+  identificado por tradução de mensagem; conclusão tardia preserva evidência real.
+- Binding: `{"$result":{"task":"legenda","field":"text"}}` ou `field:"assetUrl"`,
+  somente fonte anterior, tipo permitido e dependência direta. Mídia é resolvida
+  por ID no tenant atual; todos os parâmetros concretos são revalidados.
+- Rascunhos dos planos: uma chamada por tentativa persistida (duas no máximo);
+  fallback opt-in na segunda, sem repetir auth/entrada/budget. Resultados originais
+  não são truncados no banco; contexto limitado explicita omissões.
+- `editorial_evaluation`: manifesto de oito cenários, amostras reais declaradas,
+  revisão humana com notas mínimas e gates de estrutura/segurança/carga cognitiva.
+  Não chama modelos, não cria notas e não ativa configuração automaticamente.
+
+Runbooks: `docs/operations/ady-recovery-and-approvals.md` e
+`docs/operations/ady-editorial-evaluation.md`.
+
+### Evidência técnica local — segunda implementação
+
+- PostgreSQL descartável com todas as migrations aplicadas, incluindo `0080`–`0082`.
+- Suíte Python completa: **1.022 testes passando**; cobertura de **93,46%** nos
+  módulos de runtime, recuperação, journal, checkpoints, fallback e avaliação.
+- API/chat: **394 passando / 37 ignorados por configuração**; cobertura do escopo
+  Node medido: statements **84,27%**, branches **81,84%**, functions **83,33%**.
+- Teste cross-service real: processo Node → PostgreSQL/identidade atual → delegação
+  curta → HTTP/FastAPI → checkpoint → resposta persistida. Segundo processo não
+  repete trabalho concluído. Provedor, RBAC e serviços editoriais auxiliares usam
+  portas controladas; não houve chamada paga.
+- Testes PostgreSQL de concorrência: novo pedido vencendo reconciliador,
+  cancelamento/conclusão, claims single/lote e sucesso tardio após timeout.
+- Builds shared/db/API/web e lint dos módulos Node alterados passaram.
+- Gate frontend anterior ao merge: 335 testes de chat; 74 E2E mocked passando,
+  1 jornada real ignorada nesse gate. A apresentação legível do lote e a
+  incorporação das sugestões contextuais da `hmg` têm verificação complementar.
+
+Cobertura é do escopo explicitado, não do monorepo inteiro. Estes resultados não
+são evidência de deploy, qualidade com empresários ou homologação paga de modelos.
 
 ## Verificação
 

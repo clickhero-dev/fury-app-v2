@@ -3,6 +3,7 @@ from uuid import uuid4
 import json
 
 from attachment_repository import AttachmentRepository, ConversationError
+from turn_recovery import TurnRecovery
 
 
 class ConversationRepository:
@@ -50,7 +51,7 @@ class ConversationRepository:
     async def interrupt_expired(self, conn, conversation_id):
         await conn.execute("UPDATE chat_response_runs SET status='interrupted',updated_at=clock_timestamp() WHERE conversation_id=$1 AND status='running' AND lease_until<=clock_timestamp()", conversation_id)
 
-    async def begin_run(self, conversation_id, content='', *, retry=False, retry_run_id=None, attachment_ids=(), client_key=None, clarification_id=None, choice_index=None):
+    async def begin_run(self, conversation_id, content='', *, retry=False, retry_run_id=None, attachment_ids=(), client_key=None, clarification_id=None, choice_index=None, automatic=False):
         lease_id = uuid4()
         async with self.db.acquire() as conn:
             async with conn.transaction():
@@ -84,7 +85,23 @@ class ConversationRepository:
                     if previous is None or previous['status'] not in ('failed', 'interrupted'):
                         raise ConversationError(409, 'Não há resposta interrompida para retentar.')
                     message_id = previous['user_message_id']
+                    # Legacy turns only enter durable recovery through explicit
+                    # human retry; never backfill and replay old effects in a scan.
+                    if not automatic:
+                        await TurnRecovery(self.db,self.tenant_id,self.user_id).register(conn,conversation_id,message_id)
+                    await TurnRecovery(self.db,self.tenant_id,self.user_id).claim(conn,conversation_id,message_id,automatic=automatic)
                 else:
+                    # Preserve concurrent *original* requests (0072), but stop
+                    # obsolete background continuations when the human moves on.
+                    await conn.execute("""UPDATE chat_response_runs r SET status='interrupted',
+                        lease_until=clock_timestamp(),updated_at=clock_timestamp()
+                        WHERE r.conversation_id=$1 AND r.status='running' AND EXISTS (
+                            SELECT 1 FROM chat_turn_recovery t WHERE t.user_message_id=r.user_message_id
+                            AND t.status='running' AND t.attempts>0)""",conversation_id)
+                    await conn.execute("""UPDATE chat_turn_recovery t SET status='stopped'
+                        WHERE conversation_id=$1 AND status IN ('queued','running')
+                        AND (attempts>0 OR EXISTS (SELECT 1 FROM chat_response_runs r
+                            WHERE r.user_message_id=t.user_message_id AND r.status IN ('failed','interrupted')))""",conversation_id)
                     if clarification_id is not None:
                         clarification = await conn.fetchrow('''SELECT q.choices,q.selected_index,q.dismissed_at,
                             EXISTS (SELECT 1 FROM chat_response_runs r
@@ -108,6 +125,8 @@ class ConversationRepository:
                         await conn.execute('UPDATE chat_clarifications SET selected_index=$2,answer_message_id=$3 WHERE id=$1', clarification_id, choice_index, message_id)
                     await AttachmentRepository(conn, self.tenant_id, self.user_id).bind(conversation_id, message_id, attachment_ids)
                 run_id = await conn.fetchval("INSERT INTO chat_response_runs(conversation_id,user_message_id,lease_id,status,lease_until,created_at,client_key) VALUES($1,$2,$3,'running',clock_timestamp()+interval '45 seconds',clock_timestamp(),$4) RETURNING id", conversation_id, message_id, lease_id, client_key)
+                if not retry:
+                    await TurnRecovery(self.db,self.tenant_id,self.user_id).register(conn,conversation_id,message_id)
                 return run_id, lease_id, message_id
 
     async def delete(self, conversation_id, cleanup):

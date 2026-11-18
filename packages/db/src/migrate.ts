@@ -187,6 +187,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0073_chat_plan_run_fencing' },
   { tag: '0074_chat_response_messages' },
   { tag: '0080_chat_turn_checkpoints' },
+  { tag: '0081_chat_turn_recovery' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
@@ -196,6 +197,7 @@ const STEPS: MigrationStep[] = [
   },
   { tag: '0056_demo_tenant' },
   { tag: '0063_ady_rbac_plan_views_blocked' },
+  { tag: '0082_chat_batch_approvals' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

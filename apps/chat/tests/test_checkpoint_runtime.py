@@ -107,6 +107,25 @@ def test_snapshot_is_saved_before_model(runtime):
     assert state['snapshot'][1][-1]['content'] == 'Não sei o que postar'
 
 
+def test_recovery_exposes_uncertain_journal_without_mutation_tools(runtime):
+    client,cid,_,captured,_,state = runtime
+    state['snapshot'] = ([],[{'role':'user','content':'Pedido original'}])
+    async def reads(query,*args):
+        if 'SELECT id,path,display,body,status,result FROM chat_approvals' in query:
+            return [{'id':uuid4(),'path':'/api/planner/posts','status':'unknown',
+                     'display':'{}','body':'{}','result':json.dumps({'token':'private','error':'uncertain'})}]
+        return []
+    client.app.state.pool.fetch = reads
+    response=client.post(f'/conversations/{cid}/retry',
+                         headers={'Authorization':'Bearer synthetic'},json={'automatic':True})
+    assert 'event: done' in response.text
+    options,_=captured[-1]
+    instructions=' '.join(options['instructions'])
+    assert 'unknown' in instructions and 'uncertain' in instructions
+    assert 'private' not in instructions
+    assert not any(getattr(tool,'__name__','').startswith('propose_') for tool in options['tools'])
+
+
 def test_retry_uses_snapshot_not_later_memories_or_history(runtime):
     client, cid, events, captured, _, state = runtime
     state['snapshot'] = ([{'topic': 'marca', 'text': 'snapshot antigo'}],
@@ -168,6 +187,20 @@ def test_tool_checkpoint_failure_cannot_be_swallowed_into_success(runtime):
     assert 'event: done' not in response.text
     assert not completions
     assert 'private' not in state['tool_exception']
+
+
+def test_context_limit_does_not_tell_customer_to_discard_conversation(runtime, monkeypatch):
+    client, cid, _, _, _, _ = runtime
+    async def no_compression(*args, **kwargs): return False
+    monkeypatch.setattr(chat, 'requires_compression', lambda size: True)
+    monkeypatch.setattr(chat, 'compress_memories', no_compression)
+    response = client.post(f'/conversations/{cid}/messages',
+                           headers={'Authorization': 'Bearer synthetic'},
+                           json={'content': 'Prepare um post'})
+    assert 'event: error' in response.text
+    assert 'Inicie uma nova conversa' not in response.text
+    messages = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith('data: ')]
+    assert any('histórico' in item.get('message', '').lower() for item in messages)
 
 
 def test_postgres_retry_after_compaction_uses_original_checkpoint(monkeypatch):

@@ -62,6 +62,17 @@ def estimate_request_tokens(body: bytes, *, counter: Callable[[str], int] | None
 
 
 _retry_state = ContextVar('provider_retry_state', default=None)
+_durable_charge = ContextVar('durable_provider_charge', default=None)
+
+
+@contextmanager
+def durable_budget_scope(charge):
+    """Independent of per-request retries; includes summaries and tool rounds."""
+    token = _durable_charge.set(charge)
+    try:
+        yield
+    finally:
+        _durable_charge.reset(token)
 
 
 @contextmanager
@@ -114,6 +125,8 @@ class SanitizedEventStream(httpx.AsyncByteStream):
                 self.state['error_kind'] = 'timeout'
             raise httpx.ReadTimeout('Model provider timeout') from None
         except httpx.HTTPError:
+            if self.state is not None and self.state.get('error_kind') not in ('auth','budget','invalid'):
+                self.state['error_kind'] = 'transient'
             raise httpx.ReadError('Model provider stream failed') from None
 
     def clean_event(self, event):
@@ -137,10 +150,12 @@ class SanitizedEventStream(httpx.AsyncByteStream):
             code = error.get('code') if isinstance(error, dict) else None
             self.error_code = code if type(code) is int else None
             if self.state is not None:
-                self.state['error_kind'] = 'auth' if code in (401, 403) else 'error'
+                self.state['error_kind'] = 'auth' if code in (401, 403) else ('transient' if type(code) is int and (code == 429 or 500 <= code <= 599) else 'error')
             return b'data: ' + json.dumps({'error': {'message': 'Model provider request failed', 'code': self.error_code}}).encode() + b'\n\n'
         reasons = [choice.get('finish_reason') for choice in payload['choices'] if isinstance(choice, dict)]
         if any(reason in ('error', 'length', 'content_filter') for reason in reasons):
+            if self.state is not None:
+                self.state['error_kind'] = 'invalid' if any(reason in ('length','content_filter') for reason in reasons) else 'transient'
             raise httpx.ReadError('Model provider stream failed')
         if any(reason in ('stop', 'tool_calls', 'function_call') for reason in reasons):
             self.terminal = True
@@ -257,6 +272,9 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                     await self.guard_request(request)
             if state is not None:
                 state['error_kind'] = 'error'
+            charge = _durable_charge.get()
+            if charge is not None:
+                await charge(estimate_request_tokens(request.content))
             try:
                 response = await self.inner.handle_async_request(request)
             except httpx.TimeoutException:
@@ -266,6 +284,8 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                     continue
                 raise httpx.ReadTimeout('Model provider timeout', request=request) from None
             except (httpx.NetworkError, httpx.RemoteProtocolError):
+                if state is not None:
+                    state['error_kind'] = 'transient'
                 if await retry(attempt):
                     continue
                 raise httpx.ConnectError('Model provider connection failed', request=request) from None
@@ -314,7 +334,7 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                 return httpx.Response(200, json=payload, request=request)
             status = response.status_code
             if state is not None:
-                state['error_kind'] = 'auth' if status in (401, 403) else 'error'
+                state['error_kind'] = 'auth' if status in (401, 403) else ('transient' if status == 429 or 500 <= status <= 599 else 'error')
             await response.aclose()
             if await retry(attempt, status, response.headers, retryable=status == 429 or 500 <= status <= 599):
                 continue
