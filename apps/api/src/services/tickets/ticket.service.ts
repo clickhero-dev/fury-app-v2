@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { captureServerEvent } from '../../lib/analytics.js';
 import {
   ClickUpTicketsClient,
@@ -12,10 +13,12 @@ import {
 } from '../../lib/clickup-tickets.client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
-type SafeFailureReason = 'timeout' | 'unauthorized' | 'provider_unavailable' | 'invalid_response' | 'missing_config';
+type SafeFailureReason = 'rate_limited' | 'network_error' | 'timeout' | 'unauthorized' | 'provider_unavailable' | 'invalid_response' | 'missing_config';
 
 function toSafeFailureReason(error: ClickUpTicketsError): SafeFailureReason {
   switch (error.code) {
+    case 'CLICKUP_RATE_LIMITED': return 'rate_limited';
+    case 'CLICKUP_NETWORK_ERROR': return 'network_error';
     case 'CLICKUP_UNAUTHORIZED': return 'unauthorized';
     case 'CLICKUP_TIMEOUT': return 'timeout';
     case 'CLICKUP_INVALID_RESPONSE': return 'invalid_response';
@@ -85,13 +88,14 @@ export class TicketService {
     }
   }
 
-  async listStatuses(): Promise<ClickUpTicketStatus[]> {
+  async listStatuses(requestId: string = randomUUID()): Promise<ClickUpTicketStatus[]> {
     try {
       return await this.clickUpClient.listStatuses();
     } catch (error) {
       const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
-      captureServerEvent('ticket_clickup_statuses_failed', { reason });
-      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os status agora. Tente novamente.');
+      const diagnostics = { requestId, reason, environment: process.env.APP_ENV ?? process.env.NODE_ENV ?? 'unknown', providerStatus: error instanceof ClickUpTicketsError ? error.providerStatus : undefined };
+      captureServerEvent('ticket_clickup_statuses_failed', diagnostics);
+      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os status agora. Tente novamente.', { requestId }, diagnostics);
     }
   }
 
