@@ -141,6 +141,7 @@ interface QuotaLike {
 type StudioRepoF = (tenantId: string) => StudioRepository;
 type PhotoRepoF = (tenantId: string) => Pick<BrandKitPhotoRepository, 'findById' | 'findByIds'>;
 type BrandRepoF = (tenantId: string) => Pick<CampaignRepository, 'findBrandKit' | 'upsertTenantBrandKit'>;
+type ImageStoragePort = { upload(dataUrl: string): Promise<string> };
 
 export class StudioAiService {
   constructor(
@@ -155,6 +156,7 @@ export class StudioAiService {
     },
     private photoRepoFactory: PhotoRepoF = (t) => new BrandKitPhotoRepository(t),
     private brandRepoFactory: BrandRepoF = (t) => new CampaignRepository(t),
+    private imageStorage: ImageStoragePort = { upload: uploadImageToStorage },
   ) {}
 
   private repo(tenantId: string): StudioRepository {
@@ -347,7 +349,7 @@ export class StudioAiService {
       const review = await this.applyHeadline(headline, generated.dataUrl, payload.aspect_ratio);
       const dataUrl = review.dataUrl;
       const costUsd = generated.costUsd === null && review.costUsd === null ? null : (generated.costUsd ?? 0) + (review.costUsd ?? 0);
-      const imageUrl = await uploadImageToStorage(dataUrl);
+      const imageUrl = await this.imageStorage.upload(dataUrl);
       const processingTimeMs = Math.round(performance.now() - startedAt);
       const modificationsRemaining = await this.quota.getModificationsPerCreativeLimit(tenantId);
       const asset = await this.repo(tenantId).createAsset({
@@ -537,7 +539,7 @@ export class StudioAiService {
     }
 
     const costUsd = costs.every((c) => c === null) ? null : costs.reduce<number>((sum, c) => sum + (c ?? 0), 0);
-    const imageUrl = await uploadImageToStorage(finalDataUrl);
+    const imageUrl = await this.imageStorage.upload(finalDataUrl);
     const processingTimeMs = Math.round(performance.now() - startedAt);
     const modificationsRemaining = await this.quota.getModificationsPerCreativeLimit(tenantId);
     const brand = await this.getBrandContext(tenantId);
@@ -684,7 +686,7 @@ export class StudioAiService {
 
     const startedAt = performance.now();
     const { dataUrl, costUsd } = await this.llm.generateImageWithMeta({ model: originalModel, prompt: newPrompt, logoUrl: brand.logoUrl });
-    const imageUrl = await uploadImageToStorage(dataUrl);
+    const imageUrl = await this.imageStorage.upload(dataUrl);
     const processingTimeMs = Math.round(performance.now() - startedAt);
     const newAsset = await this.repo(tenantId).createAsset({
       tenantId,
@@ -753,7 +755,7 @@ export class StudioAiService {
           aspect_ratio: 'auto',
           referenceImageUrls: [asset.url],
         });
-        imageUrl = await uploadImageToStorage(edited.dataUrl);
+        imageUrl = await this.imageStorage.upload(edited.dataUrl);
         costUsd = edited.costUsd;
         source = 'openrouter-edit-image-flux';
       }

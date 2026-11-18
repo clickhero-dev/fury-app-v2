@@ -89,6 +89,14 @@ describe('StudioAiService', () => {
     expect(out.logo).toEqual(expect.objectContaining({ saved: true }));
   });
 
+  it('permite injetar armazenamento da imagem gerada, sem acessar R2', async () => {
+    const upload = vi.fn(async () => 'https://fixture.invalid/generated.png');
+    const svcWithStorage = new StudioAiService(() => repo as any, llm as any, quota as any, () => photoRepo as any, () => makeRepo() as any, { upload });
+    const out = await svcWithStorage.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '1K' });
+    expect(upload).toHaveBeenCalledWith('data:image/png;base64,AAAA');
+    expect(out.imageUrl).toBe('https://fixture.invalid/generated.png');
+  });
+
   it('generateImage sem custo no OpenRouter persiste costUsd null', async () => {
     (llm.generateImageWithMeta as any).mockResolvedValueOnce({ dataUrl: 'data:image/png;base64,AAAA', costUsd: null, model: 'x' });
     const out = await svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' });
