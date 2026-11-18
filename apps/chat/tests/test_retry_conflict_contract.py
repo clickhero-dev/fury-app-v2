@@ -19,6 +19,7 @@ def test_retry_conflicts_distinguish_compaction_from_duplicate(duplicate, expect
         async def fetchval(self, sql, *_):
             if 'FOR UPDATE' in sql: return uuid4()
             if 'INSERT INTO chat_send_keys' in sql: return None if duplicate else uuid4()
+            if 'chat_turn_checkpoints' in sql: return None
             if 'chat_memories' in sql: return 1
             raise AssertionError(sql)
     class Pool:

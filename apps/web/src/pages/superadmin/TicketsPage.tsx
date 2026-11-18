@@ -215,9 +215,11 @@ function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: Tick
   </section>;
 }
 
-function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
+function StatusDialog({ ticket, statuses, loading, onRetry, open, onOpenChange, onSaved }: {
   ticket: Ticket | null;
   statuses: TicketStatus[];
+  loading: boolean;
+  onRetry: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
@@ -227,7 +229,7 @@ function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!ticket || !status || status.toLocaleLowerCase() === ticket.status.toLocaleLowerCase()) return;
+    if (!ticket || statuses.length === 0 || !status || status.toLocaleLowerCase() === ticket.status.toLocaleLowerCase()) return;
     setSaving(true); setError(null);
     try {
       await api.patch(`/admin/tickets/${encodeURIComponent(ticket.id)}/status`, { expectedStatus: ticket.status, status });
@@ -259,10 +261,14 @@ function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
               {statuses.length === 0 ? <option value="">Status indisponíveis</option> : statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
+          {statuses.length === 0 && <div className="mt-3 space-y-2">
+            <p role={loading ? 'status' : 'alert'} className="text-sm text-text-secondary">{loading ? 'Carregando status…' : 'Não foi possível carregar os status. Tente novamente.'}</p>
+            <button type="button" disabled={loading} onClick={onRetry} className="ady-btn rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50">Tentar carregar status novamente</button>
+          </div>}
           {error && <p role="alert" className="mt-3 text-sm text-[#DC2626] dark:text-red-300">{error}</p>}
           <div className="mt-5 flex justify-end gap-2">
             <DialogPrimitive.Close disabled={saving} className="ady-btn rounded-lg border border-border px-3 py-2 text-sm text-text-primary disabled:opacity-50">Cancelar</DialogPrimitive.Close>
-            <button type="button" onClick={() => void submit()} disabled={saving || !status || status.toLocaleLowerCase() === ticket?.status.toLocaleLowerCase()} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Salvando…' : 'Confirmar alteração'}</button>
+            <button type="button" onClick={() => void submit()} disabled={saving || loading || statuses.length === 0 || !status || status.toLocaleLowerCase() === ticket?.status.toLocaleLowerCase()} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Salvando…' : 'Confirmar alteração'}</button>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Overlay>
@@ -593,7 +599,7 @@ export function TicketsPage() {
     </p>
     {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
     <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} onReview={setReviewingTicket} />
-    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
+    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} loading={loading} onRetry={refresh} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
     <details className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
         <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />

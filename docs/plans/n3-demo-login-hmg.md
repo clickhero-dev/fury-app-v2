@@ -1,7 +1,7 @@
 # [N3] Investigar erro 503 no login da conta demo em HMG
 
 ## Evidência e diagnóstico
-Evento isolado reportado em 2026-11-13 14:50:06Z; associação do backend com HMG é temporal. Não é evidência de recorrência. Busca inicial de PRs abertas por `demo` não encontrou resultados.
+Evento isolado reportado em 2026-11-13 14:50:06Z; associação do backend com HMG é temporal. Não é evidência de recorrência. A PR #464 já existente foi reutilizada para esta correção.
 
 Causa reproduzível no código: `create-demo-user.ts` cria tenant sem `isDemo`, que assume false. A migração 0056 só marca tenants novos; um tenant legado com o slug reservado permanece false e é rejeitado por AuthService.demoLogin. Não se deve remover essa proteção nem promover um tenant comercial pelo slug. O host web fornecido retornou 404 na sondagem atual; não há acesso à configuração/logs históricos de HMG nesta sessão, portanto a causa histórica permanece hipótese.
 
@@ -28,3 +28,8 @@ Reprodução isolada confirma a falha de configuração legada, mas não comprov
 - Navegador Chromium contra este checkout na porta 5179: 503 mostra mensagem, não grava tokens e permite segunda tentativa manual.
 - Endpoint é público e sem entrada: 401/403 por autenticação/tenant e 404 de entidade não se aplicam ao contrato; ausência de conta é intencionalmente 503. Não alterado o contrato existente.
 - Revisão de diff: somente arquivos da tarefa; MCP de grafo indisponível, índice SQLite local consultado antes da leitura das implementações.
+
+## Integração com hmg — 2026-11-18
+- Integrar a base atual na PR #464, preservar o registro de todas as migrações e confirmar que a reparação segue após 0056.
+- Reexecutar os testes direcionados de API, PostgreSQL e web, o fluxo de recuperação no navegador e os builds; revisar o diff e executar as verificações disponíveis no novo SHA.
+- Atualizar a PR existente, confirmar ausência de conflitos e acompanhar todos os checks até sua conclusão. `quality_analysis` e o MCP de grafo não estão disponíveis nesta sessão; registrar essa limitação.
