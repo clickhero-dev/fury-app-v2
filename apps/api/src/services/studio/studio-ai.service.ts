@@ -7,6 +7,7 @@ import { StudioRepository } from '../../repository/studio.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { saveTemporaryStudioImage, ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
+import { extractLogoColors } from '../brand-kit/logo-colors.js';
 import {
   consumeCreativeQuota,
   refundCreativeQuota,
@@ -17,6 +18,7 @@ import {
 
 import { IMAGE_MODELS, VIDEO_MODELS } from './studio-model-catalog.js';
 import { BrandKitPhotoRepository } from '../../repository/brand-kit-photo.repository.js';
+import { CampaignRepository } from '../../repository/campaign.repository.js';
 import {
   TEMPLATE_ANALYSIS_MODEL,
   TEMPLATE_IMAGE_MODEL,
@@ -138,6 +140,7 @@ interface QuotaLike {
 
 type StudioRepoF = (tenantId: string) => StudioRepository;
 type PhotoRepoF = (tenantId: string) => Pick<BrandKitPhotoRepository, 'findById' | 'findByIds'>;
+type BrandRepoF = (tenantId: string) => Pick<CampaignRepository, 'findBrandKit' | 'upsertTenantBrandKit'>;
 
 export class StudioAiService {
   constructor(
@@ -151,6 +154,7 @@ export class StudioAiService {
       getModificationsPerCreativeLimit,
     },
     private photoRepoFactory: PhotoRepoF = (t) => new BrandKitPhotoRepository(t),
+    private brandRepoFactory: BrandRepoF = (t) => new CampaignRepository(t),
   ) {}
 
   private repo(tenantId: string): StudioRepository {
@@ -273,6 +277,7 @@ export class StudioAiService {
       reference_image_urls?: string[];
       template_photo_id?: string;
       photo_ids?: string[];
+      save_as_logo?: boolean;
     },
   ): Promise<Record<string, any>> {
     let referenceImageUrls = payload.reference_image_urls?.length ? payload.reference_image_urls : undefined;
@@ -364,6 +369,7 @@ export class StudioAiService {
           ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected } } : {}),
         }),
       });
+      const logo = payload.save_as_logo ? await this.saveGeneratedLogo(tenantId, imageUrl, review.dataUrl) : null;
       return {
         type: 'image' as const,
         creativeAssetId: asset.id,
@@ -375,10 +381,29 @@ export class StudioAiService {
         modificationsRemaining,
         costUsd,
         processingTimeMs,
+        ...(logo ? { logo } : {}),
       };
     } catch (error) {
       await this.quota.refundCreativeQuota(tenantId);
       throw error;
+    }
+  }
+
+  private async saveGeneratedLogo(tenantId: string, imageUrl: string, dataUrl: string) {
+    try {
+      const match = /^data:image\/(?:png|jpeg);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(dataUrl);
+      if (!match) throw new Error('Imagem gerada inválida.');
+      const colors = await extractLogoColors(Buffer.from(match[1], 'base64'));
+      const repo = this.brandRepoFactory(tenantId);
+      const existing = await repo.findBrandKit();
+      await repo.upsertTenantBrandKit({
+        logoUrl: imageUrl,
+        ...(existing?.primaryColor ? {} : colors?.primaryColor ? { primaryColor: colors.primaryColor } : {}),
+        ...(existing?.secondaryColor ? {} : colors?.secondaryColor ? { secondaryColor: colors.secondaryColor } : {}),
+      });
+      return { saved: true, colors };
+    } catch {
+      return { saved: false };
     }
   }
 

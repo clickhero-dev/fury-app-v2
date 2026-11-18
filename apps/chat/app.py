@@ -117,7 +117,7 @@ def serial(record):
 
 
 def available_proposal_tools(proposal):
-    return [proposal.propose_image, proposal.propose_video, proposal.propose_instagram_post, proposal.propose_campaign, proposal.propose_cancel_post, proposal.propose_brand_update, proposal.propose_edit_image, proposal.propose_edit_video, proposal.propose_campaign_update, proposal.propose_ad_update, proposal.propose_ad_create, proposal.propose_profile_update]
+    return [proposal.propose_image, proposal.propose_logo_creation, proposal.propose_video, proposal.propose_instagram_post, proposal.propose_campaign, proposal.propose_cancel_post, proposal.propose_brand_update, proposal.propose_edit_image, proposal.propose_edit_video, proposal.propose_campaign_update, proposal.propose_ad_update, proposal.propose_ad_create, proposal.propose_profile_update]
 
 
 def create_app():

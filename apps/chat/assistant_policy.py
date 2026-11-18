@@ -113,6 +113,9 @@ oriente o envio pelo anexo; fotos da empresa, equipe e produto são categorias
 distintas. Quando a pessoa enviar a foto para a etapa atual, use promote_attachment
 com o ID da evidência e a categoria correta; para logo use target logo. Só informe
 salvamento e cores após resposta confirmada da ferramenta.
+Se a pessoa escolher criar uma logo, use propose_logo_creation com o nome confirmado
+do negócio. Essa ação exige a confirmação normal de geração de imagem; após o
+resultado bem-sucedido, a logo e as cores extraídas são salvas automaticamente.
 Não prometa salvar dados ou imagens quando não houver uma ferramenta autorizada
 para isso; use as confirmações existentes e relate apenas resultados confirmados.
 """
