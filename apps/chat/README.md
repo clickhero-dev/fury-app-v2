@@ -46,6 +46,9 @@ O chat usa OpenAI direta (`gpt-6-luna`), Anthropic direta
 Provedores sem chave são ignorados. Falhas transitórias e de credencial permitem
 avançar somente antes de saída ou início de ferramenta; não há replay automático
 do agente após essas fronteiras.
+O adapter OpenAI usa Chat Completions com `reasoning_effort: none`: essa é a
+configuração exigida pelo GPT-6 Luna para chamadas de função nesse endpoint.
+Não equivale ao modo de raciocínio com ferramentas da Responses API.
 
 O worker de turnos na API recupera respostas após reinício a partir do banco,
 com delegação JIT e limites globais persistidos. A interface acompanha o estado
@@ -221,5 +224,6 @@ do agente; preparação/compressão de contexto mantém seus limites HTTP existe
 
 Falhas de ferramenta ou checkpoint são classificadas pela fase, sem registrar
 argumentos ou mensagens internas, e não são reportadas como falhas de provedor.
-Os testes usam transportes simulados; disponibilidade real dos modelos e
-credenciais exige homologação operacional.
+Os testes automatizados usam transportes simulados. Um smoke de streaming e
+ferramenta sintética também deve ser executado com as credenciais do ambiente
+antes de cada rollout; ele não substitui avaliação de qualidade ou carga.

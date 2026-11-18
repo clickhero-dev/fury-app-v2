@@ -369,3 +369,44 @@ def test_provider_fallback_diagnostics_are_sanitized(caplog):
     assert 'private-provider-detail' not in caplog.text
     assert 'private-prompt' not in caplog.text
     assert 'private-key' not in caplog.text
+
+
+def test_compressed_anthropic_sse_is_decoded_once():
+    import gzip
+    async def scenario():
+        def event(name, data):
+            return 'event: '+name+'\ndata: '+json.dumps(data)+'\n\n'
+        body = event('message_start', {'type':'message_start','message':{
+            'id':'m1','type':'message','role':'assistant','model':'claude-sonnet-5-5','content':[],
+            'stop_reason':None,'usage':{'input_tokens':7,'output_tokens':0}}})
+        body += event('content_block_start', {'type':'content_block_start','index':0,'content_block':{'type':'text','text':''}})
+        body += event('content_block_delta', {'type':'content_block_delta','index':0,'delta':{'type':'text_delta','text':'ok'}})
+        body += event('content_block_stop', {'type':'content_block_stop','index':0})
+        body += event('message_delta', {'type':'message_delta','delta':{'stop_reason':'end_turn','stop_sequence':None},'usage':{'output_tokens':3}})
+        body += event('message_stop', {'type':'message_stop'})
+        class Compressed(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield gzip.compress(body.encode())
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+                200, headers={'content-type':'text/event-stream','content-encoding':'gzip'},
+                stream=Compressed()))) as client:
+            events = [e async for e in stream_agent('hello', env={'ANTHROPIC_API_KEY':'test'}, http_client=client)]
+        assert any(getattr(e,'content',None) == 'ok' for e in events)
+    run(scenario())
+
+
+def test_openai_luna_tool_request_sets_supported_reasoning_effort():
+    async def scenario():
+        payloads = []
+        async def action():
+            """A synthetic tool."""
+            return 'done'
+        def handler(request):
+            payloads.append(json.loads(request.content))
+            return openai_stream()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            _ = [e async for e in stream_agent('hello', env={'OPENAI_API_KEY':'test'},
+                http_client=client, agent_options={'tools':[action]})]
+        assert payloads[0]['reasoning_effort'] == 'none'
+        assert payloads[0]['tools']
+    run(scenario())

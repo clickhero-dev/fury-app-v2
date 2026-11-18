@@ -48,7 +48,7 @@ class _Stream(httpx.AsyncByteStream):
                 async def chunks():
                     yield self.response.content
             else:
-                chunks = self.response.aiter_raw
+                chunks = self.response.aiter_bytes
             async for chunk in chunks():
                 pending += chunk
                 if len(pending) > 4_000_000:
@@ -136,13 +136,19 @@ class _Transport(httpx.AsyncBaseTransport):
             self.state['kind'] = 'invalid'
             await response.aclose()
             raise httpx.ReadError('Model provider returned an invalid stream')
-        return httpx.Response(response.status_code, headers=response.headers, stream=_Stream(response, self.state))
+        headers = httpx.Headers(response.headers)
+        headers.pop('content-encoding', None)
+        headers.pop('content-length', None)
+        return httpx.Response(response.status_code, headers=headers, stream=_Stream(response, self.state))
 
 
 def _model(provider, model_id, key, client):
     if provider == 'openai':
         from agno.models.openai import OpenAIChat
-        cls = OpenAIChat
+        # GPT-6 Luna Chat Completions only supports function calls with
+        # reasoning disabled. Responses API would require a different adapter.
+        return OpenAIChat(id=model_id, api_key=key, http_client=client, timeout=60,
+                          max_retries=0, retries=0, reasoning_effort='none')
     elif provider == 'anthropic':
         from agno.models.anthropic import Claude
         return Claude(id=model_id, api_key=key, http_client=client, timeout=60,
