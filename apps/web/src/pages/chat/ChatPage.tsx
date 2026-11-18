@@ -12,12 +12,13 @@ import { useChatDictation } from './useChatDictation';
 import { useChatPlans } from './useChatPlans';
 import { ChatPlanCard } from './ChatPlanCard';
 import { ChatQuickActions } from './ChatQuickActions';
-import { buildQuickActionPrompt, type QuickAction } from './quick-actions';
+import { buildQuickActionPrompt, homeActionForId, type QuickAction } from './quick-actions';
 import { useQuickActionContext } from './useQuickActionContext';
 import { isChatPlanActive } from './chat-plans';
 import { ChatComposer } from './ChatComposer';
 import { MessageAttachments } from './MessageAttachments';
 import type { Attachment } from './chat-media';
+import { captureEvent } from '../../lib/posthog';
 import { AdySymbol } from '../../components/AdySymbol';
 import { useChatViewport } from './useChatViewport';
 import './chat.css';
@@ -214,7 +215,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   const [titleError, setTitleError] = useState('');
   const [current, setCurrent] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [quickAction, setQuickAction] = useState<QuickAction | null>(null);
+  const [homeEntry] = useState(() => homeActionForId(new URLSearchParams(window.location.search).get('inicio')));
+  const [quickAction, setQuickAction] = useState<QuickAction | null>(homeEntry);
   const quickActionContext = useQuickActionContext(quickAction !== null);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -278,7 +280,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       setConversations(existing => [...existing, ...items.filter(item => !existing.some(c => c.id === item.id))]);
       let saved: string | null = null;
       try { saved = sessionStorage.getItem('ady-chat-current'); } catch { /* Sem persistência de aba. */ }
-      if (saved && selectionVersion.current === version && items.some(c => c.id === saved)) void open(saved);
+      if (!homeEntry && saved && selectionVersion.current === version && items.some(c => c.id === saved)) void open(saved);
     }).catch(() => setError('Não foi possível carregar as conversas.'));
   }, []);
   const hasRunningJob = approvals.some(a => a.result?.jobId && !['done', 'error', 'failed'].includes(a.result?.job?.status || ''));
@@ -419,12 +421,14 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       const id = current || await create(true, true);
       if (!id) return;
       const content = quickAction && text ? buildQuickActionPrompt(quickAction, text, quickActionContext) : text;
+      const homeFlow = quickAction && 'id' in quickAction ? quickAction.id : null;
       await streamResponse(content, id, attachments, () => {
+        if (homeFlow) captureEvent('home_fluxo_iniciado', {fluxo:homeFlow});
         sendingRef.current.delete(key);
         released = true;
         clearAcceptedDraft(id, text);
         media.clear(id, attachments.map(item => item.id));
-      });
+      }, undefined, undefined, undefined, homeFlow);
     } finally { if (!released) sendingRef.current.delete(key); }
   }
   function choose(item: Clarification, index: number) {
@@ -433,7 +437,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     const conversation = current;
     void streamResponse(item.choices[index], conversation, [], undefined, undefined, undefined, {id:item.id, index}).finally(() => choosingRef.current.delete(item.id));
   }
-  async function streamResponse(text?: string, conversationId = current, attachments: Attachment[] = [], onAccepted?: () => void, retryRunId?: string, retryPayload?: PendingPayload, selection?: {id:string; index:number}) {
+  async function streamResponse(text?: string, conversationId = current, attachments: Attachment[] = [], onAccepted?: () => void, retryRunId?: string, retryPayload?: PendingPayload, selection?: {id:string; index:number}, homeFlow?: string | null) {
     const current = conversationId;
     if (!current) return;
     if (!selection && retryPayload) {
@@ -485,9 +489,11 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       onAccepted?.();
       if (!response.body) throw new Error('stream ausente');
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let completed = false; let responseText = '';
-      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if ((event === 'run' || event === 'done') && typeof data.run_id === 'string' && typeof data.user_message_id === 'string') { runId = data.run_id; markPending(current, clientKey, false); if (isMessage) updateMessages(items => items.some(m => m.id === userId) ? items.filter(m => m.id !== data.user_message_id || m.id === userId).map(m => m.id === userId ? {...m,id:data.user_message_id} : m) : items); const existing = snapshot.runs.find(r => r.id === runId); updateRuns([{...existing,id:runId!,user_message_id:data.user_message_id,status:event === 'done' ? 'completed' : 'running'}, ...snapshot.runs.filter(r => r.id !== runId)]); } if (event === 'token' && typeof data.content === 'string') { responseText += data.content; updateMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); } if (event === 'done') { completed = true; if (data.clarification && typeof data.clarification.id === 'string') { const previous = snapshot.clarifications.find(c => c.id === data.clarification.id); const clarification = {...data.clarification, ...(previous?.selected_index != null ? {selected_index:previous.selected_index} : {}), ...((previous?.dismissed_at || messageOrder < snapshot.latestAcceptedMessage) ? {dismissed_at:previous?.dismissed_at || 'pending-refresh'} : {})}; snapshot.clarifications = [...snapshot.clarifications.filter(c => c.id !== clarification.id), clarification]; if (visible()) setClarifications(snapshot.clarifications); } if (Array.isArray(data.messages) && data.messages.length && data.messages.every((m: Message) => typeof m.id === 'string' && typeof m.content === 'string')) { const received: Message[] = data.messages; responseText = received.map(m => m.content).join('\n'); updateMessages(items => { const ids = new Set(received.map(m => m.id)); const filtered = items.filter(m => m.id === replyId || !ids.has(m.id)); return filtered.flatMap(m => m.id === replyId ? received : [m]); }); } else if (typeof data.message?.content === 'string') { responseText = data.message.content; updateMessages(v => v.filter(m => !data.message.id || m.id !== data.message.id || m.id === replyId).map(m => m.id === replyId ? {...m, id:data.message.id || m.id, content:data.message.content, created_at:data.message.created_at} : m)); } if (visible()) void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') updateApprovals(v => [...v,data]); if (event === 'error') updateError(data.message || 'Não foi possível concluir a resposta.'); };
+      let responseFailed = false;
+      const process = (frame: string) => { const event = frame.split(/\r?\n/).find(x => x.startsWith('event:'))?.slice(6).trim(); const raw = frame.split(/\r?\n/).filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n'); if (!raw) return; const data = JSON.parse(raw); if ((event === 'run' || event === 'done') && typeof data.run_id === 'string' && typeof data.user_message_id === 'string') { runId = data.run_id; markPending(current, clientKey, false); if (isMessage) updateMessages(items => items.some(m => m.id === userId) ? items.filter(m => m.id !== data.user_message_id || m.id === userId).map(m => m.id === userId ? {...m,id:data.user_message_id} : m) : items); const existing = snapshot.runs.find(r => r.id === runId); updateRuns([{...existing,id:runId!,user_message_id:data.user_message_id,status:event === 'done' ? 'completed' : 'running'}, ...snapshot.runs.filter(r => r.id !== runId)]); } if (event === 'token' && typeof data.content === 'string') { responseText += data.content; updateMessages(v => v.map(m => m.id === replyId ? {...m,content:m.content + data.content} : m)); } if (event === 'done') { completed = true; if (data.clarification && typeof data.clarification.id === 'string') { const previous = snapshot.clarifications.find(c => c.id === data.clarification.id); const clarification = {...data.clarification, ...(previous?.selected_index != null ? {selected_index:previous.selected_index} : {}), ...((previous?.dismissed_at || messageOrder < snapshot.latestAcceptedMessage) ? {dismissed_at:previous?.dismissed_at || 'pending-refresh'} : {})}; snapshot.clarifications = [...snapshot.clarifications.filter(c => c.id !== clarification.id), clarification]; if (visible()) setClarifications(snapshot.clarifications); } if (Array.isArray(data.messages) && data.messages.length && data.messages.every((m: Message) => typeof m.id === 'string' && typeof m.content === 'string')) { const received: Message[] = data.messages; responseText = received.map(m => m.content).join('\n'); updateMessages(items => { const ids = new Set(received.map(m => m.id)); const filtered = items.filter(m => m.id === replyId || !ids.has(m.id)); return filtered.flatMap(m => m.id === replyId ? received : [m]); }); } else if (typeof data.message?.content === 'string') { responseText = data.message.content; updateMessages(v => v.filter(m => !data.message.id || m.id !== data.message.id || m.id === replyId).map(m => m.id === replyId ? {...m, id:data.message.id || m.id, content:data.message.content, created_at:data.message.created_at} : m)); } if (visible()) void plans.refetch(); } if (event === 'title' && data.id === current && typeof data.title === 'string') setConversations(items => items.map(item => item.id === current ? {...item, title:data.title} : item)); if (event === 'approval') updateApprovals(v => [...v,data]); if (event === 'error') { responseFailed = true; updateError(data.message || 'Não foi possível concluir a resposta.'); } };
       while (true) { const {value,done} = await reader.read(); buffer += decoder.decode(value, {stream:!done}); const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || ''; frames.forEach(process); if (done) { if (buffer.trim()) process(buffer); break; } }
       if (!completed) throw new Error('stream interrompido');
+      if (homeFlow && !responseFailed && responseText.trim()) captureEvent('home_fluxo_avancou', {fluxo:homeFlow});
       if (!responseText.trim()) {
         updateMessages(v => v.filter(m => m.id !== replyId));
         updateError('Não foi possível concluir a resposta. Atualize a conversa para conferir o estado.');
