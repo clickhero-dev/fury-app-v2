@@ -1,6 +1,7 @@
 """Isolated Agno provider failover. Never restarts a turn after output or a tool call."""
 import os
 import json
+import logging
 import re
 from collections.abc import Mapping
 
@@ -180,7 +181,7 @@ async def stream_agent(context, *, env: Mapping | None = None, http_client=None,
     upstream = http_client or httpx.AsyncClient(timeout=60)
     try:
         async with httpx.AsyncClient(transport=_Transport(upstream, state), timeout=60) as client:
-            for model_id, provider, key in providers:
+            for index, (model_id, provider, key) in enumerate(providers):
                 state['kind'] = 'error'
                 try:
                     model = _model(provider, model_id, key, client)
@@ -199,6 +200,11 @@ async def stream_agent(context, *, env: Mapping | None = None, http_client=None,
                 except ProviderFailure as error:
                     if state['unsafe'] or error.kind not in ('transient', 'auth'):
                         raise
+                    if index + 1 < len(providers):
+                        logging.getLogger('ady.chat').warning(
+                            'model_attempt provider=%s phase=fallback kind=%s',
+                            provider, error.kind,
+                        )
                 except (ImportError, ModuleNotFoundError):
                     raise ProviderFailure('configuration') from None
             raise ProviderFailure(state['kind'], provider)

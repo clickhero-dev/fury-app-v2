@@ -351,3 +351,21 @@ def test_budget_database_failure_is_not_sent_or_reported_as_provider(capfd):
         assert calls == []
     run(scenario())
     assert 'private database password' not in ''.join(capfd.readouterr())
+
+
+def test_provider_fallback_diagnostics_are_sanitized(caplog):
+    async def scenario():
+        calls = []
+        def handler(request):
+            calls.append(1)
+            return (httpx.Response(503, json={'error': {'message': 'private-provider-detail'}})
+                    if len(calls) == 1 else openai_stream('ok'))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            _ = [event async for event in stream_agent('private-prompt', env={
+                'OPENAI_API_KEY':'private-key', 'OPENROUTER_API_KEY':'another-key'
+            }, http_client=client)]
+    run(scenario())
+    assert 'provider=openai' in caplog.text and 'phase=fallback' in caplog.text
+    assert 'private-provider-detail' not in caplog.text
+    assert 'private-prompt' not in caplog.text
+    assert 'private-key' not in caplog.text
