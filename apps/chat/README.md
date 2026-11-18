@@ -206,10 +206,11 @@ o smoke externo e o build Docker pertencem ao gate de integração. Para a suít
 
 ### Continuidade e falhas do provedor (#452)
 
-O transporte OpenRouter repete somente a requisição atual, no máximo três tentativas,
+O transporte OpenRouter repete somente a requisição atual, no máximo onze tentativas
+(uma inicial e dez retries),
 antes de qualquer saída ou ferramenta observada no turno. Timeout/conexão, 429 e 5xx
 usam backoff exponencial com jitter; `Retry-After` aceita segundos ou data HTTP. O
-orçamento acumulado de espera é 20 segundos e o de retry da requisição é 200 segundos.
+orçamento acumulado de espera é 120 segundos e o de retry da requisição é 300 segundos.
 Uma espera indicada maior que o orçamento encerra sem antecipar o retry. Erros de
 requisição, autenticação, cobrança e contexto não são repetidos automaticamente.
 

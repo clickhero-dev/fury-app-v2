@@ -246,10 +246,14 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                     except (ValueError, TypeError, OverflowError):
                         seconds = 0
                 if math.isfinite(seconds):
-                    delay = min(MAX_RETRY_DELAY_SECONDS, max(delay, seconds))
+                    # An explicit provider delay takes precedence over the
+                    # regular per-attempt cap. The aggregate retry budget
+                    # below rejects an excessive hint instead of silently
+                    # retrying earlier than OpenRouter requested.
+                    delay = max(delay, seconds)
             if (not retryable or state is None or state['unsafe']
                     or attempt >= MAX_PROVIDER_ATTEMPTS - 1
-                    or waited + delay > MAX_RETRY_WAIT_SECONDS
+                    or waited + delay >= MAX_RETRY_WAIT_SECONDS
                     or time.monotonic() - started + delay > MAX_REQUEST_RETRY_SECONDS):
                 log.warning('provider_attempt request=%s run=%s model=%s phase=final_failure attempt=%s status=%s', correlation, run_id, model, attempt + 1, status)
                 return False
