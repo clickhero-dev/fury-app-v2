@@ -22,9 +22,12 @@ from provider_policy import ProviderPolicy
 MAX_MODEL_REQUEST_TOKENS = 50_000
 MODEL_RESPONSE_RESERVE_TOKENS = 4_096
 DEEPSEEK_V4_MODEL = 'deepseek/deepseek-v4-pro-0813'
-MAX_PROVIDER_ATTEMPTS = 3
-MAX_RETRY_WAIT_SECONDS = 20
-MAX_REQUEST_RETRY_SECONDS = 200
+# One initial provider request plus ten retries. This is intentionally an
+# application constant: every chat instance must recover consistently.
+MAX_PROVIDER_ATTEMPTS = 11
+MAX_RETRY_WAIT_SECONDS = 120
+MAX_REQUEST_RETRY_SECONDS = 300
+MAX_RETRY_DELAY_SECONDS = 15
 
 
 class ModelRequestBudgetExceeded(OpenAIError):
@@ -76,8 +79,13 @@ def durable_budget_scope(charge):
 
 
 @contextmanager
-def provider_retry_scope(run_id=None):
-    state = {'unsafe': False, 'error_kind': 'error', 'run_id': str(run_id) if run_id else None}
+def provider_retry_scope(run_id=None, on_retry=None):
+    state = {
+        'unsafe': False,
+        'error_kind': 'error',
+        'run_id': str(run_id) if run_id else None,
+        'on_retry': on_retry,
+    }
     token = _retry_state.set(state)
     try:
         yield state
@@ -226,7 +234,8 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
             nonlocal waited
             log = logging.getLogger('ady.chat')
             log.warning('provider_attempt request=%s run=%s model=%s phase=%s attempt=%s status=%s', correlation, run_id, model, 'initial_failure' if attempt == 0 else 'failure', attempt + 1, status)
-            delay = 0.1 * (2 ** attempt) + random.uniform(0, 0.1)
+            base_delay = min(MAX_RETRY_DELAY_SECONDS, 2 ** attempt)
+            delay = min(MAX_RETRY_DELAY_SECONDS, base_delay + random.uniform(0, base_delay * 0.2))
             hint = (headers or {}).get('retry-after')
             if hint:
                 try:
@@ -237,15 +246,25 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                     except (ValueError, TypeError, OverflowError):
                         seconds = 0
                 if math.isfinite(seconds):
+                    # An explicit provider delay takes precedence over the
+                    # regular per-attempt cap. The aggregate retry budget
+                    # below rejects an excessive hint instead of silently
+                    # retrying earlier than OpenRouter requested.
                     delay = max(delay, seconds)
             if (not retryable or state is None or state['unsafe']
                     or attempt >= MAX_PROVIDER_ATTEMPTS - 1
-                    or waited + delay > MAX_RETRY_WAIT_SECONDS
+                    or waited + delay >= MAX_RETRY_WAIT_SECONDS
                     or time.monotonic() - started + delay > MAX_REQUEST_RETRY_SECONDS):
                 log.warning('provider_attempt request=%s run=%s model=%s phase=final_failure attempt=%s status=%s', correlation, run_id, model, attempt + 1, status)
                 return False
             log.info('provider_attempt request=%s run=%s model=%s phase=retry attempt=%s status=%s', correlation, run_id, model, attempt + 2, status)
             waited += delay
+            callback = state.get('on_retry')
+            if callback is not None:
+                try:
+                    await callback(attempt + 2, MAX_PROVIDER_ATTEMPTS, round(delay * 1000))
+                except Exception:
+                    log.warning('provider_attempt request=%s run=%s model=%s phase=progress_notify_failed', correlation, run_id, model)
             await asyncio.sleep(delay)
             return True
 
