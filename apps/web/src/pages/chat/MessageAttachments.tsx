@@ -9,7 +9,13 @@ function PrivateAttachment({conversationId, attachment}: {conversationId:string;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const resource = useRef<{url?:string; request?:AbortController; timeout?:ReturnType<typeof setTimeout>}>({});
-  useEffect(() => () => { clearTimeout(resource.current.timeout); resource.current.request?.abort(); if (resource.current.url) URL.revokeObjectURL(resource.current.url); }, []);
+  useEffect(() => () => {
+    clearTimeout(resource.current.timeout);
+    resource.current.request?.abort();
+    resource.current.request = undefined;
+    if (resource.current.url) URL.revokeObjectURL(resource.current.url);
+    resource.current.url = undefined;
+  }, []);
   async function preview(download = false) {
     if (resource.current.request) return;
     if (resource.current.url) {
@@ -46,6 +52,7 @@ function PrivateAttachment({conversationId, attachment}: {conversationId:string;
   }
   const image = attachment.mimeType.startsWith('image/');
   const video = attachment.mimeType.startsWith('video/');
+  useEffect(() => { if (image || video) void preview(); }, [conversationId, attachment.id]);
   const Icon = image ? ImageIcon : video ? Film : FileText;
   return <div className="ady-chat-saved-attachment">
     <div className="ady-chat-file-summary"><Icon size={20} aria-hidden="true"/><div><strong>{attachment.filename}</strong><small>{formatBytes(attachment.sizeBytes)}{attachment.pageCount ? ` · ${attachment.pageCount} páginas` : ''}{attachment.durationSeconds ? ` · ${formatDuration(attachment.durationSeconds)}` : ''}</small></div></div>

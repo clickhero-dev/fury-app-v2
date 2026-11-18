@@ -8,12 +8,21 @@ vi.mock('./chat-request', () => ({chatRequest: vi.fn(), mediaError: () => 'Falha
 const attachment = {id:'271b73cd-07c8-45db-a271-e3f7b329c026', filename:'foto.png', mimeType:'image/png', sizeBytes:5};
 afterEach(() => vi.restoreAllMocks());
 describe('mídia privada', () => {
+  it('carrega a imagem automaticamente para abri-la diretamente no chat', async () => {
+    vi.mocked(chatRequest).mockResolvedValue({blob: async () => new Blob(['image'], {type:'image/png'})} as Response);
+    URL.createObjectURL = vi.fn(() => 'blob:private');
+    URL.revokeObjectURL = vi.fn();
+    render(<MessageAttachments conversationId="conversa" attachments={[attachment]}/>);
+    fireEvent.click(await screen.findByRole('button', {name:'Abrir foto.png'}));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
   it('baixa sem abrir o visualizador e usa o endpoint privado', async () => {
     vi.mocked(chatRequest).mockResolvedValue({blob: async () => new Blob(['image'], {type:'image/png'})} as Response);
     URL.createObjectURL = vi.fn(() => 'blob:private');
     URL.revokeObjectURL = vi.fn();
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     render(<MessageAttachments conversationId="conversa" attachments={[attachment]}/>);
+    await screen.findByRole('button', {name:'Abrir foto.png'});
     fireEvent.click(screen.getByRole('button', {name:'Baixar foto.png'}));
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
     expect(chatRequest).toHaveBeenCalledWith('/conversations/conversa/attachments/271b73cd-07c8-45db-a271-e3f7b329c026', expect.any(Object));

@@ -4,9 +4,10 @@ import api from '@/lib/api';
 type Connection = {selectedInstagramUserId?: string | null; selectedInstagramUsername?: string | null};
 type State = 'loading' | 'disconnected' | 'ready' | 'permission' | 'unknown' | 'multiple';
 
-export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|'video'; mediaKey:string}) {
+export function InstagramShare({kind, mediaKey}: {src:string; kind:'image'|'video'; mediaKey:string}) {
   const [state, setState] = useState<State>('loading');
   const [username, setUsername] = useState('');
+  const [instagramUserId, setInstagramUserId] = useState('');
   const [review, setReview] = useState(false);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,6 +23,7 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
       if (!connections.length) { setState('disconnected'); return; }
       if (connections.length > 1) { setState('multiple'); return; }
       setUsername(connections[0].selectedInstagramUsername || connections[0].selectedInstagramUserId || '');
+      setInstagramUserId(connections[0].selectedInstagramUserId || '');
       const scopes = await api.get('/meta/scopes');
       if (!Array.isArray(scopes.data?.data?.scopes)) throw new Error('invalid scopes');
       setState(scopes.data.data.scopes.includes('instagram_content_publish') ? 'ready' : 'permission');
@@ -40,9 +42,7 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
     sessionStorage.setItem(`chat-ig-publish:${mediaKey}`, key);
     setLocked(true);
     try {
-      const result = await api.post('/planner/posts/publish-now', {
-        caption, postType:kind === 'video' ? 'reel' : 'image', imageUrl:src,
-      }, {headers:{'Idempotency-Key':key}});
+      const result = await api.post(`/planner/chat-media/${encodeURIComponent(mediaKey)}/publish`, {caption, instagramUserId});
       if (result.data?.data?.status === 'published') setMessage('Publicado com sucesso no Instagram.');
       else setMessage('Não foi possível confirmar a publicação. Verifique o calendário antes de tentar novamente.');
     } catch {

@@ -198,6 +198,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0056_demo_tenant' },
   { tag: '0063_ady_rbac_plan_views_blocked' },
   { tag: '0082_chat_batch_approvals' },
+  { tag: '0083_chat_media_publish' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

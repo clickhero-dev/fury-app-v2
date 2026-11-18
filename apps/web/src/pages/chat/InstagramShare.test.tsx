@@ -26,7 +26,8 @@ describe('compartilhamento no Instagram', () => {
     fireEvent.change(screen.getByLabelText('Legenda'), {target:{value:'Olá'}});
     fireEvent.click(screen.getByRole('button', {name:'Confirmar publicação'}));
     await waitFor(() => expect(post).toHaveBeenCalledOnce());
-    expect(post.mock.calls[0][1]).toMatchObject({caption:'Olá',postType:'image',imageUrl:'https://example.com/imagem.png'});
+    expect(post.mock.calls[0][0]).toBe('/planner/chat-media/b/publish');
+    expect(post.mock.calls[0][1]).toEqual({caption:'Olá',instagramUserId:'ig'});
     expect(await screen.findByText(/publicado com sucesso/i)).toBeTruthy();
   });
   it('não considera erro de permissão como conta desconectada', async () => {
