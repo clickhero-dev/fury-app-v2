@@ -383,11 +383,11 @@ for (const viewport of [{ width: 1287, height: 652 }, { width: 375, height: 812 
 test('falha no início do atalho preserva briefing e permite cancelar', async ({page}) => {
   const counts = await isolateChat(page, 'light', true);
   await page.getByRole('button',{name:'Criar post para o Instagram',exact:true}).click();
-  const answer = page.getByLabel('Qual é o tema do post e para qual público?',{exact:true});
+  const answer = page.getByRole('textbox',{name:'Mensagem',exact:true});
   await answer.fill('   ');
-  await expect(page.getByRole('button',{name:'Continuar com Ady'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Enviar mensagem',exact:true})).toBeDisabled();
   await answer.fill('Apresentar minha floricultura');
-  await page.getByRole('button',{name:'Continuar com Ady'}).click();
+  await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('Não foi possível iniciar a conversa');
   await expect(answer).toHaveValue('Apresentar minha floricultura');
   await page.getByRole('button',{name:'Cancelar',exact:true}).click();

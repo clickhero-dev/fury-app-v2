@@ -12,6 +12,8 @@ import { useChatDictation } from './useChatDictation';
 import { useChatPlans } from './useChatPlans';
 import { ChatPlanCard } from './ChatPlanCard';
 import { ChatQuickActions } from './ChatQuickActions';
+import { buildQuickActionPrompt, type QuickAction } from './quick-actions';
+import { useQuickActionContext } from './useQuickActionContext';
 import { isChatPlanActive } from './chat-plans';
 import { ChatComposer } from './ChatComposer';
 import { MessageAttachments } from './MessageAttachments';
@@ -212,6 +214,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   const [titleError, setTitleError] = useState('');
   const [current, setCurrent] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [quickAction, setQuickAction] = useState<QuickAction | null>(null);
+  const quickActionContext = useQuickActionContext(quickAction !== null);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [responseRun, setResponseRun] = useState<string | null>(null);
@@ -227,7 +231,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [sendUncertain, setSendUncertain] = useState(false);
   useEffect(() => () => { selectionVersion.current++; creatingRequest.current?.abort(); }, []);
-  const media = useChatAttachments(async () => current || await create(true), current);
+  const media = useChatAttachments(async () => current || await create(true, true), current);
   const dictation = useChatDictation(text => {
     setInput(draft => draft ? `${draft}${/\s$/.test(draft) ? '' : ' '}${text}` : text);
     inputRef.current?.focus();
@@ -286,7 +290,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     timer = setTimeout(poll, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [current, hasRunningJob, hasActivePlan, responseRun, busy]);
-  async function create(transferDraft = false) {
+  async function create(transferDraft = false, preserveQuickAction = false) {
     if (creatingRef.current || deletingRef.current) return null;
     creatingRef.current = true; setCreating(true);
     const version = ++selectionVersion.current;
@@ -301,6 +305,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
         drafts.current.delete(null);
         media.transfer(null, c.id);
       }
+      if (!preserveQuickAction) setQuickAction(null);
       setConversations(v => [c,...v]); selectedConversation.current = c.id; setCurrent(c.id); setSendUncertain(false);
       setHistoryOpen(false);
       followLatest.current = true; setAwayFromLatest(false);
@@ -323,6 +328,7 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       setSendUncertain(unresolved);
       if (unresolved) setError('A conexão foi interrompida. Atualize a conversa para recuperar o estado.');
       if (typeof c.title === 'string') setConversations(items => items.map(item => item.id === id ? {...item, title:c.title} : item));
+      setQuickAction(null);
       selectedConversation.current = id; setCurrent(id);
       try { sessionStorage.setItem('ady-chat-current', id); } catch { /* Sem persistência de aba. */ }
       followLatest.current = true; setAwayFromLatest(false);
@@ -392,6 +398,13 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
       }
     } finally { approvalVersion.current++; setApproving(null); void plans.refetch(); }
   }
+  function clearAcceptedDraft(conversationId: string, sentText: string) {
+    const draft = (drafts.current.get(conversationId) || '').trim();
+    const content = quickAction && draft ? buildQuickActionPrompt(quickAction, draft, quickActionContext) : draft;
+    if (draft === sentText || content === sentText) drafts.current.set(conversationId, '');
+    if (selectedConversation.current === conversationId) setQuickAction(selected => selected === quickAction ? null : selected);
+    renderDraft(n => n + 1);
+  }
   async function send(e: React.FormEvent) {
     e.preventDefault();
     await submitMessage(input.trim());
@@ -403,14 +416,14 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
     sendingRef.current.add(key);
     let released = false;
     try {
-      const id = current || await create(true);
+      const id = current || await create(true, true);
       if (!id) return;
-      await streamResponse(text, id, attachments, () => {
+      const content = quickAction && text ? buildQuickActionPrompt(quickAction, text, quickActionContext) : text;
+      await streamResponse(content, id, attachments, () => {
         sendingRef.current.delete(key);
         released = true;
-        if ((drafts.current.get(id) || '').trim() === text) drafts.current.set(id, '');
+        clearAcceptedDraft(id, text);
         media.clear(id, attachments.map(item => item.id));
-        renderDraft(n => n + 1);
       });
     } finally { if (!released) sendingRef.current.delete(key); }
   }
@@ -585,15 +598,15 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
   </DialogPrimitive.Portal>
 </DialogPrimitive.Root>
 <div ref={messagesRef} onLoadCapture={() => { if (messagesRef.current && followLatest.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; }} onScroll={e => { const el = e.currentTarget; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80; followLatest.current = nearBottom; setAwayFromLatest(!nearBottom); }} className="ady-chat-messages" aria-live="polite">{messages.length === 0 && approvals.length === 0 && plans.plans.length === 0 && <div className="ady-chat-welcome">
-<div className="ady-chat-intro">
+{!quickAction && <div className="ady-chat-intro">
 <h1>Como posso ajudar?</h1>
 <p>Conte sua ideia ou escolha uma sugestão para começar.</p>
-</div>
-<ChatQuickActions onSelect={prompt => { void submitMessage(prompt); }} disabled={composerDisabled}/>
+</div>}
+<ChatQuickActions selected={quickAction} onChange={setQuickAction} context={quickActionContext} onSelect={submitMessage} disabled={composerDisabled || media.blocked || dictation.active}/>
 </div>}<MessageList messages={messages} approvals={approvals} conversationId={current} clarifications={clarifications} onChoose={choose} disabled={opening || deleting || sendUncertain || busy}>{approvals.map(a => <article className="ady-chat-approval" data-status={a.status} data-approval-id={a.id} key={a.id}>
 <strong>{a.status === 'pending' ? 'Confirme esta ação' : 'Ação'}: {a.action}</strong>
 <ParameterValues value={a.parameters}/>{a.status === 'pending' ? <button onClick={() => approve(a.id)} disabled={opening || deleting || approving !== null}>{approving === a.id ? 'Confirmando…' : 'Confirmar ação'}</button> : approvalFailureFromResult(a.status, a.result) ? <p role="alert">{approvalFailureFromResult(a.status, a.result)?.message}</p> : (['unknown','failed'].includes(a.status) || a.result?.job?.status === 'unknown') ? <p>O resultado não pôde ser confirmado. Verifique o estado da ação antes de tentar novamente.</p> : <p>Status: {a.result?.jobId && !['done','error','failed'].includes(a.result?.job?.status || '') ? 'Em andamento' : ['error','failed'].includes(a.result?.job?.status || '') ? 'Falhou' : a.status === 'completed' ? 'Concluída' : a.status === 'expired' ? 'Expirada' : 'Em andamento'}</p>}{typeof a.result?.imageUrl === 'string' && /^https:\/\//i.test(a.result.imageUrl) && <img src={a.result.imageUrl} alt="Imagem gerada" className="max-w-full rounded-xl"/>}{a.result?.jobId && !['done','error','failed','unknown'].includes(a.result?.job?.status || '') && <p>O cancelamento desta geração está indisponível. O vídeo continuará sendo processado.</p>}{['error','failed'].includes(a.result?.job?.status || '') && <p>{a.result?.job?.error === 'Não foi possível confirmar o resultado do vídeo. Verifique antes de tentar novamente.' ? a.result.job.error : 'Não foi possível concluir o vídeo.'}</p>}{typeof a.result?.job?.videoUrl === 'string' && /^https:\/\//i.test(a.result.job.videoUrl) && <video src={a.result.job.videoUrl} aria-label="Vídeo gerado" controls className="max-w-full"/>}{typeof a.result?.videoUrl === 'string' && /^https:\/\//i.test(a.result.videoUrl) && <video src={a.result.videoUrl} aria-label="Vídeo gerado" controls className="max-w-full"/>}</article>)}{plans.plans.map(plan => <ChatPlanCard key={plan.id} plan={plan} busy={plans.busyPlanIds.includes(plan.id)} error={plans.errors[plan.id]} onAction={plans.onAction} onEdit={plans.onEdit} onCompleteTask={plans.onCompleteTask}/> )}</MessageList>{plans.error && <p role="alert">{plans.error}</p>}{!busy && responseRun === 'running' && <p role="status">Aguardando a resposta em andamento…</p>}{latestRuns(responseRuns).filter(run => ['failed','interrupted'].includes(run.status)).map(run => <button key={run.id} disabled={opening || creating || deleting || busy || sendUncertain} onClick={() => streamResponse(undefined, current, [], undefined, run.id)}>Retomar resposta{messages.find(message => message.id === run.user_message_id)?.content ? `: ${messages.find(message => message.id === run.user_message_id)?.content}` : ''}</button>)}{!responseRuns.length && !busy && ['failed','interrupted'].includes(responseRun || '') && <button disabled={opening || creating || deleting} onClick={() => streamResponse()}>Retomar resposta</button>}{opening && <p role="status">Carregando conversa…</p>}{creating && <p role="status">Iniciando conversa…</p>}{busy && <p role="status">Ady está respondendo…</p>}{error && <div role="alert">
-<p>{error}</p>{current && sendUncertain && Array.from(pendingFor(current)).map(key => { const payload = readPayload(current, key); return payload && <button key={key} disabled={busy} onClick={() => { if (retryingPending.current.has(key)) return; retryingPending.current.add(key); const parsed = JSON.parse(payload.body); void streamResponse(payload.path.includes('/messages') ? parsed.content || '' : undefined, current, [], () => { if ((drafts.current.get(current) || '').trim() === (parsed.content || '')) { drafts.current.set(current, ''); renderDraft(n => n + 1); } media.clear(current, parsed.attachmentIds || []); }, undefined, payload).finally(() => { retryingPending.current.delete(key); if (selectedConversation.current === current) setSendUncertain(pendingFor(current).size > 0); }); }}>Reenviar envio pendente</button>; })}{current && <button onClick={() => open(current)} disabled={busy}>Atualizar conversa</button>}</div>}</div>
+<p>{error}</p>{current && sendUncertain && Array.from(pendingFor(current)).map(key => { const payload = readPayload(current, key); return payload && <button key={key} disabled={busy} onClick={() => { if (retryingPending.current.has(key)) return; retryingPending.current.add(key); const parsed = JSON.parse(payload.body); void streamResponse(payload.path.includes('/messages') ? parsed.content || '' : undefined, current, [], () => { clearAcceptedDraft(current, parsed.content || ''); media.clear(current, parsed.attachmentIds || []); }, undefined, payload).finally(() => { retryingPending.current.delete(key); if (selectedConversation.current === current) setSendUncertain(pendingFor(current).size > 0); }); }}>Reenviar envio pendente</button>; })}{current && <button onClick={() => open(current)} disabled={busy}>Atualizar conversa</button>}</div>}</div>
 <ChatComposer input={input} onInput={setInput} inputRef={inputRef} onSubmit={send} disabled={composerDisabled} media={media} dictation={dictation} onFiles={addFiles} awayFromLatest={awayFromLatest} onLatest={() => { followLatest.current = true; setAwayFromLatest(false); if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; }}/>
 </section>
 </div>
