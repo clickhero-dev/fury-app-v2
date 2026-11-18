@@ -62,4 +62,21 @@ describe('Conexão Redis resiliente', () => {
     expect(mocks.constructor).toHaveBeenCalledWith('redis://localhost:6379', expect.any(Object));
   });
 
+  it('reutiliza a conexão da fila durante reconexão sem criar outra', async () => {
+    vi.stubEnv('REDIS_URL', 'redis://example.com');
+    const { getRedisConnection } = await import('../lib/queue.js');
+    const first = getRedisConnection();
+    mocks.clients[0].status = 'ready'; mocks.clients[0].emit('ready');
+    await vi.waitFor(() => expect(mocks.clients).toHaveLength(2));
+    const connection = mocks.clients[1];
+    connection.status = 'ready'; connection.emit('ready');
+    await first;
+    connection.status = 'reconnecting';
+    const second = getRedisConnection();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.clients).toHaveLength(2);
+    connection.status = 'ready'; connection.emit('ready');
+    await expect(second).resolves.toBe(connection);
+  });
+
 });

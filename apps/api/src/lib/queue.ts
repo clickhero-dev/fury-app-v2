@@ -12,9 +12,16 @@ let pendingConnection: Promise<IORedis> | null = null;
  * Se já estiver criando, aguarda a mesma Promise.
  */
 export async function getRedisConnection(): Promise<IORedis> {
+  if (redisConnection && redisConnection.status !== 'end') {
+    const connection = redisConnection;
+    await awaitRedisReady(connection);
+    return connection;
+  }
   await waitForRedisReady();
-  if (redisConnection && redisConnection.status === 'ready') {
-    return redisConnection;
+  if (redisConnection && redisConnection.status !== 'end') {
+    const connection = redisConnection;
+    await awaitRedisReady(connection);
+    return connection;
   }
   if (pendingConnection) {
     return pendingConnection;
