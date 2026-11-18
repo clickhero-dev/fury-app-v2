@@ -41,11 +41,11 @@ continua somente leitura; conversas legadas compactadas sem snapshot permanecem
 protegidas pelo erro `retry_compacted`. Um snapshot não recria mensagens/runs que
 já tenham sido removidos pelas políticas de compactação existentes.
 
-Fallback de modelo é opt-in, configurável e limitado às mesmas três tentativas
-totais por requisição, sem replay após saída/ferramentas. Consulte
-[`docs/operations/chat-provider-fallback.md`](../../docs/operations/chat-provider-fallback.md).
-Sem homologação explícita, mantém-se o modelo principal. Falha do próprio
-OpenRouter não é resolvida por trocar o modelo no mesmo gateway.
+O chat usa OpenAI direta (`gpt-6-luna`), Anthropic direta
+(`claude-sonnet-5-5`) e OpenRouter (`google/gemini-3.8-flash`), nessa ordem.
+Provedores sem chave são ignorados. Falhas transitórias e de credencial permitem
+avançar somente antes de saída ou início de ferramenta; não há replay automático
+do agente após essas fronteiras.
 
 O worker de turnos na API recupera respostas após reinício a partir do banco,
 com delegação JIT e limites globais persistidos. A interface acompanha o estado
@@ -63,7 +63,7 @@ Ainda dependem de operação real: homologação editorial com empresários, col
 de latência/custo reais dos modelos e rollout controlado. O CLI de avaliação não
 faz chamadas pagas nem aprova modelos a partir de amostras sintéticas.
 
-Para executar o chat em container local, defina `CHAT_DELEGATION_SECRET` (igual ao da API) e `OPENROUTER_API_KEY` no ambiente, inicie a API na porta 3000 e execute `docker compose -f infra/docker-compose.yml --profile chat up --build chat`. O serviço fica acessível apenas em `127.0.0.1:8000`. Se necessário, configure `CHAT_DATABASE_URL` e `ADY_API_URL` para apontar ao banco e à API acessíveis pelo container; aplique as migrações antes de usá-lo.
+Para executar o chat em container local, defina `CHAT_DELEGATION_SECRET` (igual ao da API), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` e `OPENROUTER_API_KEY` no ambiente, inicie a API na porta 3000 e execute `docker compose -f infra/docker-compose.yml --profile chat up --build chat`. Não inclua valores das chaves em logs ou no repositório. O serviço fica acessível apenas em `127.0.0.1:8000`; aplique as migrações antes de usá-lo.
 
 Antes de produção, concluir a homologação e o checklist de rollout. O fluxo cobre
 consultas de campanhas, anúncios, calendário, marca e mídias; propostas confirmadas
@@ -206,13 +206,11 @@ o smoke externo e o build Docker pertencem ao gate de integração. Para a suít
 
 ### Continuidade e falhas do provedor (#452)
 
-O transporte OpenRouter repete somente a requisição atual, no máximo onze tentativas
-(uma inicial e dez retries),
-antes de qualquer saída ou ferramenta observada no turno. Timeout/conexão, 429 e 5xx
-usam backoff exponencial com jitter; `Retry-After` aceita segundos ou data HTTP. O
-orçamento acumulado de espera é 120 segundos e o de retry da requisição é 300 segundos.
-Uma espera indicada maior que o orçamento encerra sem antecipar o retry. Erros de
-requisição, autenticação, cobrança e contexto não são repetidos automaticamente.
+O orquestrador tenta cada provedor configurado no máximo uma vez por execução,
+sem retries internos dos SDKs. Cada envio físico é verificado e cobrado ao
+orçamento durável do turno antes de sair. Falhas de validação e de orçamento
+interrompem o fluxo; falhas transitórias ou de autenticação permitem passar ao
+próximo provedor apenas antes de conteúdo ou ferramenta.
 
 O agente e suas ferramentas têm prazo total de 240 segundos. EOF sem término SSE,
 `finish_reason: error`, saída truncada por limite ou filtro geram erro recuperável pelo
@@ -221,9 +219,7 @@ conteúdo parcial ou ferramenta: o usuário usa **Retomar resposta**, somente le
 com o `user_message_id` original e propostas preservadas. O deadline cobre a execução
 do agente; preparação/compressão de contexto mantém seus limites HTTP existentes.
 
-Logs `provider_attempt` correlacionam request UUID local, run UUID, modelo validado,
-tentativa, status e fases `initial_failure`, `retry`, `recovered`, `final_failure`.
-Não incluem corpo, credencial nem conteúdo de conversa. `recovered` indica aceitação
-do transporte após retry; falha posterior do stream segue a telemetria de falha de run.
-A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
-operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.
+Falhas de ferramenta ou checkpoint são classificadas pela fase, sem registrar
+argumentos ou mensagens internas, e não são reportadas como falhas de provedor.
+Os testes usam transportes simulados; disponibilidade real dos modelos e
+credenciais exige homologação operacional.

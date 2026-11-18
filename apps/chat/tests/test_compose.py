@@ -34,6 +34,14 @@ def test_imagem_inclui_modulos_de_titulos():
     assert 'conversation_titles.py' in dockerfile
 
 
+def test_configuracao_do_container_inclui_chaves_dos_tres_provedores():
+    compose = (Path(__file__).resolve().parents[3] / 'infra/docker-compose.yml').read_text()
+    for key in ('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY'):
+        assert f'{key}: ${{{key}:-}}' in compose
+    requirements = (Path(__file__).resolve().parents[1] / 'requirements.txt').read_text()
+    assert any(line.startswith('anthropic') for line in requirements.splitlines())
+
+
 @pytest.mark.skipif(shutil.which('docker') is None, reason='Docker indisponível')
 def test_perfil_chat_tem_rede_e_configuracao_local():
     root = Path(__file__).resolve().parents[3]

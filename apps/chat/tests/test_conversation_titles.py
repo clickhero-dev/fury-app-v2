@@ -21,6 +21,18 @@ TENANT = '22222222-2222-4222-8222-222222222222'
 USER = '11111111-1111-4111-8111-111111111111'
 
 
+def test_title_uses_multi_provider_core(monkeypatch):
+    import conversation_titles
+    calls = []
+    async def collect(context, **kwargs):
+        calls.append((context, kwargs))
+        return 'Título seguro'
+    monkeypatch.setattr(conversation_titles, 'collect_text', collect, raising=False)
+    client = object()
+    assert asyncio.run(conversation_titles.model_title('Olá', 'Resposta', client)) == 'Título seguro'
+    assert calls[0][1]['http_client'] is client
+
+
 def headers():
     now = int(time.time())
     token = jwt.encode({'actor': 'chatbot', 'userId': USER, 'tenantId': TENANT, 'iat': now, 'exp': now + 300, 'email': 'test@example.invalid', 'role': 'admin', 'iss': 'ady-api', 'aud': 'ady-chat'}, SECRET, algorithm='HS256')
@@ -131,20 +143,17 @@ def test_title_timeout_uses_fallback(monkeypatch):
 
 def test_title_model_uses_budgeted_http_client(monkeypatch):
     import conversation_titles
-    from types import SimpleNamespace
+    import httpx
+    from model_request_budget import durable_budget_scope
+    from test_multi_provider_core import openai_stream
 
-    captured = {}
-
-    class Model:
-        def __init__(self, **kwargs): captured.update(kwargs)
-
-    class Agent:
-        def __init__(self, *, model, instructions): captured['model'] = model
-        async def arun(self, _prompt): return SimpleNamespace(content='Título seguro')
-
-    monkeypatch.setattr('agno.models.openrouter.OpenRouter', Model)
-    monkeypatch.setattr('agno.agent.Agent', Agent)
-    client = object()
-    result = asyncio.run(conversation_titles.model_title('Olá', 'Resposta', http_client=client))
-    assert captured['http_client'] is client
-    assert result == 'Título seguro'
+    monkeypatch.setenv('OPENAI_API_KEY', 'synthetic')
+    async def scenario():
+        charged = []
+        async def charge(tokens):
+            charged.append(tokens)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: openai_stream('Título seguro'))) as client:
+            with durable_budget_scope(charge):
+                assert await conversation_titles.model_title('Olá', 'Resposta', http_client=client) == 'Título seguro'
+        assert len(charged) == 1
+    asyncio.run(scenario())

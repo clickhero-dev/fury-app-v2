@@ -1,6 +1,7 @@
 """Serviço interno de conversas do Ady."""
 import json
 import asyncio
+import logging
 import os
 import re
 import time
@@ -16,9 +17,11 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, field_validator, model_validator
 from memory import ContextBudgetExceeded, conversation_context, consolidate, compress_memories, requires_compression, estimate_request_tokens, MAX_CONTEXT_COMPACTION_BATCHES, MAX_SUMMARY_RESPONSES_PER_BATCH
 from model_request_budget import create_budgeted_http_client as create_model_http_client, is_model_request_budget_error
+from multi_provider_core import stream_agent, collect_text, ProviderFailure, PersistenceAdmissionFailure
 from tools import AdyTools, ImageProposal
 from chat_read_tools import ChatReadTools
-from streaming import start_stream, recoverable_job_id, resume_approved_video, safe_video_job, checked_agent_events
+from streaming import recoverable_job_id, resume_approved_video, safe_video_job, checked_agent_events
+from stream_lifecycle import start_stream, heartbeat
 from model_request_budget import provider_retry_scope, mark_provider_output, durable_budget_scope
 from turn_recovery import TurnRecovery, transient_failure
 from telemetry import classify_provider_error, report_provider_failure
@@ -36,7 +39,7 @@ from dotenv import load_dotenv
 from assistant_policy import editorial_instructions, STRUCTURED_RESPONSE_INSTRUCTIONS
 from assistant_policy import POLICY_VERSION
 from checkpoints import CheckpointRepository, redact_checkpoint_data
-from checkpoint_tools import checkpointed_tool
+from checkpoint_tools import ToolGuard, ToolFailure
 from assistant_metrics import report_assistant_event
 from guided_setup import GuidedSetup, GuidedSetupTools
 
@@ -128,7 +131,7 @@ def create_app():
         app.state.tasks = set()
         app.state.recovering = set()
         app.state.http = httpx.AsyncClient()
-        app.state.model_http = create_model_http_client()
+        app.state.model_http = httpx.AsyncClient(timeout=60)
         yield
         if app.state.tasks:
             try:
@@ -308,22 +311,15 @@ def create_app():
                 latency_ms=int((time.monotonic()-started_at)*1000),
                 input_mode='retry' if retry else ('choice' if clarification_id else 'typed'),
             )
-        async def heartbeat():
-            while True:
-                await asyncio.sleep(10)
-                try:
-                    updated = await fenced.heartbeat()
-                    if not updated: return
-                except Exception:
-                    return
         async def produce(emit):
             with durable_budget_scope(lambda tokens: recovery.charge(user_message_id,run_id,lease_id,tokens)):
                 await produce_budgeted(emit)
         async def produce_budgeted(emit):
-            heartbeat_task = asyncio.create_task(heartbeat())
+            heartbeat_task = asyncio.create_task(heartbeat(lambda: fenced.heartbeat()))
             provider_active = False
+            tool_guard = None
             async def report(error):
-                await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error))
+                await report_provider_failure(app.state.http, os.getenv('POSTHOG_HOST', 'https://us.i.posthog.com'), os.getenv('POSTHOG_API_KEY', ''), classify_provider_error(error), getattr(error, 'provider', None))
             async def report_retry(attempt, max_attempts, retry_in_ms):
                 await emit('event: retrying\ndata: ' + json.dumps({
                     'attempt': attempt,
@@ -333,12 +329,11 @@ def create_app():
             try:
                 await observe('started')
                 await emit('event: run\ndata: ' + json.dumps({'run_id': str(run_id), 'user_message_id': str(user_message_id), 'client_key': str(client_key) if client_key else None}) + '\n\n')
-                from agno.agent import Agent
-                from agno.models.openrouter import OpenRouter
                 checkpoints = CheckpointRepository(
                     db, user['tenantId'], user['userId'], conversation_id,
                     run_id, lease_id, user_message_id, policy_version=POLICY_VERSION,
                 )
+                tool_guard = ToolGuard(checkpoints)
                 saved_context = await checkpoints.load_context() if retry else None
                 async def read_context():
                     if saved_context is not None:
@@ -394,16 +389,14 @@ def create_app():
                     ]
                 async def summarize(previous, messages):
                     nonlocal provider_active
-                    summary_agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), instructions=['Resuma fatos úteis em JSON: {"facts":[{"topic":"...","text":"..."}]}. Preserve fatos anteriores e não invente informações.'])
                     payload = redact_checkpoint_data({'previous': previous, 'messages': [{'role': m['role'], 'content': m['content']} for m in messages]})
                     with provider_retry_scope(run_id, on_retry=report_retry):
                         provider_active = True
-                        result = await summary_agent.arun(json.dumps(payload, ensure_ascii=False))
+                        result = await collect_text(json.dumps(payload, ensure_ascii=False), http_client=app.state.model_http,
+                            instructions=['Resuma fatos úteis em JSON: {"facts":[{"topic":"...","text":"..."}]}. Preserve fatos anteriores e não invente informações.'])
                         provider_active = False
-                    return result.content
+                    return result
                 async def context_size():
-                    if os.environ['MODEL_CHATBOT'] == 'deepseek/deepseek-v4-pro-0813':
-                        return await asyncio.to_thread(estimate_request_tokens, instructions(), agent_history(), tool_list)
                     return await asyncio.to_thread(estimate_request_tokens, instructions(), agent_history(), tool_list, lambda text: len(text.encode('utf-8')))
                 if requires_compression(await context_size()):
                     # Retry intentionally excludes unversioned memories. Pruning
@@ -429,38 +422,23 @@ def create_app():
                 if requires_compression(await context_size()):
                     async def compress(facts):
                         nonlocal provider_active
-                        compact_agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), instructions=['Condense os fatos em JSON estrito {"facts":[{"topic":"...","text":"..."}]}, preservando informações relevantes. Não invente fatos.'])
                         with provider_retry_scope(run_id, on_retry=report_retry):
                             provider_active = True
-                            result = await compact_agent.arun(json.dumps(redact_checkpoint_data(facts), ensure_ascii=False))
+                            result = await collect_text(json.dumps(redact_checkpoint_data(facts), ensure_ascii=False),
+                                http_client=app.state.model_http,
+                                instructions=['Condense os fatos em JSON estrito {"facts":[{"topic":"...","text":"..."}]}, preservando informações relevantes. Não invente fatos.'])
                             provider_active = False
-                        return result.content
-                    try:
-                        await compress_memories(db, user['tenantId'], user['userId'], compress)
-                    except Exception as error:
-                        await report(error)
-                        raise
+                        return result
+                    await compress_memories(db, user['tenantId'], user['userId'], compress)
                     context, history = await read_context()
                     if requires_compression(await context_size()):
                         raise ContextBudgetExceeded('A conversa excede o limite seguro de contexto do modelo.')
                 # Capture the actual causal context after safe compaction, before
                 # any provider call/tool. Attachments are re-read under current auth.
                 await checkpoints.save_context(context, history)
-                tool_checkpoint_failed = False
                 async def guarded_tool(function, args, function_name=None):
-                    nonlocal tool_checkpoint_failed
-                    if tool_checkpoint_failed:
-                        raise RuntimeError('Não foi possível preservar o trabalho desta resposta.')
                     mark_provider_output()
-                    try:
-                        return await checkpointed_tool(checkpoints, function, args, name=function_name)
-                    except Exception:
-                        # Agno may turn hook exceptions into tool results and log
-                        # them. Never expose DB diagnostics or allow a subsequent
-                        # action after a failed checkpoint.
-                        tool_checkpoint_failed = True
-                        raise RuntimeError('Não foi possível preservar o trabalho desta resposta.') from None
-                agent = Agent(model=OpenRouter(id=os.environ['MODEL_CHATBOT'], timeout=60, max_retries=0, retries=0, http_client=app.state.model_http), tools=tool_list, tool_hooks=[guarded_tool], tool_call_limit=12, instructions=instructions())
+                    return await tool_guard(function, args, function_name=function_name)
                 chunks = []
                 model_chunks = []
                 model_length = 0
@@ -471,9 +449,12 @@ def create_app():
                     await emit('event: token\ndata: ' + json.dumps({'content': evidence.notice}) + '\n\n')
                 provider_active = True
                 with provider_retry_scope(run_id, on_retry=report_retry) as provider_state:
-                    async for event in checked_agent_events(agent.arun(conversation_context(agent_history()), stream=True), provider_state):
-                        if tool_checkpoint_failed:
-                            raise RuntimeError('Não foi possível preservar o trabalho desta resposta.')
+                    events = stream_agent(conversation_context(agent_history()), http_client=app.state.model_http,
+                                          agent_options={'tools': tool_list, 'tool_hooks': [guarded_tool],
+                                                         'tool_call_limit': 12, 'instructions': instructions()})
+                    async for event in checked_agent_events(events, provider_state):
+                        if tool_guard.failed:
+                            raise ToolFailure('execution')
                         content = getattr(event, 'content', None)
                         if isinstance(content, str) and content:
                             mark_provider_output()
@@ -493,8 +474,8 @@ def create_app():
                                     prefix_pending = ''
                             elif not structured:
                                 await emit('event: token\ndata: ' + json.dumps({'content': content}) + '\n\n')
-                if tool_checkpoint_failed:
-                    raise RuntimeError('Não foi possível preservar o trabalho desta resposta.')
+                if tool_guard.failed:
+                    raise ToolFailure('execution')
                 if not ''.join(model_chunks).strip():
                     raise ValueError('Resposta vazia')
                 provider_active = False
@@ -525,8 +506,8 @@ def create_app():
                     title_task = asyncio.create_task(generate_title(repo, conversation_id, first_user, ''.join(chunks), http_client=app.state.model_http))
                 try:
                     await consolidate(db, conversation_id, summarize, message_repository=attachment_repository)
-                except Exception as error:
-                    await report(error)
+                except Exception:
+                    logging.getLogger('ady.chat').warning('memory_consolidation_failed')
                 stored_clarification = await db.fetchrow('SELECT id,run_id,message_id,question,choices,selected_index,answer_message_id,dismissed_at,created_at FROM chat_clarifications WHERE run_id=$1', run_id) if clarification else None
                 clarify_event = {**serial(stored_clarification), 'choices':json.loads(stored_clarification['choices'])} if stored_clarification else None
                 await emit('event: done\ndata: ' + json.dumps({'message': serial(row), 'messages': [serial(item) for item in rows], 'clarification':clarify_event, 'run_id': str(run_id), 'user_message_id': str(user_message_id), 'client_key': str(client_key) if client_key else None}) + '\n\n')
@@ -540,10 +521,10 @@ def create_app():
             except Exception as error:
                 await observe('failed')
                 request_budget_error = is_model_request_budget_error(error)
-                if provider_active and not isinstance(error, (RunExpired, ContextBudgetExceeded)) and not request_budget_error:
+                if provider_active and not (tool_guard and tool_guard.failed) and not isinstance(error, (RunExpired, ContextBudgetExceeded, ToolFailure, PersistenceAdmissionFailure)) and not request_budget_error:
                     await report(error)
                 try:
-                    await recovery.finish(run_id,lease_id,transient=provider_active and transient_failure(error))
+                    await recovery.finish(run_id,lease_id,transient=provider_active and not (tool_guard and tool_guard.failed) and transient_failure(error))
                 except Exception:
                     pass
                 budget_error = isinstance(error, ContextBudgetExceeded) or request_budget_error

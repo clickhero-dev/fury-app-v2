@@ -35,10 +35,11 @@ def test_provider_failure_is_visible_and_retry_preserves_turn(monkeypatch, failu
                 return httpx.Response(200,headers={'content-type':'text/event-stream'},content=chunk('Proposta pronta.')+b'data: [DONE]\n\n')
             monkeypatch.setenv('MODEL_CHATBOT','synthetic/model')
             monkeypatch.setenv('OPENROUTER_API_KEY','synthetic')
+            monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+            monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
             monkeypatch.setenv('ADY_API_URL','https://ady.invalid')
             monkeypatch.setenv('POSTHOG_API_KEY','')
             monkeypatch.setenv('DATABASE_URL',os.environ['CHAT_MEDIA_TEST_DATABASE_URL'])
-            monkeypatch.setattr(chat_app,'create_model_http_client',lambda: budget.create_budgeted_http_client(transport=httpx.MockTransport(handler)))
             original=chat_app.checked_agent_events
             monkeypatch.setattr(chat_app,'checked_agent_events',lambda events,state: original(events,state,timeout=0.2 if failure == 'deadline' and not requests else 5))
             async def noop(*args,**kwargs): pass
@@ -48,6 +49,7 @@ def test_provider_failure_is_visible_and_retry_preserves_turn(monkeypatch, failu
             application.dependency_overrides[chat_app.identity]=lambda: {'tenantId':tenant,'userId':user}
             async with application.router.lifespan_context(application):
                 application.state.pool=pool
+                application.state.model_http._transport = httpx.MockTransport(handler)
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),base_url='http://chat',headers={'authorization':'Bearer synthetic'}) as client:
                     failed=await client.post(f'/conversations/{cid}/messages',json={'content':'Planeje novembro'})
                     assert 'event: error' in failed.text
