@@ -11,7 +11,7 @@ import app as chat
 
 
 @pytest.fixture
-def runtime(monkeypatch):
+def runtime(monkeypatch, guided_setup_unavailable):
     cid, tenant, user, mid = (uuid4() for _ in range(4))
     events, captured, completions = [], [], []
     state = {'snapshot': None, 'save_error': False}

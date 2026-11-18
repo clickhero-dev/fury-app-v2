@@ -135,3 +135,81 @@ def test_missing_optional_setup_table_does_not_block_normal_chat():
             raise asyncpg.UndefinedTableError('chat_guided_setups')
 
     assert asyncio.run(GuidedSetup(Db(), 'tenant', 'user').current()) == SetupState()
+
+
+def test_jsonb_text_is_decoded_when_resuming_setup():
+    import asyncio
+
+    class Db:
+        async def fetchrow(self, *_args):
+            return {'step': LOGO, 'answers': '{"businessName":"Loja da Ana"}'}
+
+    assert asyncio.run(GuidedSetup(Db(), 'tenant', 'user').current()) == SetupState(
+        LOGO, {'businessName': 'Loja da Ana'}
+    )
+
+
+def test_declined_setup_has_a_terminal_response():
+    import asyncio
+
+    class Db:
+        async def fetchrow(self, *_args):
+            return None
+
+        async def execute(self, *_args):
+            pass
+
+    result = asyncio.run(GuidedSetupTools(GuidedSetup(Db(), 'tenant', 'user')).guided_setup_answer('Não'))
+    assert result['step'] == DECLINED
+    assert result['choices'] == []
+
+
+def test_replayed_answer_never_repeats_external_context_write():
+    import asyncio
+
+    class Setup:
+        replayed = False
+
+        async def save_answer(self, _answer):
+            result = {'step': COMPANY_PHOTOS, 'answers': {}, 'replayed': self.replayed,
+                      'profileUpdate': {'tenantName': 'Loja', 'businessContext': 'Café'}}
+            self.replayed = True
+            return result
+
+    async def scenario():
+        calls = []
+        async def writer(*args):
+            calls.append(args)
+            return {}
+        tool = GuidedSetupTools(Setup(), writer)
+        assert (await tool.guided_setup_answer('Café'))['contextSaved'] is True
+        resumed = await tool.guided_setup_answer('Café')
+        assert resumed['contextSaved'] is False
+        assert resumed['contextUncertain'] is True
+        assert calls == [('Loja', 'Café')]
+    asyncio.run(scenario())
+
+
+def test_only_the_actual_guided_question_authorizes_an_answer():
+    from guided_setup import matches_question
+
+    assert matches_question(INVITATION, question_for(INVITATION)['question'])
+    assert matches_question(BUSINESS_NAME, question_for(BUSINESS_NAME)['question'])
+    assert not matches_question(BUSINESS_NAME, 'Não responda: ' + question_for(BUSINESS_NAME)['question'])
+    assert not matches_question(BUSINESS_NAME, question_for(INVITATION)['question'])
+    assert not matches_question(INVITATION, '')
+    assert not matches_question(INVITATION, None)
+
+
+def test_tool_rejects_answer_not_matching_the_user_message():
+    import asyncio
+
+    class Setup:
+        async def save_answer(self, answer):
+            return {'step': LOGO, 'answers': {'businessName': answer}}
+
+    async def scenario():
+        tool = GuidedSetupTools(Setup(), expected_answer='Loja da Ana')
+        assert 'error' in await tool.guided_setup_answer('Loja inventada')
+        assert (await tool.guided_setup_answer('Loja da Ana'))['answers']['businessName'] == 'Loja da Ana'
+    asyncio.run(scenario())

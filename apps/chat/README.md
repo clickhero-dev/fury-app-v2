@@ -208,7 +208,9 @@ o smoke externo e o build Docker pertencem ao gate de integração. Para a suít
 
 O transporte OpenRouter repete somente a requisição atual, no máximo onze tentativas
 (uma inicial e dez retries),
-antes de qualquer saída ou ferramenta observada no turno. Timeout/conexão, 429 e 5xx
+antes de qualquer saída ou ferramenta observada no turno. Uma requisição nova com
+resultado de ferramenta também pode ser repetida antes de entregar sua própria
+saída: apenas o HTTP é repetido, não a ferramenta. Timeout/conexão, 429 e 5xx
 usam backoff exponencial com jitter; `Retry-After` aceita segundos ou data HTTP. O
 orçamento acumulado de espera é 120 segundos e o de retry da requisição é 300 segundos.
 Uma espera indicada maior que o orçamento encerra sem antecipar o retry. Erros de
@@ -216,9 +218,9 @@ requisição, autenticação, cobrança e contexto não são repetidos automatic
 
 O agente e suas ferramentas têm prazo total de 240 segundos. EOF sem término SSE,
 `finish_reason: error`, saída truncada por limite ou filtro geram erro recuperável pelo
-tratamento de run existente. Não se reinicia automaticamente o agente depois de
-conteúdo parcial ou ferramenta: o usuário usa **Retomar resposta**, somente leitura,
-com o `user_message_id` original e propostas preservadas. O deadline cobre a execução
+tratamento de run existente. Não se reinicia o mesmo stream depois de entregar
+conteúdo parcial; a recuperação de turno usa o `user_message_id` original e
+preserva propostas, sem repetir ações externas. O deadline cobre a execução
 do agente; preparação/compressão de contexto mantém seus limites HTTP existentes.
 
 Logs `provider_attempt` correlacionam request UUID local, run UUID, modelo validado,
@@ -227,3 +229,16 @@ Não incluem corpo, credencial nem conteúdo de conversa. `recovered` indica ace
 do transporte após retry; falha posterior do stream segue a telemetria de falha de run.
 A configuração usa `MODEL_CHATBOT`; “Evo” ainda precisa ser identificado com evidência
 operacional. Os testes demonstram falhas controladas, não a causa do relato em produção.
+
+O setup guiado requer as migrations `0084` e `0085`. Cada turno captura a etapa
+antes do modelo e registra o avanço com um recibo atômico por mensagem; uma
+retomada devolve o recibo e não avança novamente. Uma etapa alterada por outra
+execução após a captura é rejeitada. A ferramenta de resposta só fica disponível
+quando a pergunta exibida corresponde à pergunta canônica da etapa, e aceita
+apenas o texto enviado pela pessoa; caso contrário, é preciso confirmar novamente.
+Se a tabela ou o snapshot estiverem
+indisponíveis, o chat normal continua, mas a resposta guiada não é aplicada.
+As chamadas externas de atualização de perfil não são repetidas automaticamente:
+se o processo cair após gravar a resposta, o resultado do perfil pode ser
+incerto e deve ser conferido. Isso evita sobrescritas e não é garantia de
+entrega exatamente uma vez.
