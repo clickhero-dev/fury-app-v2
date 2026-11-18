@@ -22,3 +22,13 @@ O log da tentativa mais recente de jornada-real no SHA 5ccf879 mostra login bem-
 - Preservar o worker de planos do chatbot: iniciá-lo apenas após probe, migrations e seed bem-sucedidos; manter o encerramento no SIGTERM. Aceite: teste de integração do bootstrap e build da API passam.
 - Preservar todas as migrations já registradas nas duas branches, incluindo `0063_ady_rbac_plan_views_blocked` e as migrations do chatbot; validar o conjunto integrado e o CI do SHA resultante.
 - Manter a PR em rascunho até correlacionar as seis ocorrências e comprovar APP_ENV, capacidade do pool, funcionamento em HMG e restart pelo supervisor. A PR #427 continua aberta e deve ser reconciliada novamente caso seja integrada primeiro.
+
+## Plano de verificação operacional e reconciliação de 18/11
+
+1. Exportar os seis eventos individuais do PostHog com IDs e timestamps UTC; para cada um, consultar logs do backend, banco e plataforma na mesma janela e registrar serviço, ambiente e causa apenas quando houver correlação verificável. Aceite: seis registros com evidência ou lacuna explicitada; não inferir a origem pelo texto da consulta.
+2. Identificar os serviços e réplicas reais; conferir `APP_ENV` em cada backend sem registrar segredos. Validar em HMG que um evento de falha e um de recuperação carregam serviço, ambiente e categoria, sem mensagens do driver ou credenciais. Aceite: evidências sanitizadas por ambiente.
+3. Obter limites de conexão, reserva administrativa e número máximo de processos; comparar a soma dos limites de pool por processo com a capacidade disponível. Medir latência de conexão e cancelamento para avaliar os prazos iguais de 10 s. Aceite: dimensionamento e margens documentados com fontes, ou ajuste acompanhado de testes.
+4. Em homologação, simular indisponibilidade e recuperação de forma controlada, observar health, filas e reinício automático pelo supervisor. Aceite: health crítico durante a janela, saída 1, reinício comprovado, retomada dos jobs e ausência de perda silenciosa.
+5. Integrar a base `hmg`, preservar ambas as variáveis de CI do conflito e os workers de chatbot após o bootstrap. Reavaliar a PR #427 se ela for integrada; executar testes focados, builds e todos os checks do SHA final. Aceite: PR sem conflitos e CI verde no SHA atual.
+
+Em 18/11, `hmg` avançou e a #435 passou a apresentar conflito no workflow de CI. A reconciliação preserva `PROBE_E2E_DATABASE_URL` e `TEST_RATING_DATABASE`; o worker de recuperação de turnos incorporado pela base permanece após `startupReady`. A #427 segue aberta. O acesso a PostHog e aos logs/configurações dos serviços não está disponível nesta sessão; os passos 1–4 continuam pendentes e não se deve concluir o card com base apenas em testes locais ou CI.
