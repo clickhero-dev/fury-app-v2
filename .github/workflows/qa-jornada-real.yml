@@ -73,17 +73,18 @@ jobs:
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
           QA_EMAIL: ${{ secrets.QA_EMAIL }}
           QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
-        run: pnpm test:qa -- jornada-leitura.spec.ts
+        run: pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-leitura.spec.ts
 
       - name: Run QA jornada real com ações reais
         if: github.event_name == 'workflow_dispatch' && inputs.allow_mutations
         working-directory: apps/web
         env:
+          QA_ALLOW_MUTATIONS: 'true'
           QA_BASE_URL: http://127.0.0.1:5173
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
           QA_EMAIL: ${{ secrets.QA_EMAIL }}
           QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
-        run: pnpm test:qa -- jornada-real.spec.ts
+        run: pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-real.spec.ts
 
       - name: Upload report
         if: failure()

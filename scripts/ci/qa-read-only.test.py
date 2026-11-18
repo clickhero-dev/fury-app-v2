@@ -25,12 +25,16 @@ class ReadOnlyQAContract(unittest.TestCase):
                     'inputs': SimpleNamespace(allow_mutations=opt_in),
                 })
                 self.assertEqual(result, expected)
-        self.assertIn('pnpm test:qa -- jornada-real.spec.ts', step.group(1))
+        self.assertIn('pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-real.spec.ts', step.group(1))
 
     def test_safe_journey_is_the_default(self):
         source = WORKFLOW.read_text()
         self.assertRegex(source, r'allow_mutations:[\s\S]*?type: boolean\s+default: false')
-        self.assertIn('pnpm test:qa -- jornada-leitura.spec.ts', source)
+        self.assertIn('pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-leitura.spec.ts', source)
+        self.assertNotIn('pnpm test:qa --', source)
+        spec = (WORKFLOW.parents[2] / 'apps/web/e2e-qa/jornada-real.spec.ts').read_text()
+        self.assertIn("test.skip(process.env.QA_ALLOW_MUTATIONS !== 'true'", spec)
+        self.assertIn("QA_ALLOW_MUTATIONS: 'true'", source)
         self.assertIn('python scripts/ci/qa-read-only.test.py', source)
 
 
