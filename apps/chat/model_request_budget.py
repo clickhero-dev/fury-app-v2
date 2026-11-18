@@ -17,6 +17,7 @@ import httpx
 from openai import OpenAIError
 
 from memory import count_tokens
+from provider_policy import ProviderPolicy
 
 MAX_MODEL_REQUEST_TOKENS = 50_000
 MODEL_RESPONSE_RESERVE_TOKENS = 4_096
@@ -182,8 +183,10 @@ class SanitizedEventStream(httpx.AsyncByteStream):
 
 class SafeProviderTransport(httpx.AsyncBaseTransport):
     """Retry only a pre-output request; never pass provider error bodies to SDK logs."""
-    def __init__(self, inner):
+    def __init__(self, inner, *, guard_request=None, policy=None):
         self.inner = inner
+        self.guard_request = guard_request
+        self.policy = policy or ProviderPolicy()
 
     async def handle_async_request(self, request):
         is_chat = request.method == 'POST' and request.url.path.endswith('/chat/completions')
@@ -199,6 +202,10 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
         except (ValueError, AttributeError):
             model = ''
         model = model if isinstance(model, str) and re.fullmatch(r'[a-zA-Z0-9/._:-]{1,128}', model) else 'unknown'
+        primary_model = model
+        payload = json.loads(request.content)
+        candidates = self.policy.candidates(payload)
+        original_request = request
 
         async def retry(attempt, status=None, headers=None, *, retryable=True):
             nonlocal waited
@@ -228,10 +235,26 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
             return True
 
         def recovered(attempt):
+            if state is not None:
+                state['selected_model'] = model
+                state['fallback_used'] = model != primary_model
             if attempt:
                 logging.getLogger('ady.chat').info('provider_attempt request=%s run=%s model=%s phase=recovered attempt=%s', correlation, run_id, model, attempt + 1)
 
         for attempt in range(MAX_PROVIDER_ATTEMPTS):
+            if attempt and candidates:
+                model = candidates[min(attempt - 1, len(candidates) - 1)]
+                body = json.dumps({**payload, 'model': model}, ensure_ascii=False).encode('utf-8')
+                headers = original_request.headers.copy()
+                headers.pop('content-length', None)
+                request = httpx.Request(
+                    original_request.method, original_request.url, headers=headers,
+                    content=body, extensions=original_request.extensions,
+                )
+                # Transport retries bypass HTTPX event hooks. Invoke the exact
+                # same guard on the rewritten body before every fallback send.
+                if self.guard_request is not None:
+                    await self.guard_request(request)
             if state is not None:
                 state['error_kind'] = 'error'
             try:
@@ -256,6 +279,11 @@ class SafeProviderTransport(httpx.AsyncBaseTransport):
                         if await retry(attempt):
                             continue
                         raise httpx.ReadTimeout('Model provider timeout', request=request) from None
+                    except httpx.ReadError:
+                        await response.aclose()
+                        if await retry(attempt):
+                            continue
+                        raise httpx.ReadError('Model provider stream failed', request=request) from None
                     except BaseException:
                         await response.aclose()
                         raise
@@ -322,6 +350,9 @@ def create_budgeted_http_client(
 
     return httpx.AsyncClient(
         timeout=60,
-        transport=SafeProviderTransport(transport or httpx.AsyncHTTPTransport()),
+        transport=SafeProviderTransport(
+            transport or httpx.AsyncHTTPTransport(), guard_request=guard_request,
+            policy=ProviderPolicy.from_env(),
+        ),
         event_hooks={'request': [guard_request]},
     )

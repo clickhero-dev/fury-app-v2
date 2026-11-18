@@ -12,7 +12,7 @@ import app as chat
 
 
 @pytest.mark.parametrize('model_text', [''])
-def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(monkeypatch, model_text):
+def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(monkeypatch, model_text, checkpoint_store):
     tenant, user, cid = uuid4(), uuid4(), uuid4()
     now = int(time.time())
     secret = 'test-secret-with-at-least-32-characters'

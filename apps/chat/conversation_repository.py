@@ -59,10 +59,22 @@ class ConversationRepository:
                 if client_key is not None and not await conn.fetchval("INSERT INTO chat_send_keys(conversation_id,client_key) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING client_key", conversation_id, client_key):
                     raise ConversationError(409, 'Envio já registrado. Atualize a conversa.')
                 if retry:
-                    # Summaries do not carry a causal watermark. Their facts may
-                    # describe turns newer than the target, so never guess.
+                    # Legacy summaries have no causal watermark. New turns have
+                    # a frozen snapshot, so later compaction cannot contaminate
+                    # their retry. Do not use some other turn's checkpoint.
                     if await conn.fetchval('SELECT 1 FROM chat_memories WHERE conversation_id=$1', conversation_id):
-                        raise ConversationError(409, 'Não é possível retentar após a compactação desta conversa.', code='retry_compacted')
+                        snapshot = await conn.fetchval('''SELECT 1 FROM chat_turn_checkpoints
+                            WHERE conversation_id=$1 AND user_message_id=(
+                                SELECT r.user_message_id FROM chat_response_runs r
+                                WHERE r.conversation_id=$1 AND ($2::uuid IS NULL OR r.id=$2)
+                                AND NOT EXISTS (SELECT 1 FROM chat_response_runs newer
+                                    WHERE newer.conversation_id=r.conversation_id
+                                    AND newer.user_message_id=r.user_message_id
+                                    AND (newer.created_at,newer.id)>(r.created_at,r.id))
+                                ORDER BY r.created_at DESC,r.id DESC LIMIT 1)''',
+                            conversation_id, retry_run_id)
+                        if not snapshot:
+                            raise ConversationError(409, 'Não é possível retentar após a compactação desta conversa.', code='retry_compacted')
                     previous = await conn.fetchrow("""SELECT r.user_message_id,r.status FROM chat_response_runs r
                         WHERE r.conversation_id=$1 AND ($2::uuid IS NULL OR r.id=$2)
                         AND NOT EXISTS (SELECT 1 FROM chat_response_runs newer

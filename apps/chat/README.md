@@ -4,6 +4,47 @@ Crie um ambiente Python 3.12 e instale `requirements.txt` (ou `requirements-dev.
 
 Execute os testes com `PYTHONPATH=apps/chat pytest apps/chat/tests`. Para testes PostgreSQL, forneça `CHAT_TEST_DATABASE_URL` apontando a um banco isolado. As migrações são gerenciadas por `packages/db`.
 
+### Refinamento proativo e recuperação
+
+Spec de produto e limites: [`specs/ady-proativo-resiliente/spec.md`](../../specs/ady-proativo-resiliente/spec.md).
+O Ady prepara ideias, legendas e organização em rascunho sem exigir briefing de
+marketing. A política e as quatro skills editoriais ficam em `assistant_policy.py`;
+a versão da política integra os checkpoints. A confirmação de custo/publicação
+permanece no backend. Instruções ao modelo não garantem qualidade editorial:
+homologação com negócios reais continua necessária.
+
+Aplique `0080_chat_turn_checkpoints.sql` com o runner de migrations **antes** de
+subir esta versão. Contexto efetivo é salvo antes do agente; retomadas podem usar
+o snapshot mesmo depois da compactação da conversa. Consultas estáveis confirmadas
+são reutilizadas apenas no mesmo turno original, após consultar novamente a
+rota original para revalidar autorização e acesso ao recurso. Sem essa confirmação,
+o cache não é devolvido. Cotas e jobs continuam sendo consultados ao vivo.
+Dados em cache não substituem a revalidação de acesso,
+snapshot do recurso e confirmação exigida para executar uma ação.
+
+Snapshots não contêm tokens/headers e estão isolados por conversa e proprietário,
+com lease/fencing; são removidos com a conversa. Limites: 1 MiB de contexto e
+128 KiB por resultado de ferramenta. O runtime omite padrões de credenciais do
+histórico antes de enviá-lo ao modelo/snapshot; mensagens brutas continuam no
+histórico privado existente. O repositório recusa credenciais não sanitizadas.
+Payload incompatível ou erro de persistência interrompe a resposta de forma segura,
+sem alegar sucesso.
+Não há gravação de tokens parciais nem replay automático de mutações. Retomada
+continua somente leitura; conversas legadas compactadas sem snapshot permanecem
+protegidas pelo erro `retry_compacted`. Um snapshot não recria mensagens/runs que
+já tenham sido removidos pelas políticas de compactação existentes.
+
+Fallback de modelo é opt-in, configurável e limitado às mesmas três tentativas
+totais por requisição, sem replay após saída/ferramentas. Consulte
+[`docs/operations/chat-provider-fallback.md`](../../docs/operations/chat-provider-fallback.md).
+Sem homologação explícita, mantém-se o modelo principal. Falha do próprio
+OpenRouter não é resolvida por trocar o modelo no mesmo gateway.
+
+Ainda não estão implementados: worker de recuperação automática dos turnos
+conversacionais após reinício, journal atômico de mutações, referências de
+resultados entre tarefas e aprovação em lote. O worker persistido de **planos**
+já existente não equivale à recuperação completa de um turno do agente.
+
 Para executar o chat em container local, defina `CHAT_DELEGATION_SECRET` (igual ao da API) e `OPENROUTER_API_KEY` no ambiente, inicie a API na porta 3000 e execute `docker compose -f infra/docker-compose.yml --profile chat up --build chat`. O serviço fica acessível apenas em `127.0.0.1:8000`. Se necessário, configure `CHAT_DATABASE_URL` e `ADY_API_URL` para apontar ao banco e à API acessíveis pelo container; aplique as migrações antes de usá-lo.
 
 Este serviço ainda não está pronto para produção: o fluxo experimental cobre consultas de campanhas, anúncios, calendário, marca e mídias; propostas com confirmação para criar e editar imagem e vídeo, criar ou alterar campanha, criar anúncio com conjunto e criativo existentes, pausar, renomear ou duplicar anúncio, agendar e cancelar postagem no Instagram e atualizar perfil, negócio e marca. Após reinício, uma resposta interrompida pode ser retomada explicitamente pelo usuário; a retomada é somente leitura e preserva propostas anteriores. Jobs de criação e ajuste de vídeo são consultados ao reabrir a conversa. A compressão estima memória, histórico, instruções e schemas Agno com tokenizer nativo DeepSeek V4 Pro, margem de 16 tokens por item e reserva de 4.096 tokens para resposta; outros modelos usam limite conservador por bytes. A formatação final do provedor pode diferir da estimativa.

@@ -586,8 +586,8 @@ function reconcilePending(id: string, runs: ResponseRun[], keys: string[] = []) 
 </DialogPrimitive.Root>
 <div ref={messagesRef} onLoadCapture={() => { if (messagesRef.current && followLatest.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; }} onScroll={e => { const el = e.currentTarget; const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80; followLatest.current = nearBottom; setAwayFromLatest(!nearBottom); }} className="ady-chat-messages" aria-live="polite">{messages.length === 0 && approvals.length === 0 && plans.plans.length === 0 && <div className="ady-chat-welcome">
 <div className="ady-chat-intro">
-<h1>Como posso ajudar?</h1>
-<p>Conte sua ideia ou escolha uma sugestão para começar.</p>
+<h1>Vamos preparar seu próximo post?</h1>
+<p>Você não precisa saber de marketing. Escolha por onde começar e eu preparo com o que já sei do seu negócio. Você revisa antes de publicar.</p>
 </div>
 <ChatQuickActions onSelect={prompt => { void submitMessage(prompt); }} disabled={composerDisabled}/>
 </div>}<MessageList messages={messages} approvals={approvals} conversationId={current} clarifications={clarifications} onChoose={choose} disabled={opening || deleting || sendUncertain || busy}>{approvals.map(a => <article className="ady-chat-approval" data-status={a.status} data-approval-id={a.id} key={a.id}>
