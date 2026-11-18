@@ -46,8 +46,15 @@ export function InstagramShare({src, kind, mediaKey}: {src:string; kind:'image'|
       const result = await api.post(`/planner/chat-media/${encodeURIComponent(mediaKey)}/publish`, {caption, instagramUserId});
       if (result.data?.data?.status === 'published') setMessage('Publicado com sucesso no Instagram.');
       else setMessage('Não foi possível confirmar a publicação. Verifique o calendário antes de tentar novamente.');
-    } catch {
-      setMessage('Não foi possível confirmar a publicação. Verifique o calendário antes de tentar novamente.');
+    } catch (error) {
+      const response = (error as {response?:{status?:number;data?:{error?:{code?:string}}}})?.response;
+      if (response?.status === 400 && response.data?.error?.code === 'REEL_REQUIRES_VIDEO') {
+        sessionStorage.removeItem(`chat-ig-publish:${mediaKey}`);
+        setLocked(false);
+        setMessage('Para publicar como Reels, use vídeo MP4 ou MOV. Você ainda pode baixar a mídia.');
+      } else {
+        setMessage('Não foi possível confirmar a publicação. Verifique o calendário antes de tentar novamente.');
+      }
     } finally { submitting.current = false; setBusy(false); setReview(false); }
   }
   return <div>

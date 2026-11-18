@@ -13,6 +13,8 @@ export class ChatMediaPublishService {
   async publish(tenantId:string, userId:string, approvalId:string, caption:string, expectedInstagramUserId:string) {
     const media = await this.repo.findMedia(tenantId,userId,approvalId);
     if (!media) throw new AppError(404,'CHAT_MEDIA_NOT_FOUND','Mídia não encontrada ou indisponível.');
+    if (media.kind === 'video' && !/\.(mp4|mov)(\?|$)/i.test(media.url))
+      throw new AppError(400,'REEL_REQUIRES_VIDEO','Reels precisa de um vídeo MP4 ou MOV.');
     if (!await this.repo.claim(tenantId,userId,approvalId)) {
       const saved = await this.repo.result(tenantId,userId,approvalId);
       if (saved) return saved;

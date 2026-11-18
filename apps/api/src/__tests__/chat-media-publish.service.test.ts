@@ -20,6 +20,13 @@ describe('publicação de mídia gerada no chat', () => {
     await expect(service.publish('tenant','user','approval','','ig')).rejects.toMatchObject({statusCode:404});
     expect(publish).not.toHaveBeenCalled();
   });
+  it('rejeita vídeo incompatível antes de adquirir claim', async () => {
+    const {service,repo,publish} = setup();
+    repo.findMedia.mockResolvedValue({kind:'video',url:'https://example.com/video.webm'});
+    await expect(service.publish('tenant','user','approval','','ig')).rejects.toMatchObject({statusCode:400,code:'REEL_REQUIRES_VIDEO'});
+    expect(repo.claim).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
   it('não repete uma publicação em andamento ou concluída', async () => {
     const {service,repo,publish} = setup(); repo.claim.mockResolvedValue(false);
     await expect(service.publish('tenant','user','approval','','ig')).rejects.toMatchObject({statusCode:409});

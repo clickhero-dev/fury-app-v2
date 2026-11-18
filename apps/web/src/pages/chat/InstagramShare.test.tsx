@@ -63,4 +63,14 @@ describe('compartilhamento no Instagram', () => {
     expect((screen.getByRole('button', {name:'Compartilhar no Instagram'}) as HTMLButtonElement).disabled).toBe(true);
     expect(post).toHaveBeenCalledOnce();
   });
+  it('explica formato incompatível sem afirmar que publicou', async () => {
+    get.mockResolvedValueOnce({data:{data:[{selectedInstagramUserId:'ig'}]}});
+    get.mockResolvedValueOnce({data:{data:{scopes:['instagram_content_publish']}}});
+    post.mockRejectedValueOnce({response:{status:400,data:{error:{code:'REEL_REQUIRES_VIDEO'}}}});
+    render(<InstagramShare src="https://example.com/video.webm" kind="video" mediaKey="f"/>);
+    fireEvent.click(await screen.findByRole('button', {name:'Compartilhar no Instagram'}));
+    fireEvent.click(screen.getByRole('button', {name:'Confirmar publicação'}));
+    expect(await screen.findByText(/MP4 ou MOV/)).toBeTruthy();
+    expect(screen.queryByText(/publicado com sucesso/i)).toBeNull();
+  });
 });
