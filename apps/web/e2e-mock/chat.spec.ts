@@ -173,7 +173,7 @@ test('recupera vídeo e confirma post e campanha com orçamento legível', async
   });
   await page.goto('/chat'); await page.getByRole('button',{name:'Somente essenciais'}).click();
   await page.getByRole('button',{name:'Projeto'}).click();
-  await expect(page.getByLabel('Vídeo gerado')).toHaveAttribute('src','https://example.com/video.mp4');
+  await expect(page.getByLabel('Vídeo gerado', { exact: true })).toHaveAttribute('src','https://example.com/video.mp4');
   await expect(page.getByText('Orçamento diário')).toBeVisible();
   await expect(page.getByText(/15,00/)).toBeVisible();
   expect(calls).toHaveLength(0);
@@ -196,7 +196,7 @@ test('acompanha job de vídeo até conclusão', async ({ page }) => {
   await page.goto('/chat'); await page.getByRole('button',{name:'Somente essenciais'}).click();
   await page.getByRole('button',{name:'Vídeo',exact:true}).click();
   await expect(page.getByText('Status: Em andamento')).toBeVisible();
-  await expect(page.getByLabel('Vídeo gerado')).toHaveAttribute('src','https://example.com/video.mp4',{timeout:10000});
+  await expect(page.getByLabel('Vídeo gerado', { exact: true })).toHaveAttribute('src','https://example.com/video.mp4',{timeout:10000});
   expect(reads).toBe(2);
 });
 
