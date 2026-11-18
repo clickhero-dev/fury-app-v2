@@ -124,3 +124,14 @@ def test_persistence_is_scoped_to_tenant_and_user_and_keeps_progress():
 
     import asyncio
     asyncio.run(exercise())
+
+
+def test_missing_optional_setup_table_does_not_block_normal_chat():
+    import asyncio
+    import asyncpg
+
+    class Db:
+        async def fetchrow(self, *_args):
+            raise asyncpg.UndefinedTableError('chat_guided_setups')
+
+    assert asyncio.run(GuidedSetup(Db(), 'tenant', 'user').current()) == SetupState()

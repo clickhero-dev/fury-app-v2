@@ -1,5 +1,6 @@
 """Fluxo durável e opcional para conhecer o negócio sem virar um formulário."""
 import json
+import asyncpg
 from dataclasses import dataclass
 from typing import Any
 
@@ -91,10 +92,15 @@ class GuidedSetup:
         self.db, self.tenant_id, self.user_id = db, tenant_id, user_id
 
     async def current(self) -> SetupState:
-        row = await self.db.fetchrow(
-            'SELECT step,answers FROM chat_guided_setups WHERE tenant_id=$1 AND user_id=$2',
-            self.tenant_id, self.user_id,
-        )
+        try:
+            row = await self.db.fetchrow(
+                'SELECT step,answers FROM chat_guided_setups WHERE tenant_id=$1 AND user_id=$2',
+                self.tenant_id, self.user_id,
+            )
+        except asyncpg.UndefinedTableError:
+            # A rolling deploy may start the chat worker before migration 0084
+            # reaches this database. The optional setup must never block chat.
+            return SetupState()
         if row is None or row.get('step') not in {
             INVITATION, DECLINED, BUSINESS_NAME, LOGO, LOGO_CREATION, OFFERING,
             COMPANY_PHOTOS, TEAM_PHOTOS, PRODUCT_PHOTOS, DONE,
