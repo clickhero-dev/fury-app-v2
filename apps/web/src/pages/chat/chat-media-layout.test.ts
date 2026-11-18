@@ -6,7 +6,7 @@ const css = readFileSync(resolve(process.cwd(), 'src/pages/chat/chat.css'), 'utf
 
 describe('mídia compacta no chat', () => {
   it('limita imagens e vídeos gerados e anexados em telas pequenas sem recorte', () => {
-    expect(css).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*?\.ady-chat-approval\s+:is\(img,\s*video\)[\s\S]*?\.ady-chat-saved-attachment\s+:is\(img,\s*video\)[\s\S]*?max-width:\s*min\(100%,\s*240px\)[\s\S]*?max-height:\s*220px[\s\S]*?object-fit:\s*contain/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*1023px\)[\s\S]*?\.ady-chat-approval\s+:is\(img,\s*video\)[\s\S]*?\.ady-chat-saved-attachment\s+:is\(img,\s*video\)[\s\S]*?max-width:\s*min\(100%,\s*240px\)[\s\S]*?max-height:\s*220px[\s\S]*?object-fit:\s*contain/);
     expect(css).toMatch(/\.ady-chat-markdown\s+:is\(img,\s*video\)/);
     expect(css).toMatch(/@media\s*\(max-height:\s*450px\)[\s\S]*?\.ady-chat-saved-attachment\s+:is\(img,\s*video\)[\s\S]*?max-height:\s*150px/);
   });

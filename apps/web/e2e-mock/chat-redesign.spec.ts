@@ -11,10 +11,10 @@ Cenário: falha ao iniciar uma conversa
 Dado que o serviço não consegue criar a conversa
 Quando o usuário envia a primeira mensagem
 Então o rascunho é preservado e ele pode tentar novamente
-Cenário: usar sugestão sem enviar automaticamente
+Cenário: iniciar fluxo específico sem enviar automaticamente
 Dado que a tela inicial está aberta
-Quando o usuário escolhe criar uma imagem
-Então o campo recebe foco e a sugestão, sem enviar dados
+Quando o usuário escolhe criar um post
+Então uma etapa específica abre sem enviar dados
 Cenário: acessar histórico no celular
 Dado que existem conversas anteriores
 Quando o usuário abre o histórico e pressiona Escape
@@ -72,7 +72,7 @@ for (const viewport of [
       const counts = await isolateChat(page, theme);
       const input = page.getByRole('textbox', { name: 'Mensagem', exact: true });
       await expect(input).toBeEnabled();
-      await expect(page.getByText('Assistente de IA', { exact: true })).toBeVisible();
+      await expect(page.getByText('Assistente do Ady', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Postar', exact: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-${theme}-empty.png`), fullPage: true });
       await input.fill('Preciso de ideias para minha marca');
@@ -103,13 +103,13 @@ test('preserva rascunho quando não consegue iniciar a conversa', async ({ page 
   expect(counts).toEqual({ creates: 1, sends: 0 });
 });
 
-test('sugestão preenche e foca o campo sem enviar', async ({ page }) => {
+test('atalho prepara diretamente sem briefing nem preencher compositor', async ({ page }) => {
   const counts = await isolateChat(page, 'light');
-  await page.getByRole('button', { name: 'Criar imagens', exact: true }).click();
-  const input = page.getByRole('textbox', { name: 'Mensagem', exact: true });
-  await expect(input).toBeFocused();
-  await expect(input).toHaveValue(/imagem/i);
   expect(counts).toEqual({ creates: 0, sends: 0 });
+  await page.getByRole('button', { name: 'Não sei o que postar', exact: true }).click();
+  await expect.poll(() => counts.sends).toBe(1);
+  await expect(page.getByRole('textbox', { name: 'Mensagem', exact: true })).toHaveValue('');
+  expect(counts).toEqual({ creates: 1, sends: 1 });
 });
 
 test('histórico móvel fecha com Escape e devolve foco', async ({ page }, testInfo) => {
@@ -378,3 +378,13 @@ for (const viewport of [{ width: 1287, height: 652 }, { width: 375, height: 812 
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   });
 }
+
+// Quando criar a conversa falha, os atalhos voltam a ficar disponíveis.
+test('falha no início do pedido direto permite tentar novamente', async ({page}) => {
+  const counts = await isolateChat(page, 'light', true);
+  await page.getByRole('button',{name:'Não sei o que postar',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Não foi possível iniciar a conversa');
+  await expect(page.getByRole('button',{name:'Não sei o que postar',exact:true})).toBeEnabled();
+  await expect(page.getByRole('group',{name:'Ações para começar'})).toBeVisible();
+  expect(counts).toEqual({creates:1,sends:0});
+});

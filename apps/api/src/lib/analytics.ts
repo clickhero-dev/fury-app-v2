@@ -31,6 +31,10 @@ export function captureServerException(
     path?: string;
     statusCode?: number;
     code?: string;
+    requestId?: string;
+    reason?: string;
+    environment?: string;
+    providerStatus?: number;
   } = {}
 ) {
   if (!client) return;
@@ -43,7 +47,10 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
-      environment: analyticsEnvironment(),
+      environment: context.environment?.trim() || analyticsEnvironment(),
+      requestId: context.requestId,
+      reason: context.reason,
+      providerStatus: context.providerStatus,
       method: context.method,
       path: context.path,
       statusCode: context.statusCode,
@@ -71,5 +78,5 @@ export async function flushAnalytics(): Promise<void> {
 
 /** Deployment label must be configured explicitly to distinguish hmg from production. */
 export function analyticsEnvironment(): string {
-  return process.env.APP_ENV || process.env.DEPLOYMENT_ENV || process.env.NODE_ENV || 'unknown';
+  return process.env.APP_ENV?.trim() || process.env.DEPLOYMENT_ENV?.trim() || process.env.NODE_ENV?.trim() || 'unknown';
 }

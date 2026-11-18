@@ -13,4 +13,9 @@ export class ChatProfileService {
     if (!await repo.updateIfVersion(userId,userVersion,tenantVersion,values)) throw new AppError(409,'PROFILE_CHANGED','O perfil ou negócio mudou. Consulte novamente antes de confirmar.');
     return repo.snapshot(userId);
   }
+  /** Resposta explícita do fluxo guiado: lê versões atuais e mantém o mesmo fence de concorrência. */
+  async applyGuidedBusinessContext(tenantId: string, userId: string, values: Required<Pick<ChatProfileValues, 'tenantName' | 'businessContext'>>) {
+    const current = await this.snapshot(tenantId, userId);
+    return this.update(tenantId, userId, current.userVersion, current.tenantVersion, values);
+  }
 }

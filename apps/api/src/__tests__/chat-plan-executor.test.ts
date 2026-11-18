@@ -65,13 +65,24 @@ describe('executor real com portas isoladas', () => {
         expect(p.tasks[0].status).toBe('completed');
         expect(p.tasks[1].status).toBe('pending');
     });
-    it('restart em draft_text interrompido é unknown e não gasta novamente', async () => {
+    it('restart em draft_text permite um replay interno limitado sem efeito externo', async () => {
         const w = await start('draft_text', { prompt: 'Crie um texto' });
         const p = f.plans.get(w.planId)!;
         Object.assign(p.tasks[0], { status: 'running', attempts: 1, fence: 'old', leaseUntil: new Date(now - 1).toISOString() });
         await executor.run(w);
-        expect(execute).not.toHaveBeenCalled();
-        expect((await current(w.planId)).tasks[0]).toMatchObject({ status: 'failed', failure: 'unknown' });
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect((await current(w.planId)).tasks[0]).toMatchObject({ status: 'completed', attempts: 2 });
+    });
+    it('draft_text transitório só tenta duas vezes', async () => {
+        const w = await start('draft_text', { prompt: 'Crie um texto' });
+        execute.mockRejectedValue(new PlanStepError('transient'));
+        await executor.run(w);
+        expect((await current(w.planId)).tasks[0].status).toBe('pending');
+        now += 2100;
+        await executor.run(w);
+        await executor.run(w);
+        expect(execute).toHaveBeenCalledTimes(2);
+        expect((await current(w.planId)).tasks[0]).toMatchObject({ status: 'failed', failure: 'permanent', attempts: 2 });
     });
     it('unknown de aprovação impede dependentes e não recria proposta', async () => {
         execute.mockResolvedValue({ kind: 'proposal', proposal: { path: '/api/studio/video/jobs', body: {} } });

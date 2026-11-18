@@ -45,6 +45,13 @@ export type ChatMessage = {
   content: string | ChatContentPart[];
 };
 
+/** Safe provider status for internal retry policy; preserves the existing public API error. */
+export class OpenRouterChatError extends AppError {
+  constructor(readonly providerStatus: number) {
+    super(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
+  }
+}
+
 // ─── Estado de créditos OpenRouter ───────────────────────────────────────────
 // A API guarda em memória (com TTL) o estado do saldo para checá-lo ANTES de
 // chamar o OpenRouter e devolver erro apropriado (402) ao frontend, em vez de
@@ -142,7 +149,7 @@ export const openrouterService = {
       if (!response.ok) {
         await response.body?.cancel();
         console.error('[openrouter] chat error', response.status);
-        throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
+        throw new OpenRouterChatError(response.status);
       }
       // Timer remains active through body consumption, not only response headers.
       const data = (await response.json()) as any;

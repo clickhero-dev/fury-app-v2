@@ -15,6 +15,20 @@ beforeEach(() => {
     f = planMemoryFixture();
 });
 describe('runtime fechado', () => {
+    it('recovery revalidates current owner, RBAC and subscription even without write capability', async () => {
+        const check = vi.fn(async () => 'allowed' as const);
+        const sub = vi.fn(async () => ({status:'active',currentPeriodEnd:new Date('2099-01-01')}));
+        const access = new ChatPlanAccess(f.factory,{checkServices:check,getPlatformRole:vi.fn(async ()=>'user')},()=>({findSubscription:sub}));
+        expect(await access.authorizeRecovery(f.scope)).toMatchObject({userId:f.userId});
+        expect(check).toHaveBeenCalledWith(f.userId,[]);
+        sub.mockResolvedValue({status:'cancelled',currentPeriodEnd:new Date('2000-01-01')});
+        await expect(access.authorizeRecovery(f.scope)).rejects.toMatchObject({statusCode:403});
+        sub.mockResolvedValue({status:'active',currentPeriodEnd:new Date('2099-01-01')});
+        check.mockResolvedValue('blocked' as never);
+        await expect(access.authorizeRecovery(f.scope)).rejects.toMatchObject({statusCode:403});
+        f.revoke();
+        await expect(access.authorizeRecovery(f.scope)).rejects.toMatchObject({statusCode:403});
+    });
     it('GET fixo com token novo e timeout; nunca credentials persistidos', async () => {
         const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [] })));
         const http = new ChatPlanApiReader({ baseUrl: 'http://api:3000', secret, fetcher });

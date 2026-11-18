@@ -11,7 +11,7 @@ import app as chat
 
 
 @pytest.mark.parametrize('model_text', ['', '  \n'])
-def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(monkeypatch, model_text):
+def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(monkeypatch, model_text, checkpoint_store):
     tenant, user, cid = uuid4(), uuid4(), uuid4()
     now = int(time.time())
     secret = 'test-secret-with-at-least-32-characters'
@@ -62,7 +62,7 @@ def test_notice_does_not_complete_empty_model_response_and_retry_is_read_only(mo
         assert 'event: error' in response.text
         assert 'event: done' not in response.text
         assert completions == []
-        assert len(failures) == 1 and "status='failed'" in failures[0]
+        assert len(failures) == 1 and "UPDATE chat_response_runs" in failures[0] and "'failed'" in failures[0]
         response = client.post(f'/conversations/{cid}/retry', headers=headers)
         assert 'event: error' in response.text and 'event: done' not in response.text
         assert completions == []

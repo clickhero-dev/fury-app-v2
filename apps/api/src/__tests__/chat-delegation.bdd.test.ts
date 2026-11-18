@@ -25,6 +25,17 @@ const secret = 'test-secret-with-sufficient-entropy-1234567890';
 const user = { userId: 'u1', tenantId: 't1', email: 'a@example.com', role: 'admin' };
 
 describe('delegação do chatbot', () => {
+  it('concede intenção humana somente por opção explícita do servidor', () => {
+    const forgedUser = { ...user, humanIntent: true };
+    expect(verifyChatDelegation(createChatDelegation(forgedUser, secret), secret).humanIntent).not.toBe(true);
+    expect(verifyChatDelegation(createChatDelegation(user, secret, { humanIntent: true }), secret).humanIntent).toBe(true);
+    expect(verifyChatDelegation(createChatDelegation(user, secret, { humanIntent: false }), secret).humanIntent).toBe(false);
+  });
+  it('recusa claim de intenção humana com tipo inválido', () => {
+    const token = jwt.sign({ ...user, actor: 'chatbot', humanIntent: 'true' }, secret,
+      { issuer: 'ady-api', audience: 'ady-api', expiresIn: 300 });
+    expect(() => verifyChatDelegation(token, secret)).toThrow();
+  });
   it('emite identidade e ator com prazo curto', () => {
     const decoded = verifyChatDelegation(createChatDelegation(user, secret), secret);
     expect(decoded).toMatchObject({ ...user, actor: 'chatbot', iss: 'ady-api' });
@@ -33,6 +44,8 @@ describe('delegação do chatbot', () => {
   it('limita as rotas acessíveis', () => {
     expect(isChatToolPath('/api/studio/ai/generate-image')).toBe(true);
     expect(isChatToolPath('/api/campaigns/chat-account/act_123')).toBe(true);
+    expect(isChatToolPath('/api/chat/conversations/11111111-1111-4111-8111-111111111111/attachments/22222222-2222-4222-8222-222222222222/promote')).toBe(true);
+    expect(isChatToolPath('/api/chat/conversations/../attachments/22222222-2222-4222-8222-222222222222/promote')).toBe(false);
     expect(isChatToolPath('/api/campaigns/chat-account/act_123/extra')).toBe(false);
     expect(isChatToolPath('/api/admin/users')).toBe(false);
     expect(isChatToolPath('/api/studio/../admin/users')).toBe(false);
