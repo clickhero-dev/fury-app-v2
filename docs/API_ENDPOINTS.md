@@ -60,12 +60,16 @@ Authorization: Bearer <accessToken>
 
 ### Expiração dos Tokens
 
-- **Token de Acesso:** 15 minutos
-- **Refresh Token:** 30 dias
+- **Token de Acesso:** até 30 dias, limitado pelo prazo absoluto da sessão.
+- **Sessão e refresh token:** 30 dias absolutos desde o login, sem prorrogação pela renovação.
 
 ### Renovação do Token
 
 Quando o token de acesso expirar, use o refresh token para obter um novo token sem precisar fazer login novamente.
+O refresh token permanece o mesmo até a sessão expirar ou ser revogada, e o novo
+token de acesso nunca ultrapassa o prazo da sessão. Após 30 dias é necessário
+entrar novamente. Sessões emitidas antes desta política mantêm sua expiração
+original. A antiga variável `JWT_REFRESH_EXPIRES_IN` não altera esse prazo.
 
 ---
 

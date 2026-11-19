@@ -98,6 +98,7 @@ function apiClient(page: Page, getToken: () => string) {
 }
 
 test('jornada real: login, criar campanha, pausar campanha e gerar imagem', async ({ page }) => {
+  test.skip(process.env.QA_ALLOW_MUTATIONS !== 'true', 'Ações reais exigem opt-in explícito.');
   if (!email || !password) {
     throw new Error('Defina QA_EMAIL e QA_PASSWORD (GitHub Secrets no CI, variáveis de ambiente local).');
   }
