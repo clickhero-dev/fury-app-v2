@@ -25,3 +25,11 @@ export async function checkReadiness(config, request) {
     return { ok: false, reason: /timeout/i.test(String(error?.name)) || /timeout/i.test(String(error?.message)) ? 'timeout' : 'unavailable' };
   }
 }
+
+export async function runWithReadiness(config, request, journey) {
+  const result = await checkReadiness(config, request);
+  if (!result.ok) {
+    throw new Error(`PRÉ-VOO QA BLOQUEADO (${result.reason}). Consulte docs/operations/qa-quota-readiness.md para responsável, reposição e verificação.`);
+  }
+  return journey();
+}

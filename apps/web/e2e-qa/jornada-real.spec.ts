@@ -11,7 +11,7 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
 */
 import { expect, test, type Page, type Response } from '@playwright/test';
 // @ts-expect-error módulo compartilhado com os testes Node do CI
-import { checkReadiness } from '../../../scripts/ci/qa-readiness.mjs';
+import { runWithReadiness } from '../../../scripts/ci/qa-readiness.mjs';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
@@ -134,18 +134,13 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       expect(token, 'token salvo após login').not.toBe('');
     });
 
-    await test.step('Pré-voo de assinatura e cota', async () => {
-      const result = await checkReadiness(
-        { margin: process.env.QA_QUOTA_MARGIN, owner: process.env.QA_QUOTA_OWNER },
-        () => page.request.get(`${apiURL}/billing/subscription`, {
-          headers: { Authorization: `Bearer ${token}` }, timeout: 15_000,
-        }),
-      );
-      if (!result.ok) {
-        throw new Error(`PRÉ-VOO QA BLOQUEADO (${result.reason}). Consulte docs/operations/qa-quota-readiness.md para responsável, reposição e verificação.`);
-      }
-      log('Pré-voo de assinatura e cota aprovado.');
-    });
+    await test.step('Pré-voo de assinatura e cota', async () => runWithReadiness(
+      { margin: process.env.QA_QUOTA_MARGIN, owner: process.env.QA_QUOTA_OWNER },
+      () => page.request.get(`${apiURL}/billing/subscription`, {
+        headers: { Authorization: `Bearer ${token}` }, timeout: 15_000,
+      }),
+      async () => {
+        log('Pré-voo de assinatura e cota aprovado.');
 
     await test.step('Criar campanha (wizard)', async () => {
       await page.goto('/criar-campanha');
@@ -266,6 +261,8 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
         })
         .toBe(true);
     });
+      },
+    ));
   } catch (err) {
     failed = true;
     throw err;
