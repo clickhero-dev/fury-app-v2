@@ -49,9 +49,18 @@ export function canAccessAdmin(role: PlatformRole): boolean {
   return role === 'super_admin' || role === 'admin_partner';
 }
 
+// usuário dentro da conta do parceiro (ele ou a equipe), vindo do login; só tela
+export function getStoredPartnerAccount(): boolean {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}')?.partnerAccount === true;
+  } catch {
+    return false;
+  }
+}
+
 // Conta do parceiro é vitalícia: sem planos, assinatura nem faturamento
-export function hasLifetimeAccess(role: PlatformRole = getStoredPlatformRole()): boolean {
-  return role === 'admin_partner';
+export function hasLifetimeAccess(role: PlatformRole = getStoredPlatformRole(), partnerAccount: boolean = getStoredPartnerAccount()): boolean {
+  return role === 'admin_partner' || partnerAccount;
 }
 
 const BILLING_PATHS = ['/planos', '/assinatura'];

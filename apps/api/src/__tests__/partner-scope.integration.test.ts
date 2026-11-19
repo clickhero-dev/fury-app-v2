@@ -96,19 +96,25 @@ describe('Escopo do parceiro no admin — integração', () => {
     const [plan] = await db.insert(schema.plans).values({ name: `PS plano ${id}`, priceCents: 100 }).returning();
     try {
       const past = new Date(Date.now() - 2 * 86400000);
-      const [sub] = await db
-        .insert(schema.subscriptions)
-        .values({ tenantId: clientB, planId: plan!.id, status: 'active', currentPeriodEnd: past })
-        .returning();
-      await db.insert(schema.renewalEvents).values({ subscriptionId: sub!.id, tenantId: clientB, previousPeriodEnd: past });
+      // vencida + renovação no cliente do parceiro B e no cliente direto da ady
+      for (const tenantId of [clientB, clientAdy]) {
+        const [sub] = await db
+          .insert(schema.subscriptions)
+          .values({ tenantId, planId: plan!.id, status: 'active', currentPeriodEnd: past })
+          .returning();
+        await db.insert(schema.renewalEvents).values({ subscriptionId: sub!.id, tenantId, previousPeriodEnd: past });
+      }
 
       const dash = await request(app).get('/api/admin/dashboard').set(asPartner());
       expect(dash.body.data.expiredAccounts).toBe(0);
       expect(dash.body.data.recentActivity.filter((a: { tipo: string }) => a.tipo === 'renovacao')).toEqual([]);
 
+      // aba "Clientes ady" do super: só o cliente direto, nunca o do parceiro
       const sup = await request(app).get('/api/admin/dashboard').set(asSuper());
       expect(sup.body.data.expiredAccounts).toBeGreaterThanOrEqual(1);
-      expect(sup.body.data.recentActivity.some((a: { tipo: string }) => a.tipo === 'renovacao')).toBe(true);
+      const renewals = sup.body.data.recentActivity.filter((a: { tipo: string }) => a.tipo === 'renovacao');
+      expect(renewals.some((a: { tenantId?: string }) => a.tenantId === clientAdy)).toBe(true);
+      expect(renewals.some((a: { tenantId?: string }) => a.tenantId === clientB)).toBe(false);
     } finally {
       await db.delete(schema.subscriptions).where(eq(schema.subscriptions.planId, plan!.id));
       await db.delete(schema.plans).where(eq(schema.plans.id, plan!.id));

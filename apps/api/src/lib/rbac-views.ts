@@ -41,10 +41,18 @@ export const RBAC_VIEWS: readonly RbacViewEntry[] = [
 // serviços das telas desativadas
 export const DISABLED_SERVICE_KEYS: readonly string[] = RBAC_VIEWS.filter((v) => v.disabled).flatMap((v) => v.services ?? []);
 
-// Bloqueio pai → filho (campaigns bloqueia campaigns.create); 'all' bloqueia tudo
+// pais fora do padrão de key: Clientes (leads) vêm das campanhas
+export const EXTRA_VIEW_PARENT: Readonly<Record<string, string>> = { leads: 'campaigns' };
+
+// a tela é a bloqueada ou filha dela (por key ou pelo pai extra)
+export function isUnderView(key: string, blocked: string): boolean {
+  return key === blocked || key.startsWith(blocked + '.') || EXTRA_VIEW_PARENT[key] === blocked;
+}
+
+// Bloqueio pai → filho (campaigns bloqueia campaigns.create e leads); 'all' bloqueia tudo
 export function expandBlocked(raw: readonly string[], allKey = 'all'): string[] {
   const all = raw.includes(allKey);
-  return RBAC_VIEWS.map((e) => e.key).filter((key) => all || raw.some((r) => key === r || key.startsWith(r + '.')));
+  return RBAC_VIEWS.map((e) => e.key).filter((key) => all || raw.some((r) => isUnderView(key, r)));
 }
 
 // Funcionalidades que o plano pode tirar do cliente; parent = desligar o pai leva junto

@@ -6,7 +6,7 @@ import { uploadAsset } from '../services/storage/storage.service.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
 import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
-import { SubscriptionRepository } from '../repository/subscription.repository.js';
+import { getCreativeQuotaSnapshot } from '../services/studio/creative-quota.service.js';
 import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
 import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 
@@ -335,7 +335,8 @@ export class PlannerController {
   handleGetQuota = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = req.tenant!.tenantId;
-      const quota = await new SubscriptionRepository(tenantId).getCreativeQuotaSnapshot();
+      // mesmo cálculo das outras telas (conta do parceiro = ilimitado)
+      const quota = await getCreativeQuotaSnapshot(tenantId);
       res.json({ success: true, data: quota });
     } catch (err) { next(err); }
   };

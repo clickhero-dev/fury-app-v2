@@ -307,7 +307,7 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }
         disabled={isCurrentPlan || managedByPartner}
         onClick={onSubscribe}
       >
-        {isCurrentPlan ? 'Plano atual' : managedByPartner ? 'Fale com seu parceiro' : 'Assinar agora'}
+        {isCurrentPlan ? 'Plano atual' : managedByPartner ? 'Fale com o suporte' : 'Assinar agora'}
       </Button>
     </div>
   );
@@ -347,13 +347,13 @@ export function Plans() {
               </h2>
               <p className="text-text-secondary text-sm">
                 {managedByPartner
-                  ? 'Seu plano é contratado e alterado pelo seu parceiro.'
+                  ? 'Para mudar de plano, fale com o suporte.'
                   : 'Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.'}
               </p>
             </div>
 
             {staticPlans.length === 0 && (
-              <p className="text-center text-sm text-text-secondary">Seu parceiro ainda não publicou planos.</p>
+              <p className="text-center text-sm text-text-secondary">Nenhum plano disponível no momento. Fale com o suporte.</p>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">

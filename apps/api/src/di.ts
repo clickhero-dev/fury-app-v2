@@ -73,6 +73,8 @@ import { SuperAdminController } from './controllers/superadmin.controller.js';
 import { PartnerRepository } from './repository/partner.repository.js';
 import { PartnerController } from './controllers/partner.controller.js';
 import { PermissionsController } from './controllers/permissions.controller.js';
+import { PartnerPlanController } from './controllers/partner-plan.controller.js';
+import { PartnerPlanRepository } from './repository/partner-plan.repository.js';
 import { RbacRepository } from './repository/rbac.repository.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
@@ -183,6 +185,7 @@ export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
+const partnerRepository = new PartnerRepository();
 export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
@@ -257,9 +260,10 @@ export const controllers = {
   ),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
-  superadmin: new SuperAdminController(superAdminRepository),
-  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
-  permissions: new PermissionsController(new RbacRepository(), new PartnerRepository()),
+  superadmin: new SuperAdminController(superAdminRepository, partnerRepository),
+  partners: new PartnerController(partnerRepository, superAdminRepository),
+  permissions: new PermissionsController(new RbacRepository(), partnerRepository),
+  partnerPlans: new PartnerPlanController(new PartnerPlanRepository()),
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),

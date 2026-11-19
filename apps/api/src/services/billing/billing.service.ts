@@ -1,6 +1,20 @@
 import { rbacService } from '../core/rbac.service.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
+import { PartnerRepository } from '../../repository/partner.repository.js';
+
+// conta do parceiro (ele e a equipe) não compra plano da ady; na dúvida, recusa
+async function isPartnerAccount(tenantId: string): Promise<boolean> {
+  // id que não é UUID não existe no banco: não é conta de parceiro
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) return false;
+  try {
+    return !!(await new PartnerRepository().findPartnerAccount(tenantId));
+  } catch (err) {
+    console.error('[billing] falha ao verificar a conta do parceiro:', (err as Error).message);
+    throw new AppError(503, 'ACCOUNT_CHECK_FAILED', 'Não foi possível verificar sua conta agora. Tente de novo em instantes.');
+  }
+}
+const SUPPORT_MANAGED = 'Para alterar sua assinatura, fale com o suporte.';
 import {
   createCustomer,
   updateCustomer,
@@ -51,6 +65,7 @@ export class BillingService {
 
   // cliente de parceiro vê só os planos do parceiro; cliente ady, só os da ady
   async listActivePlans(tenantId: string) {
+    if (await isPartnerAccount(tenantId)) return [];
     const tenant = await this.repo(tenantId).findTenant();
     return this.repo('').listActivePlans(tenant?.partnerId ?? null);
   }
@@ -96,8 +111,8 @@ export class BillingService {
 
   async subscribe(tenantId: string, payload: SubscribePayload) {
     // cliente de parceiro não paga pela ady: o parceiro atribui o plano
-    if ((await this.repo(tenantId).findTenant())?.partnerId)
-      throw new AppError(403, 'PARTNER_MANAGED', 'Sua assinatura é gerenciada pelo seu parceiro');
+    if ((await this.repo(tenantId).findTenant())?.partnerId || (await isPartnerAccount(tenantId)))
+      throw new AppError(403, 'PARTNER_MANAGED', SUPPORT_MANAGED);
     const plan = await this.repo('').findPlanById(payload.planId, true);
     if (!plan || plan.partnerId) throw new AppError(404, 'PLAN_NOT_FOUND', 'Plano não encontrado');
 

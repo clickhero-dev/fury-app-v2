@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Save,
   UserPlus,
@@ -63,6 +63,8 @@ interface TenantData {
     platformRole?: string | null;
     createdAt: string;
   }[];
+  // conta própria do parceiro: sem assinatura, uso ilimitado
+  partnerAccount?: { partnerId: string; partnerName: string; planName: string | null } | null;
   subscription: {
     id: string;
     planId: string;
@@ -589,7 +591,9 @@ export function TenantDetailPage() {
     maxMembers: MAX_PARTNER_CLIENT_MEMBERS,
     labels: { objectives: OBJECTIVES, genders: GENDERS, tones: VOICE_TONES },
   });
-  const sectionItems: SectionItem<Tab>[] = SECTIONS.map((s) => ({ ...s, ...summaries[s.key] }));
+  const partnerAccount = data.partnerAccount ?? null;
+  // conta do parceiro não tem assinatura: some a aba
+  const sectionItems: SectionItem<Tab>[] = SECTIONS.filter((s) => !(partnerAccount && s.key === "subscription")).map((s) => ({ ...s, ...summaries[s.key] }));
 
   const memberLimitReached = !isSuperAdmin && data.users.filter((u) => u.role === "member").length >= MAX_PARTNER_CLIENT_MEMBERS;
   // página válida mesmo após remover
@@ -625,6 +629,16 @@ export function TenantDetailPage() {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {partnerAccount && (
+        <div role="note" className="mb-4 bg-admin-petrol/10 border border-admin-petrol/30 rounded-2xl px-5 py-4 text-sm text-admin-text">
+          <strong>Conta do parceiro {partnerAccount.partnerName}</strong>
+          {partnerAccount.planName ? ` · Plano ${partnerAccount.planName}` : ""} · uso ilimitado com a chave OpenRouter do parceiro, sem assinatura.{" "}
+          <Link to={`/admin/parceiros/${partnerAccount.partnerId}`} className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline">
+            Ver parceiro
+          </Link>
         </div>
       )}
 
@@ -828,7 +842,7 @@ export function TenantDetailPage() {
       )}
 
       {/* ── Subscription ────────────────────────────── */}
-      {tab === "subscription" && (
+      {tab === "subscription" && !partnerAccount && (
         <div className="space-y-4">
           {(() => {
             const subscription = data?.subscription;

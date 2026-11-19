@@ -152,7 +152,7 @@ export function AuthenticatedShell() {
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
-  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
+  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole()) || hasLifetimeAccess();
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),

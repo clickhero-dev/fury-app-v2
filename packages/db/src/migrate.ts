@@ -196,6 +196,10 @@ const STEPS: MigrationStep[] = [
   { tag: '0056_demo_tenant' },
   { tag: '0063_ady_rbac_plan_views_blocked' },
   { tag: '0075_ady_partner_payments' },
+  { tag: '0076_ady_partner_payments_history' },
+  { tag: '0077_ady_partner_plans' },
+  { tag: '0078_partner_account_members' },
+  { tag: '0079_automation_not_blockable' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -251,6 +255,8 @@ export const REQUIRED_TABLES = [
   'ady_rbac_views_blocked',
   'ady_rbac_audit_log',
   'ady_partner_payments',
+  'ady_partner_plans',
+  'ady_partner_plan_views_blocked',
   'notifications',
   'public_trial_accounts',
   'public_trial_magic_links',

@@ -5,6 +5,16 @@ import crypto from 'node:crypto';
 import type { AuthService } from '../services/core/auth.service.js';
 import type { SocialAuthService } from '../services/core/social-auth.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { rbacService } from '../services/core/rbac.service.js';
+
+// conta do parceiro (ele e a equipe): a tela esconde cobrança; na dúvida, false
+async function partnerAccountOf(userId: string): Promise<boolean> {
+  try {
+    return await rbacService.inPartnerAccount(userId);
+  } catch {
+    return false;
+  }
+}
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit, checkSocialLoginRateLimit, checkSetPasswordRateLimit, getClientIp } from '../middleware/rate-limit.middleware.js';
 import { passwordSchema } from '../lib/shared.js';
 import { audienceGeoSchema } from '../lib/audience-geo.js';
@@ -273,6 +283,7 @@ export class AuthController {
             // o admin decide quem entra por aqui (super_admin / admin_partner)
             platformRole: result.user.platformRole,
             tenantId: result.user.tenantId,
+            partnerAccount: await partnerAccountOf(result.user.id),
           },
           ...(policy ? { policy } : {}),
         },
@@ -583,6 +594,7 @@ export class AuthController {
           role: result.user.role,
           platformRole: result.user.platformRole,
           tenantId: result.user.tenantId,
+          partnerAccount: await partnerAccountOf(result.user.id),
         },
         isNewUser: result.isNewUser,
         ...(policy ? { policy } : {}),

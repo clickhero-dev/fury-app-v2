@@ -100,6 +100,25 @@ export const adyRbacRoles = pgTable('ady_rbac_roles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Plano de parceiro: pacote de pagamento único (vagas + telas), copiado ao vincular
+export const adyPartnerPlans = pgTable(
+  'ady_partner_plans',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar('name', { length: 255 }).notNull(),
+    priceCents: integer('price_cents').notNull(),
+    maxTenants: integer('max_tenants').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    nameUniq: uniqueIndex('ady_partner_plans_name_uniq').on(sql`lower(${table.name})`),
+    pricePositive: check('ady_partner_plans_price_cents_check', sql`${table.priceCents} >= 0`),
+    maxTenantsPositive: check('ady_partner_plans_max_tenants_check', sql`${table.maxTenants} >= 0`),
+  }),
+);
+
 // Empresas parceiras
 export const adyPartners = pgTable('ady_partners', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -108,6 +127,8 @@ export const adyPartners = pgTable('ady_partners', {
   status: varchar('status', { length: 20 }).notNull().default('active'),
   openrouterKeyEncrypted: text('openrouter_key_encrypted'),
   openrouterKeyLast4: varchar('openrouter_key_last4', { length: 4 }),
+  // plano comprado; null só em parceiro antigo
+  partnerPlanId: uuid('partner_plan_id').references(() => adyPartnerPlans.id, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -1443,6 +1464,20 @@ export const adyRbacPlanViewsBlocked = pgTable(
   }),
 );
 
+// Telas bloqueadas pelo plano de parceiro (blocklist)
+export const adyPartnerPlanViewsBlocked = pgTable(
+  'ady_partner_plan_views_blocked',
+  {
+    partnerPlanId: uuid('partner_plan_id').notNull().references(() => adyPartnerPlans.id, { onDelete: 'cascade' }),
+    viewKey: varchar('view_key', { length: 100 }).notNull().references(() => adyRbacViews.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.partnerPlanId, table.viewKey] }),
+  }),
+);
+
 // Histórico de alterações de RBAC e parceiros
 export const adyRbacAuditLog = pgTable(
   'ady_rbac_audit_log',
@@ -1463,7 +1498,7 @@ export const adyRbacAuditLog = pgTable(
   }),
 );
 
-// Pagamento (único) do parceiro à ady; em centavos
+// Pagamentos do parceiro à ady (plano + adicionais); em centavos
 export const adyPartnerPayments = pgTable(
   'ady_partner_payments',
   {
@@ -1471,14 +1506,16 @@ export const adyPartnerPayments = pgTable(
     partnerId: uuid('partner_id').notNull().references(() => adyPartners.id, { onDelete: 'cascade' }),
     amountCents: integer('amount_cents').notNull(),
     paidAt: date('paid_at').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull().default('plan'),
     note: text('note'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    partnerUniq: uniqueIndex('ady_partner_payments_partner_uniq').on(table.partnerId),
+    partnerPaidIdx: index('ady_partner_payments_partner_paid_idx').on(table.partnerId, table.paidAt.desc()),
     paidAtIdx: index('ady_partner_payments_paid_at_idx').on(table.paidAt),
     amountPositive: check('ady_partner_payments_amount_cents_check', sql`${table.amountCents} > 0`),
+    kindCheck: check('ady_partner_payments_kind_check', sql`${table.kind} IN ('plan', 'additional')`),
   }),
 );
 
@@ -1534,4 +1571,6 @@ export const allTables = {
   adyRbacPlanViewsBlocked,
   adyRbacAuditLog,
   adyPartnerPayments,
+  adyPartnerPlans,
+  adyPartnerPlanViewsBlocked,
 };

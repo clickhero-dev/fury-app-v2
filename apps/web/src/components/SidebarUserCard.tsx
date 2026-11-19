@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useBilling';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
 interface SidebarUserCardProps {
   collapsed?: boolean;
@@ -54,9 +55,12 @@ export function SidebarUserCard({ collapsed = false }: SidebarUserCardProps) {
           <span className="block text-sm font-medium truncate text-foreground leading-tight">
             {displayName}
           </span>
-          <span className="block text-xs truncate text-muted-foreground mt-0.5">
-            {userPlan}
-          </span>
+          {/* conta do parceiro não tem assinatura: sem a linha do plano */}
+          {!hasLifetimeAccess() && (
+            <span className="block text-xs truncate text-muted-foreground mt-0.5">
+              {userPlan}
+            </span>
+          )}
         </div>
       )}
     </div>

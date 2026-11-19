@@ -1,5 +1,5 @@
 import { db as defaultDb, type Database, users, tenants, subscriptions, adyRbacServicesBlocked, adyRbacViewsBlocked, adyRbacPlanViewsBlocked, adyRbacAuditLog } from '@fury/db';
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
 export interface RbacUserContext {
   platformRole: string;
@@ -7,6 +7,8 @@ export interface RbacUserContext {
   // cliente e cargo: base do bloqueio por plano
   tenantId?: string;
   role?: string;
+  // usuário dentro da conta própria do parceiro: segue o plano do parceiro
+  partnerAccount?: boolean;
 }
 
 export interface SetViewBlockedInput {
@@ -28,8 +30,13 @@ export class RbacRepository {
         platformRole: users.platformRole,
         tenantId: users.tenantId,
         role: users.role,
-        userPartnerId: users.partnerId,
-        tenantPartnerId: tenants.partnerId,
+        // parceiro do usuário ou do cliente, só se estiver vivo (excluído = sem parceiro = bloqueia tudo)
+        livePartnerId: sql<string | null>`(SELECT p.id FROM ady_partners p WHERE p.deleted_at IS NULL
+          AND p.id = coalesce("users"."partner_id", "tenants"."partner_id"))`,
+        // parceiro dono da conta própria (cliente sem partner_id com admin_partner vivo)
+        accountPartnerId: sql<string | null>`(SELECT u2.partner_id FROM users u2 JOIN ady_partners p2 ON p2.id = u2.partner_id AND p2.deleted_at IS NULL
+          WHERE u2.tenant_id = "tenants"."id" AND "tenants"."partner_id" IS NULL AND u2.platform_role = 'admin_partner' AND u2.deleted_at IS NULL
+          ORDER BY u2.created_at LIMIT 1)`,
       })
       .from(users)
       .innerJoin(tenants, eq(tenants.id, users.tenantId))
@@ -38,9 +45,10 @@ export class RbacRepository {
     if (!row) return null;
     return {
       platformRole: row.platformRole,
-      partnerId: row.userPartnerId ?? row.tenantPartnerId ?? null,
+      partnerId: row.livePartnerId ?? row.accountPartnerId ?? null,
       tenantId: row.tenantId,
       role: row.role,
+      partnerAccount: !!row.accountPartnerId,
     };
   }
 
@@ -60,22 +68,39 @@ export class RbacRepository {
     return rows.map((r) => r.key);
   }
 
-  async listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]> {
+  // withDefault=false: só o escopo do parceiro, sem o padrão
+  async listBlockedServiceKeys(roleKey: string, partnerId: string | null, withDefault = true): Promise<string[]> {
     const t = adyRbacServicesBlocked;
+    const scope = !partnerId ? isNull(t.partnerId) : withDefault ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : eq(t.partnerId, partnerId);
     const rows = await this.db
       .select({ key: t.serviceKey })
       .from(t)
-      .where(and(eq(t.roleKey, roleKey), partnerId ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : isNull(t.partnerId)));
+      .where(and(eq(t.roleKey, roleKey), scope));
     return rows.map((r) => r.key);
   }
 
-  async listBlockedViewKeys(roleKey: string, partnerId: string | null): Promise<string[]> {
+  // withDefault=false: só o escopo do parceiro, sem o padrão
+  async listBlockedViewKeys(roleKey: string, partnerId: string | null, withDefault = true): Promise<string[]> {
     const t = adyRbacViewsBlocked;
+    const scope = !partnerId ? isNull(t.partnerId) : withDefault ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : eq(t.partnerId, partnerId);
     const rows = await this.db
       .select({ key: t.viewKey })
       .from(t)
-      .where(and(eq(t.roleKey, roleKey), partnerId ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : isNull(t.partnerId)));
+      .where(and(eq(t.roleKey, roleKey), scope));
     return rows.map((r) => r.key);
+  }
+
+  // mundo do parceiro vale mesmo com parceiro/conta excluídos (bloqueia); parceiro só se estiver vivo
+  async findTenantPartnerScope(tenantId: string): Promise<{ partnerWorld: boolean; partnerId: string | null } | null> {
+    const rows = (await this.db.execute(sql`SELECT
+        (t.partner_id IS NOT NULL OR EXISTS (SELECT 1 FROM users u WHERE u.tenant_id = t.id
+          AND u.platform_role IN ('admin_partner', 'user_partner'))) AS "partnerWorld",
+        (SELECT p.id FROM ady_partners p WHERE p.deleted_at IS NULL AND p.id = coalesce(t.partner_id,
+          (SELECT u.partner_id FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL
+            AND u.platform_role IN ('admin_partner', 'user_partner') AND u.partner_id IS NOT NULL
+            ORDER BY u.created_at LIMIT 1))) AS "partnerId"
+      FROM tenants t WHERE t.id = ${tenantId}`)) as unknown as { partnerWorld: boolean; partnerId: string | null }[];
+    return rows[0] ?? null;
   }
 
   // só o escopo exato (sem somar o padrão), para a tela de permissões

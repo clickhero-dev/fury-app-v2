@@ -117,17 +117,26 @@ router.get("/dashboard/partners", controllers.superadmin.getPartnersDashboard);
 // Setup tenant + user
 router.post("/setup-tenant", controllers.superadmin.setupTenant);
 
+// Planos de parceiro (pacote único: vagas + telas); /views antes de /:id
+router.get("/partner-plans", controllers.partnerPlans.list);
+router.get("/partner-plans/views", controllers.partnerPlans.views);
+router.post("/partner-plans", controllers.partnerPlans.create);
+router.get("/partner-plans/:id", controllers.partnerPlans.get);
+router.patch("/partner-plans/:id", controllers.partnerPlans.update);
+
 // Parceiros (empresa + conta do parceiro) e restauração de cliente excluído
 router.get("/partners", controllers.partners.list);
 router.post("/partners", controllers.partners.create);
 router.get("/partners/:id", controllers.partners.get);
 router.patch("/partners/:id", controllers.partners.update);
+// vincula plano a parceiro sem plano (copia vagas e telas)
+router.put("/partners/:id/plan", controllers.partners.assignPlan);
 // chave de IA: super só vê se existe; quem cadastra é o próprio parceiro
 router.get("/partners/:id/ai-key", controllers.partners.getAiKey);
-// pagamento único do parceiro à ady
-router.get("/partners/:id/payment", controllers.partners.getPayment);
-router.post("/partners/:id/payment", controllers.partners.createPayment);
-router.delete("/partners/:id/payment/:paymentId", controllers.partners.deletePayment);
+// histórico de pagamentos do parceiro à ady
+router.get("/partners/:id/payments", controllers.partners.listPayments);
+router.post("/partners/:id/payments", controllers.partners.createPayment);
+router.delete("/partners/:id/payments/:paymentId", controllers.partners.deletePayment);
 router.get("/deleted-tenants", controllers.partners.listDeletedTenants);
 router.post("/deleted-tenants/:id/restore", controllers.partners.restoreTenant);
 

@@ -50,6 +50,7 @@ import { PlansPage } from './pages/superadmin/PlansPage';
 import { PartnersPage } from './pages/superadmin/PartnersPage';
 import { PartnerConfigPage } from './pages/superadmin/PartnerConfigPage';
 import { DefaultPermissionsPage } from './pages/superadmin/DefaultPermissionsPage';
+import { PartnerPlansPage } from './pages/superadmin/PartnerPlansPage';
 import { ClientesPage } from './pages/superadmin/ClientesPage';
 import { MyIntegrationsPage } from './pages/superadmin/IntegrationsPanel';
 import { UsersPage } from './pages/superadmin/UsersPage';
@@ -229,6 +230,7 @@ export const router = createBrowserRouter([
       { path: 'planos', element: <PlansPage /> },
       { path: 'parceiros', element: <PartnersPage /> },
       { path: 'parceiros/padrao', element: <DefaultPermissionsPage /> },
+      { path: 'parceiros/planos', element: <PartnerPlansPage /> },
       { path: 'parceiros/:id', element: <PartnerConfigPage /> },
       { path: 'clientes', element: <ClientesPage /> },
       { path: 'integracoes', element: <MyIntegrationsPage /> },

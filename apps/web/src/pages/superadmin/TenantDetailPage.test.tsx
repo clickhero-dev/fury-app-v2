@@ -409,3 +409,26 @@ describe('TenantDetailPage — falha ao carregar', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar o cliente. Acesso negado.');
   });
 });
+
+describe('TenantDetailPage — conta do parceiro', () => {
+  it('não mostra Assinatura nem créditos; mostra o aviso com o plano e o link do parceiro', async () => {
+    const base = tenantResponse();
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve(url.endsWith('/assignable-plans') ? { data: { data: [] } } : {
+        data: { data: { ...base.data.data, subscription: null, partnerAccount: { partnerId: 'p-9', partnerName: 'Nerd Partner', planName: 'Parceiro Ouro' } } },
+      }),
+    );
+    renderPage();
+    const note = await screen.findByRole('note');
+    expect(note).toHaveTextContent('Conta do parceiro Nerd Partner · Plano Parceiro Ouro · uso ilimitado');
+    expect(screen.getByRole('link', { name: 'Ver parceiro' })).toHaveAttribute('href', '/admin/parceiros/p-9');
+    expect(screen.queryByRole('button', { name: 'Assinatura' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Créditos de imagem')).not.toBeInTheDocument();
+  });
+
+  it('cliente comum continua com a aba Assinatura', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Assinatura' })).toBeInTheDocument();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+});

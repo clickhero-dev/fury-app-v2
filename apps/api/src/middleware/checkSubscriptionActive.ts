@@ -11,7 +11,7 @@ export function checkSubscriptionActive(
   return (async () => {
     try {
       // Exempt from plan checks:
-      // - super_admin / admin_partner (platform_role): no plan of their own
+      // - super_admin / admin_partner e usuários da conta do parceiro: seguem o plano do parceiro
       // - Admin: Tenant admin role can manage tenant even if plan is expired
       //   (needed to renew subscription, handle billing, etc)
       // Only 'member' and 'owner' roles are subject to subscription verification
@@ -19,6 +19,8 @@ export function checkSubscriptionActive(
       if (req.user?.userId && req.user.role !== 'mock') {
         const platformRole = await rbacService.getPlatformRole(req.user.userId);
         if (platformRole === 'super_admin' || platformRole === 'admin_partner') return next();
+        // conta do parceiro não tem assinatura
+        if (await rbacService.inPartnerAccount?.(req.user.userId)) return next();
       }
 
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;

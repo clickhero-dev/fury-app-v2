@@ -86,8 +86,8 @@ export function PartnersDashboardTab({ period }: { period: DashboardPeriod }) {
             <thead>
               <tr className="text-left text-xs uppercase text-text-secondary">
                 <th className="py-2 pr-3 font-semibold">Parceiro</th>
-                <th className="py-2 pr-3 font-semibold">Valor pago</th>
-                <th className="py-2 pr-3 font-semibold">Pago em</th>
+                <th className="py-2 pr-3 font-semibold">Total pago</th>
+                <th className="py-2 pr-3 font-semibold">Último pagamento</th>
                 <th className="py-2 pr-3 font-semibold">Vagas</th>
                 <th className="py-2 pr-3 font-semibold">Clientes ativos</th>
                 <th className="py-2 font-semibold">Chave de IA</th>

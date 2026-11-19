@@ -13,6 +13,8 @@ import { daysAgoSaoPauloYMD } from '../utils/date-sao-paulo.js';
  */
 describe('Dashboard Clientes ady × Parceiros — integração', () => {
   const id = Date.now().toString().slice(-8);
+  // todo parceiro nasce com plano
+  let partnerPlanId: string;
   const password = 'SecurePass123!';
   const tenantIds: string[] = [];
   const planIds: string[] = [];
@@ -27,6 +29,8 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
   const login = (email: string) => request(app).post('/api/auth/login').send({ email, password });
 
   beforeAll(async () => {
+    const [pl] = await db.insert(schema.adyPartnerPlans).values({ name: `Plano dp ${id}`, priceCents: 100000, maxTenants: 5 }).returning();
+    partnerPlanId = pl!.id;
     const email = `dp-super-${id}@test.com`;
     await request(app).post('/api/auth/register').send({ name: 'Super', email, password, companyName: `DP ${id}` });
     const sup = (await login(email)).body.data;
@@ -36,7 +40,7 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
     superToken = sup.token;
 
     const created = await request(app).post('/api/admin/partners').set(asSuper()).send({
-      name: `Parceiro DP ${id}`, maxTenants: 3, accountName: 'Dona', accountEmail: `dp-acc-${id}@test.com`, accountPassword: password,
+      name: `Parceiro DP ${id}`, maxTenants: 3, accountName: 'Dona', accountEmail: `dp-acc-${id}@test.com`, accountPassword: password, partnerPlanId,
     });
     partnerId = created.body.data.id;
     const [acc] = await db.select().from(schema.users).where(eq(schema.users.email, `dp-acc-${id}@test.com`));
@@ -53,8 +57,11 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
       tenantId: tenant!.id, planId: plan!.id, status: 'active', currentPeriodEnd: new Date(Date.now() + 30 * 864e5),
     });
 
-    await request(app).post(`/api/admin/partners/${partnerId}/payment`).set(asSuper())
-      .send({ paidAt: daysAgoSaoPauloYMD(2), amountCents: 1234500 });
+    // plano + adicional: a linha do parceiro não pode duplicar
+    await request(app).post(`/api/admin/partners/${partnerId}/payments`).set(asSuper())
+      .send({ kind: 'plan', paidAt: daysAgoSaoPauloYMD(5), amountCents: 1234500 });
+    await request(app).post(`/api/admin/partners/${partnerId}/payments`).set(asSuper())
+      .send({ kind: 'additional', paidAt: daysAgoSaoPauloYMD(2), amountCents: 50000, note: '+1 vaga' });
   });
 
   afterAll(async () => {
@@ -63,6 +70,7 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
     await db.delete(schema.plans).where(inArray(schema.plans.id, planIds));
     await db.delete(schema.adyPartnerPayments).where(eq(schema.adyPartnerPayments.partnerId, partnerId));
     await db.delete(schema.adyPartners).where(eq(schema.adyPartners.id, partnerId));
+    await db.delete(schema.adyPartnerPlans).where(eq(schema.adyPartnerPlans.id, partnerPlanId));
     await rbacService.bumpVersion();
   });
 
@@ -87,12 +95,13 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
   it('Parceiros: receita, vagas e clientes do parceiro', async () => {
     const res = await request(app).get('/api/admin/dashboard/partners?period=7d').set(asSuper());
     expect(res.status).toBe(200);
-    const row = (res.body.data.partners as { id: string }[]).find((p) => p.id === partnerId);
-    expect(row).toEqual({
-      id: partnerId, name: `Parceiro DP ${id}`, paidCents: 1234500, paidAt: daysAgoSaoPauloYMD(2),
+    const rows = (res.body.data.partners as { id: string }[]).filter((p) => p.id === partnerId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({
+      id: partnerId, name: `Parceiro DP ${id}`, paidCents: 1284500, paidAt: daysAgoSaoPauloYMD(2),
       usedTenants: 1, maxTenants: 3, activeClients: 1, aiKeyConfigured: false,
     });
-    expect(res.body.data.revenueCents).toBeGreaterThanOrEqual(1234500);
+    expect(res.body.data.revenueCents).toBeGreaterThanOrEqual(1284500);
     expect(res.body.data.slotsTotal).toBeGreaterThanOrEqual(3);
     expect(res.body.data.newPartners).toBeGreaterThanOrEqual(1);
   });
@@ -101,7 +110,7 @@ describe('Dashboard Clientes ady × Parceiros — integração', () => {
     await db.update(schema.adyPartnerPayments).set({ paidAt: daysAgoSaoPauloYMD(40) }).where(eq(schema.adyPartnerPayments.partnerId, partnerId));
     const r7 = (await request(app).get('/api/admin/dashboard/partners?period=7d').set(asSuper())).body.data;
     const r90 = (await request(app).get('/api/admin/dashboard/partners?period=90d').set(asSuper())).body.data;
-    expect(r90.revenueCents - r7.revenueCents).toBeGreaterThanOrEqual(1234500);
+    expect(r90.revenueCents - r7.revenueCents).toBeGreaterThanOrEqual(1284500);
   });
 
   it('parceiro não acessa a aba Parceiros: 403', async () => {

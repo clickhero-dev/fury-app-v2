@@ -140,23 +140,65 @@ describe('Permissões (super_admin) — integração', () => {
     expect((await audit()).filter((l) => l.partnerId === partnerA).map((l) => l.action)).toEqual(expect.arrayContaining(['view_unblocked']));
   });
 
-  it('padrão (todos): vale para cliente da ady e de parceiro, e aparece travado no parceiro', async () => {
+  it('padrão: vale só para cliente da ady; parceiro e clientes dele seguem o plano', async () => {
     const res = await request(app).put(DEFAULT).set(bearer(superToken)).send({ viewKey: 'goals', blocked: true });
     expect(res.status).toBe(200);
     expect(await blockedViews(clientAdy)).toContain('goals');
-    expect(await blockedViews(clientA)).toContain('goals');
-    expect(await blockedViews(clientB)).toContain('goals');
+    expect(await blockedViews(clientA)).not.toContain('goals');
+    expect(await blockedViews(clientB)).not.toContain('goals');
     expect(await blockedViews(superToken)).toEqual([]);
 
+    // aba do parceiro não fica travada pelo padrão
     const a = (await request(app).get(permsA()).set(bearer(superToken))).body.data;
-    expect(a.find((v: { key: string }) => v.key === 'goals')).toMatchObject({ blocked: false, locked: true });
+    expect(a.find((v: { key: string }) => v.key === 'goals')).toMatchObject({ blocked: false, locked: false });
 
-    // nunca grava para os papéis de admin
+    // grava só para o cliente da ady
     const roles = (await db.select().from(schema.adyRbacViewsBlocked).where(isNull(schema.adyRbacViewsBlocked.partnerId))).map((r) => r.roleKey);
-    expect(roles.sort()).toEqual(['user', 'user_partner']);
+    expect(roles).toEqual(['user']);
 
     await request(app).put(DEFAULT).set(bearer(superToken)).send({ viewKey: 'goals', blocked: false });
     expect(await blockedViews(clientAdy)).toEqual([]);
+  });
+
+  it('telas essenciais e Automações não aparecem nem podem ser bloqueadas', async () => {
+    const essentials = ['dashboard', 'settings', 'settings.integrations', 'plans', 'subscription', 'automation'];
+    for (const url of [DEFAULT, permsA()]) {
+      const keys = ((await request(app).get(url).set(bearer(superToken))).body.data as { key: string }[]).map((v) => v.key);
+      for (const k of essentials) expect(keys, `${url} ${k}`).not.toContain(k);
+    }
+    for (const viewKey of essentials) {
+      expect((await request(app).put(permsA()).set(bearer(superToken)).send({ viewKey, blocked: true })).status).toBe(400);
+    }
+    const catalog = ((await request(app).get('/api/admin/partner-plans/views').set(bearer(superToken))).body.data as { key: string }[]).map((v) => v.key);
+    for (const k of essentials) expect(catalog).not.toContain(k);
+  });
+
+  it('Clientes fica sob Campanhas: travado na aba e fora do menu quando Campanhas desliga', async () => {
+    await request(app).put(permsA()).set(bearer(superToken)).send({ viewKey: 'campaigns', blocked: true });
+    try {
+      const list = (await request(app).get(permsA()).set(bearer(superToken))).body.data as { key: string; locked: boolean; blocked: boolean }[];
+      expect(list.find((v) => v.key === 'leads')).toMatchObject({ blocked: false, locked: true });
+      expect(await blockedViews(clientA)).toEqual(expect.arrayContaining(['campaigns', 'leads']));
+    } finally {
+      await request(app).put(permsA()).set(bearer(superToken)).send({ viewKey: 'campaigns', blocked: false });
+    }
+    expect(await blockedViews(clientA)).not.toContain('leads');
+  });
+
+  it('plano de cliente do parceiro: oferece tudo o que o parceiro tem, ignorando os bloqueios gerais da ady', async () => {
+    // telas que o parceiro pode oferecer (as travadas ficam de fora)
+    const offer = async () =>
+      ((await request(app).get('/api/admin/plans/configurable-views').set(bearer(partnerToken))).body.data.views as { key: string; locked: boolean }[])
+        .filter((v) => !v.locked).map((v) => v.key);
+    await request(app).put(DEFAULT).set(bearer(superToken)).send({ viewKey: 'calendar', blocked: true });
+    try {
+      expect(await offer()).toContain('calendar');
+      await request(app).put(permsA()).set(bearer(superToken)).send({ viewKey: 'calendar', blocked: true });
+      expect(await offer()).not.toContain('calendar');
+    } finally {
+      await request(app).put(permsA()).set(bearer(superToken)).send({ viewKey: 'calendar', blocked: false });
+      await request(app).put(DEFAULT).set(bearer(superToken)).send({ viewKey: 'calendar', blocked: false });
+    }
   });
 
   it('tela desativada (Orçamento smart) some da lista e não pode ser alterada', async () => {

@@ -687,7 +687,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
     };
   }
 
-  // aba Parceiros do super: receita única, vagas e clientes por parceiro
+  // aba Parceiros do super: receita, vagas e clientes; pago = soma, data = último
   async getPartnersDashboard(period: DashboardPeriod): Promise<PartnersDashboard> {
     const days = parseInt(period, 10);
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -704,7 +704,8 @@ export class SuperAdminRepository extends TenantScopedRepository {
         (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL) AS "usedTenants",
         (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL AND ${ACTIVE_SUB_SQL}) AS "activeClients"
       FROM ady_partners p
-      LEFT JOIN ady_partner_payments pay ON pay.partner_id = p.id
+      LEFT JOIN (SELECT partner_id, SUM(amount_cents)::bigint AS amount_cents, MAX(paid_at) AS paid_at
+        FROM ady_partner_payments GROUP BY partner_id) pay ON pay.partner_id = p.id
       WHERE p.deleted_at IS NULL
       ORDER BY p.name ASC`)) as unknown as Array<PartnersDashboard['partners'][number] & { createdAt: Date | string; paidCents: number | string | null }>;
 

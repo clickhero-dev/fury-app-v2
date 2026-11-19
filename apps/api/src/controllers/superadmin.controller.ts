@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { users, clientGoals } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
 import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
+import type { PartnerRepository } from "../repository/partner.repository.js";
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
 import { slugify } from "./partner.controller.js";
@@ -197,7 +198,18 @@ function serializeGoal(row: typeof clientGoals.$inferSelect) {
  * SuperAdminRepository global injetado. ADR-0001.
  */
 export class SuperAdminController {
-  constructor(private repo: SuperAdminRepository) {}
+  constructor(
+    private repo: SuperAdminRepository,
+    // conta própria do parceiro; null = não checa (testes de unidade)
+    private partners: Pick<PartnerRepository, "findPartnerAccount"> | null = null,
+  ) {}
+
+  // conta própria do parceiro não tem assinatura nem cota
+  private async refuseOnPartnerAccount(tenantId: string) {
+    const account = await this.partners?.findPartnerAccount(tenantId);
+    if (account)
+      throw new AppError(409, "PARTNER_ACCOUNT_NO_SUBSCRIPTION", `Esta é a conta do parceiro ${account.partnerName}: ela não tem assinatura. O uso é ilimitado com a chave OpenRouter do parceiro.`);
+  }
 
   // cliente fora do escopo do parceiro = 404 (não revela que existe)
   private async tenantInScope(req: Request, tenantId: string) {
@@ -315,6 +327,7 @@ export class SuperAdminController {
       const goals = await repo.findClientGoalByTenant(tenant.id);
 
       const owner = audienceOwner(tenantUsers);
+      const partnerAccount = (await this.partners?.findPartnerAccount(tenant.id)) ?? null;
 
       res.json({
         success: true,
@@ -328,6 +341,7 @@ export class SuperAdminController {
           audienceDefaults: owner?.audienceDefaults ?? null,
           ownerUserId: owner?.id ?? null,
           businessContext: tenant.businessContext ?? null,
+          partnerAccount,
         },
         timestamp: new Date().toISOString(),
       });
@@ -374,6 +388,8 @@ export class SuperAdminController {
         throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.password, 10);
+      // equipe da conta própria do parceiro segue o parceiro
+      const account = tenant.partnerId ? null : await this.partners?.findPartnerAccount(tenant.id);
       const values = {
         tenantId: body.tenantId,
         name: body.name,
@@ -382,6 +398,7 @@ export class SuperAdminController {
         role: body.role,
         // cliente de parceiro → usuário do parceiro
         ...(tenant.partnerId ? { platformRole: "user_partner" as const } : {}),
+        ...(account ? { platformRole: "user_partner" as const, partnerId: account.partnerId } : {}),
       };
       const user = partnerOf(req)
         ? await repo.createMemberWithinLimit(values, MAX_PARTNER_CLIENT_MEMBERS)
@@ -580,6 +597,7 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const tenantId = req.params.tenantId;
+      await this.refuseOnPartnerAccount(tenantId);
 
       const { SubscriptionRepository } = await import('../repository/subscription.repository.js');
       const subRepo = new SubscriptionRepository(tenantId);
@@ -605,6 +623,7 @@ export class SuperAdminController {
 
       // plano precisa ser do mesmo dono do cliente (ady ou o parceiro dele)
       const tenant = await this.tenantInScope(req, req.params.tenantId);
+      await this.refuseOnPartnerAccount(tenant.id);
       const owner = tenant.partnerId ?? null;
       if (body.planId !== undefined) await this.planInScope(body.planId, owner);
 
@@ -886,7 +905,8 @@ export class SuperAdminController {
   private async actorBlockedViews(req: Request): Promise<string[]> {
     const partnerId = partnerOf(req);
     if (!partnerId) return [];
-    return expandBlocked(await new RbacRepository().listBlockedViewKeys("user_partner", partnerId));
+    // só o que o parceiro tem (plano + ajustes), sem os bloqueios gerais dos clientes ady
+    return expandBlocked(await new RbacRepository().listBlockedViewKeys("user_partner", partnerId, false));
   }
 
   configurablePlanViews = async (req: Request, res: Response, next: NextFunction) => {
