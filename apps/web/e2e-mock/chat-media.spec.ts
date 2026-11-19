@@ -160,12 +160,14 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Mostrar conversas', exact: true }).click();
     await page.getByRole('button', { name: 'Conversa de mídia', exact: true }).click();
     for (const file of fixtures) await expect(page.getByText(file, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Abrir referencia.png', exact: true }).click();
     await expect.poll(() => state.downloads).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Abrir referencia.png', exact: true }).click();
     const viewer = page.getByRole('dialog', { name: 'Visualização de referencia.png' });
     const image = viewer.getByRole('img', { name: 'referencia.png', exact: true });
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Fechar visualização' }).click();
+    await expect(viewer).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath(`media-${theme}-history.png`), fullPage: true });
     expect(errors).toEqual([]);
   });
