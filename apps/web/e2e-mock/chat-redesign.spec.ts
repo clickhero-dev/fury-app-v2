@@ -167,7 +167,7 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }
     await page.reload();
     await page.getByRole('button',{name:'Mostrar conversas'}).click();
     await page.getByRole('button',{name:'Vídeo',exact:true}).click();
-    const video = page.getByLabel('Vídeo gerado', { exact: true });
+    const video = page.locator('video[aria-label="Vídeo gerado"]');
     await expect(video).toBeVisible();
     const scroller = page.locator('.ady-chat-messages');
     await scroller.evaluate((element) => { const video = element.querySelector('video')!; element.scrollTop += video.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom; });
