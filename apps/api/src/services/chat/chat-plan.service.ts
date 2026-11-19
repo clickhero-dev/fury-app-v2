@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { AccessTokenPayload } from '../../lib/jwt.js';
 import type { PlanRepositoryFactory } from '../../repository/chat-plan.repository.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -15,9 +16,11 @@ export interface PlanQueue {
 export class ChatPlanService {
     constructor(private readonly repo: PlanRepositoryFactory, private readonly queue: PlanQueue, private readonly access: PlanAccess) {
     }
-    async create(scope: PlanScope, input: unknown) {
+    async create(scope: PlanScope, input: unknown, run?: { runId: string; leaseId: string; operationId: string }) {
         await this.access.authorize(scope);
-        return publicPlan(await this.repo(scope.tenantId, scope.userId).create(newPlan(scope.conversationId, parsePlanInput(input))));
+        const parsed = parsePlanInput(input);
+        const fence = run && { ...run, key: run.operationId, payloadHash: createHash('sha256').update(JSON.stringify(parsed)).digest('hex') };
+        return publicPlan(await this.repo(scope.tenantId, scope.userId).create(newPlan(scope.conversationId, parsed), fence));
     }
     async get(scope: PlanScope, id: string) {
         await this.access.authorize(scope);

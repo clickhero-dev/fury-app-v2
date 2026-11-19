@@ -21,6 +21,10 @@ import { describe, it, expect, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { createChatProxy } from '../routes/chat.routes.js';
+import { verifyChatDelegation } from '../lib/chat-delegation.js';
+import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
+
+vi.mock('../middleware/chat-delegation.middleware.js', () => ({ getDelegatedUser: vi.fn() }));
 
 const user = { userId: 'u1', tenantId: 't1', email: 'a@example.com', role: 'admin' };
 const secret = 'test-secret-with-sufficient-entropy-1234567890';
@@ -32,6 +36,46 @@ function app(fetcher: typeof fetch, logged = true) {
   return app;
 }
 describe('proxy do chat', () => {
+  it.each([
+    '/conversations/123/approvals/review',
+    '/conversations/123/approvals/confirm-batch',
+    '/approvals/123/confirm',
+    '/conversations/123/runs/456/cancel',
+  ])('emite intenção humana apenas na operação humana POST %s', async path => {
+    const fetcher = vi.fn(async () => new Response('{}'));
+    const server = app(fetcher as typeof fetch);
+    expect((await request(server).post(`/chat${path}`).send({ approvalIds: ['123'] })).status).toBe(200);
+    const token = (vi.mocked(fetcher as typeof fetch).mock.calls[0][1]?.headers as Record<string, string>).authorization.slice(7);
+    expect(verifyChatDelegation(token, secret)).toHaveProperty('humanIntent', true);
+    expect((await request(server).get(`/chat${path}`)).status).toBe(404);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('não eleva identidade delegada para confirmação humana', async () => {
+    const fetcher = vi.fn();
+    vi.mocked(getDelegatedUser).mockReturnValueOnce(user);
+    expect((await request(app(fetcher as typeof fetch)).post('/chat/conversations/123/approvals/review').send({})).status).toBe(403);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('não permite humanIntent enviado no body e não marca mensagens como humanas para ações', async () => {
+    const fetcher = vi.fn(async () => new Response('{}'));
+    const server = app(fetcher as typeof fetch);
+    expect((await request(server).post('/chat/conversations/123/approvals/review').send({humanIntent:true})).status).toBe(400);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect((await request(server).post('/chat/conversations/123/messages').send({content:'oi'})).status).toBe(200);
+    const token = (vi.mocked(fetcher as typeof fetch).mock.calls[0][1]?.headers as Record<string, string>).authorization.slice(7);
+    expect(verifyChatDelegation(token, secret).humanIntent).not.toBe(true);
+  });
+  it.each([400, 401, 403, 404, 409])('preserva recusa HTTP %s no lote sem novo envio', async status => {
+    const fetcher = vi.fn(async () => new Response('{"detail":"recusa"}', {status}));
+    expect((await request(app(fetcher as typeof fetch)).post('/chat/conversations/123/approvals/confirm-batch').send({})).status).toBe(status);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('encaminha cancelamento humano, mas não aceita outros métodos no controle de run', async () => {
+    const fetcher = vi.fn(async () => new Response('{"status":"cancelled"}'));
+    expect((await request(app(fetcher as typeof fetch)).post('/chat/conversations/123/runs/456/cancel').send({})).status).toBe(200);
+    expect((await request(app(fetcher as typeof fetch)).get('/chat/conversations/123/runs/456/cancel')).status).toBe(404);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it('encaminha identidade sem token original', async () => {
     const fetcher = vi.fn(async () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
     const res = await request(app(fetcher)).get('/chat/conversations').set('Authorization', 'Bearer original');
@@ -63,6 +107,24 @@ describe('proxy do chat', () => {
     const fetcher = vi.fn() as unknown as typeof fetch;
     expect((await request(app(fetcher)).get('/chat/admin')).status).toBe(404);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('preserva o run_id exato na tentativa de resposta direcionada', async () => {
+    const fetcher = vi.fn(async () => new Response('data: {"text":"ok"}\n\n', { headers: { 'content-type': 'text/event-stream' } })) as unknown as typeof fetch;
+    const res = await request(app(fetcher))
+      .post('/chat/conversations/123/retry?run_id=run-123%2Ftarget%2B1')
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetcher).mock.calls[0][0]).toBe('http://chat:8000/conversations/123/retry?run_id=run-123%2Ftarget%2B1');
+    expect(vi.mocked(fetcher).mock.calls[0][1]?.method).toBe('POST');
+  });
+  it('encaminha seleção de esclarecimento somente por POST', async () => {
+    const fetcher = vi.fn(async () => new Response('ok')) as unknown as typeof fetch;
+    const server = app(fetcher);
+    expect((await request(server).post('/chat/conversations/123/clarifications/456/answer').send({choiceIndex:1})).status).toBe(200);
+    expect((await request(server).get('/chat/conversations/123/clarifications/456/answer')).status).toBe(404);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('encaminha tentativa de resposta somente por POST', async () => {
     const fetcher = vi.fn(async () => new Response('data: {"text":"ok"}\n\n', {headers:{'content-type':'text/event-stream'}})) as unknown as typeof fetch;

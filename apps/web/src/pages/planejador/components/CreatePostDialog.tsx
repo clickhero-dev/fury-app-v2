@@ -1,4 +1,4 @@
-import { useState, useRef, type DragEvent } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, type DragEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus, FolderOpen, Image as ImageIcon, Loader2, Check } from 'lucide-react';
@@ -124,8 +124,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const [dragOver, setDragOver] = useState(false);
   const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
   const [mediaSource, setMediaSource] = useState<'upload' | 'library'>('upload');
-  const [preparedSingleUrl, setPreparedSingleUrl] = useState<string | null>(null);
-  const [preparedCarouselUrls, setPreparedCarouselUrls] = useState<string[] | null>(null);
+  const uploadedFiles = useRef(new WeakMap<File, string>());
+  const generation = useRef(0);
+  const closed = useRef(false);
+  const generating = useRef(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [selectedLibraryAssets, setSelectedLibraryAssets] = useState<StudioAsset[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -197,7 +199,6 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     }
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
-    setPreparedSingleUrl(null);
   };
 
   const handleCarouselFiles = (files: File[]) => {
@@ -214,13 +215,11 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     const newPreviews = toAdd.map(f => URL.createObjectURL(f));
     setCarouselFiles(newFiles);
     setCarouselPreviews(prev => [...prev, ...newPreviews]);
-    setPreparedCarouselUrls(null);
   };
 
   const removeCarouselFile = (idx: number) => {
     setCarouselFiles(prev => prev.filter((_, i) => i !== idx));
     setCarouselPreviews(prev => prev.filter((_, i) => i !== idx));
-    setPreparedCarouselUrls(null);
   };
 
   const handleDrop = (e: DragEvent) => {
@@ -252,75 +251,87 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const submitLabel = isEdit ? 'Salvar' : isNow ? (failedPostId ? 'Tentar novamente' : 'Postar agora') : 'Criar post';
   const loadingLabel = isEdit ? 'Salvando...' : isNow ? 'Publicando...' : 'Criando...';
 
-  const uploadMedia = async (): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
+  const uploadMedia = async (firstOnly = false): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
     if (existingUrls.length > 0) {
       return postType === 'carousel' ? { imageUrls: existingUrls } : { imageUrl: existingUrls[0] };
     }
     // Handle library selection
-    if (mediaSource === 'library' && selectedLibraryAssets.length > 0) {
+    if (mediaSource === 'library') {
       const urls = selectedLibraryAssets.map(a => a.url).filter((u): u is string => !!u);
       return postType === 'carousel' ? { imageUrls: urls } : { imageUrl: urls[0] };
     }
-    let imageUrl: string | undefined = preparedSingleUrl ?? undefined;
-    let imageUrls: string[] | undefined = preparedCarouselUrls ?? undefined;
-    // Upload single image/video
-    if (mediaFile && !imageUrl) {
+    const uploadFile = async (file: File): Promise<string> => {
+      const cached = uploadedFiles.current.get(file);
+      if (cached) return cached;
       const formData = new FormData();
-      formData.append('file', mediaFile);
-      const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      imageUrl = uploadRes.data.url;
-      setPreparedSingleUrl(imageUrl);
-    }
-    // Upload carousel images
-    if (postType === 'carousel' && carouselFiles.length > 0 && !imageUrls) {
-      const uploadedUrls: string[] = [];
-      for (const file of carouselFiles) {
-        const formData = new FormData();
-        formData.append('file', file);
-        const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+      formData.append('file', file);
+      let url: string;
+      try {
+        const { data } = await api.post('/planner/posts/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        uploadedUrls.push(uploadRes.data.url);
-      }
-      imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
-      setPreparedCarouselUrls(imageUrls ?? null);
+        url = data.data.url;
+      } catch { throw Object.assign(new Error('Não foi possível enviar a mídia. Tente novamente.'), { captionCode: 'CAPTION_UPLOAD_FAILED' }); }
+      uploadedFiles.current.set(file, url);
+      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+      return url;
+    };
+    const imageUrl = postType !== 'carousel' && mediaFile ? await uploadFile(mediaFile) : undefined;
+    const imageUrls: string[] | undefined = postType === 'carousel' && carouselFiles.length ? [] : undefined;
+    if (imageUrls) {
+      for (const file of firstOnly ? carouselFiles.slice(0, 1) : carouselFiles) imageUrls.push(await uploadFile(file));
     }
     return { imageUrl, imageUrls };
   };
 
+  // Media changes and closing invalidate both upload continuations and late responses.
+  useLayoutEffect(() => { generation.current++; }, [mediaFile, carouselFiles, existingUrls, selectedLibraryAssets, mediaSource, postType]);
+  useEffect(() => {
+    closed.current = false;
+    return () => { closed.current = true; generation.current++; };
+  }, []);
+  const closeDialog = () => { closed.current = true; generation.current++; onClose(); };
+  const currentRequest = (id: number) => !closed.current && generation.current === id;
   const suggestMutation = useMutation({
     mutationFn: async () => {
+      const id = generation.current;
       const context = caption.trim();
-      const videoOnly = postType === 'reel' || postType === 'stories';
-      let imageUrl: string | undefined;
-      if (!videoOnly && mediaSource === 'library') {
-        imageUrl = selectedLibraryAssets.find(asset => asset.type === 'image')?.url;
+      try {
+        const media = await uploadMedia(true);
+        if (!currentRequest(id)) return null;
+        const url = media.imageUrl ?? media.imageUrls?.[0];
+        const kind = existingUrls.length ? urlKind(existingUrls[0])
+          : mediaSource === 'library' ? selectedLibraryAssets[0]?.type
+          : postType === 'carousel' ? carouselFiles[0] && fileKind(carouselFiles[0])
+          : mediaFile && fileKind(mediaFile);
+        const { data } = await api.post('/planner/posts/suggest-caption', {
+          ...(context ? { context } : {}),
+          ...(url ? kind === 'video' ? { videoUrl: url } : { imageUrl: url } : {}),
+        });
+        return { ...data.data as { caption: string; imageUsed: boolean }, id, requestedImage: Boolean(url && kind !== 'video') };
+      } catch (error) {
+        if (currentRequest(id)) throw error;
+        return null;
       }
-      if (!videoOnly && mediaSource === 'upload' && mediaFile?.type.startsWith('image/')) {
-        if (preparedSingleUrl) imageUrl = preparedSingleUrl;
-        else {
-          const media = await uploadMedia();
-          imageUrl = media.imageUrl;
-        }
-      }
-      if (!videoOnly && postType === 'carousel' && carouselFiles.length) {
-        const media = await uploadMedia();
-        imageUrl = media.imageUrls?.[0];
-      }
-      const { data } = await api.post('/planner/posts/suggest-caption', {
-        ...(context ? { context } : {}),
-        ...(imageUrl ? { imageUrl } : {}),
-      });
-      return data.data as { caption: string; imageUsed: boolean };
     },
     onSuccess: (data) => {
+      if (!data || !currentRequest(data.id)) return;
       setCaption(data.caption);
-      setSuggestError(data.imageUsed ? null : (hasVisualContext ? 'A imagem não pôde ser usada; sugestão baseada no texto.' : null));
+      setSuggestError(!data.imageUsed && data.requestedImage ? 'A imagem não pôde ser usada; sugestão baseada no texto.' : null);
       clearRetryState();
     },
-    onError: () => setSuggestError('Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.'),
+    onError: (error: any) => {
+      const code = error?.captionCode ?? error?.response?.data?.error?.code;
+      const messages: Record<string, string> = {
+        CAPTION_UPLOAD_FAILED: 'Não foi possível enviar a mídia. Tente novamente ou escreva a legenda manualmente.',
+        MEDIA_NOT_FOUND: 'A mídia não está disponível. Envie novamente ou escreva um tema na legenda.',
+        CAPTION_MEDIA_ORIGIN: 'A origem da mídia não é permitida. Selecione uma mídia da biblioteca ou envie novamente.',
+        CAPTION_VIDEO_NO_SPEECH: 'Não foi identificada fala no vídeo. Escreva um tema na legenda e tente novamente.',
+        CAPTION_TRANSCRIPTION_UNAVAILABLE: 'Não foi possível ouvir o vídeo. Tente novamente ou escreva a legenda manualmente.',
+      };
+      setSuggestError(messages[code] ?? 'Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.');
+    },
+    onSettled: () => { generating.current = false; },
   });
 
   const mutation = useMutation({
@@ -398,12 +409,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     },
   });
 
-  const hasVisualContext = postType !== 'reel' && postType !== 'stories' && (
-    (existingUrls.some(url => urlKind(url) === 'image')) ||
-    (mediaSource === 'library' && selectedLibraryAssets.some(asset => asset.type === 'image')) ||
-    (mediaSource === 'upload' && (Boolean(mediaFile?.type.startsWith('image/')) || (postType === 'carousel' && carouselFiles.length > 0)))
-  );
-  const canSuggest = !suggestMutation.isPending && (Boolean(caption.trim()) || hasVisualContext);
+  const hasMediaContext = existingUrls.length > 0 ||
+    (mediaSource === 'library' ? selectedLibraryAssets.length > 0
+      : postType === 'carousel' ? carouselFiles.length > 0 : Boolean(mediaFile));
+  const canSuggest = !mutation.isPending && !suggestMutation.isPending && caption.trim().length <= 5000 && (Boolean(caption.trim()) || hasMediaContext);
   const carouselCount = mediaSource === 'library' ? selectedLibraryAssets.length : carouselFiles.length;
   // Edição pode ficar sem agendamento (rascunho); criação agendada exige data + hora
   const scheduleOk = mode === 'now' || scheduleValid || (isEdit && !scheduledDate && !scheduledTime);
@@ -428,14 +437,14 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   };
 
   return (
-    <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50" onClick={onClose}>
+    <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50" onClick={closeDialog}>
       <div
         className="bg-surface border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
           <h3 className="text-lg font-bold text-text-primary">{isEdit ? 'Editar post' : isNow ? 'Postar agora' : 'Novo post'}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors">
+          <button onClick={closeDialog} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -562,7 +571,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                     {mediaPreview ? (
                       <MediaPreview src={mediaPreview} isVideo={!!mediaFile?.type.startsWith('video/')} postType={postType}>
                         <button
-                          onClick={() => { setMediaFile(null); setMediaPreview(null); setPreparedSingleUrl(null); }}
+                          onClick={() => { setMediaFile(null); setMediaPreview(null); }}
                           className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -790,13 +799,13 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                 </label>
                 <button
                   type="button"
-                  onClick={() => { setSuggestError(null); suggestMutation.mutate(); }}
+                  onClick={() => { if (!canSuggest || generating.current) return; generating.current = true; setSuggestError(null); suggestMutation.mutate(); }}
                   disabled={!canSuggest}
                   aria-busy={suggestMutation.isPending}
                   className="inline-flex items-center gap-1 text-xs font-medium text-accent disabled:text-text-tertiary disabled:cursor-not-allowed"
                 >
                   {suggestMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {suggestMutation.isPending ? 'Gerando...' : 'Gerar legenda com IA'}
+                  {suggestMutation.isPending ? 'Gerando...' : 'Gerar legenda automática'}
                 </button>
               </div>
               <textarea
@@ -807,16 +816,18 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                 className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm resize-none focus:border-accent focus:outline-none transition-colors"
                 placeholder="Escreva a legenda do post..."
               />
-              {(postType === 'reel' || postType === 'stories') && !caption.trim() && (
-                <p className="mt-1 text-xs text-text-tertiary">Para vídeos, escreva um tema na legenda antes de gerar.</p>
+              {!hasMediaContext && !caption.trim() && (
+                <p className="mt-1 text-xs text-text-tertiary">Selecione uma imagem ou vídeo, ou escreva um tema na legenda.</p>
               )}
+              {hasMediaContext && <p className="mt-1 text-xs text-text-tertiary">Para vídeos, a sugestão usa a fala do áudio (até 2 minutos). Sem fala, escreva um tema.</p>}
+              {mediaSource === 'upload' && (mediaFile || carouselFiles.length > 0) && <p className="mt-1 text-xs text-text-tertiary">Ao gerar, a mídia será enviada e ficará na biblioteca mesmo se cancelar.</p>}
               {suggestError && <p role="alert" className="mt-1 text-xs text-error">{suggestError}</p>}
             </div>
 
             {/* Actions */}
             <div className="flex gap-3 pt-2">
               <button
-                onClick={onClose}
+                onClick={closeDialog}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-surface-secondary hover:bg-border text-text-primary text-sm font-medium transition-colors"
               >
                 Cancelar

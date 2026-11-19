@@ -69,9 +69,10 @@ export interface ClickUpTicketDetails {
 export class ClickUpTicketsError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT',
+    public readonly code: 'CLICKUP_RATE_LIMITED' | 'CLICKUP_NETWORK_ERROR' | 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT',
     message: string,
     public readonly clickupTaskUrl?: string,
+    public readonly providerStatus?: number,
   ) {
     super(message);
     Error.captureStackTrace(this, this.constructor);
@@ -147,6 +148,50 @@ export class ClickUpTicketsClient {
     return response.json().catch(() => {
       throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
     });
+  }
+
+  /** Somente leitura de status: duas tentativas, até 3s cada e 7s no total. */
+  private async getStatusesJson(path: string): Promise<unknown> {
+    const { apiToken } = this.resolveConfig();
+    const deadline = Date.now() + 7_000;
+    for (let attempt = 0; ; attempt++) {
+      const signal = AbortSignal.timeout(Math.max(1, Math.min(3_000, deadline - Date.now())));
+      let failure: ClickUpTicketsError;
+      let delay = 250;
+      try {
+        const response = await externalFetch(`${CLICKUP_API_URL}${path}`, {
+          headers: { Authorization: apiToken }, signal,
+        });
+        if (response.ok) {
+          try { return await response.json(); }
+          catch {
+            throw new ClickUpTicketsError(502, signal.aborted ? 'CLICKUP_TIMEOUT' : 'CLICKUP_INVALID_RESPONSE', 'Não foi possível carregar os status agora.');
+          }
+        }
+        const status = response.status;
+        failure = new ClickUpTicketsError(502,
+          status === 429 ? 'CLICKUP_RATE_LIMITED' : status === 401 || status === 403 ? 'CLICKUP_UNAUTHORIZED' : 'CLICKUP_UNAVAILABLE',
+          'Não foi possível carregar os status agora.', undefined, status);
+        if (status !== 429 && status < 500) throw failure;
+        const retryAfter = response.headers?.get('retry-after');
+        if (retryAfter) {
+          const seconds = /^\d+(?:\.\d+)?$/.test(retryAfter.trim()) ? Number(retryAfter) * 1000 : NaN;
+          const wait = Number.isNaN(seconds) ? Date.parse(retryAfter) - Date.now() : seconds;
+          if (Number.isFinite(wait)) delay = Math.max(0, wait);
+        }
+        await response.body?.cancel();
+      } catch (error) {
+        if (error instanceof ClickUpTicketsError) {
+          if (error.code !== 'CLICKUP_TIMEOUT') throw error;
+          failure = error;
+        } else if (error instanceof ExternalHttpError) {
+          failure = new ClickUpTicketsError(502, error.code === 'TIMEOUT' || signal.aborted ? 'CLICKUP_TIMEOUT' : 'CLICKUP_NETWORK_ERROR', 'Não foi possível carregar os status agora.');
+        } else { throw error; }
+      }
+      // Não antecipa Retry-After nem espera indefinidamente por um provedor.
+      if (attempt >= 1 || delay + 3_000 > deadline - Date.now()) throw failure;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 
   private async uploadAttachment(taskId: string, attachment: TicketAttachment): Promise<void> {
@@ -323,13 +368,13 @@ export class ClickUpTicketsClient {
     const { listId } = this.resolveConfig();
     // O endpoint de detalhes da lista é o que retorna os status configurados.
     // `/list/:id/status` não é uma rota pública do ClickUp e responde 404.
-    const payload = await this.getJson(`/list/${listId}`) as { statuses?: unknown };
-    if (!Array.isArray(payload?.statuses)) {
+    const payload = await this.getStatusesJson(`/list/${listId}`) as { statuses?: unknown };
+    if (!Array.isArray(payload?.statuses) || payload.statuses.length === 0) {
       throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
     }
     return payload.statuses.map((status): ClickUpTicketStatus => {
       const item = status as { status?: unknown; type?: unknown; color?: unknown };
-      if (typeof item.status !== 'string' || !item.status.trim() || typeof item.type !== 'string') {
+      if (!item || typeof item.status !== 'string' || !item.status.trim() || typeof item.type !== 'string' || !item.type.trim()) {
         throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
       }
       return {

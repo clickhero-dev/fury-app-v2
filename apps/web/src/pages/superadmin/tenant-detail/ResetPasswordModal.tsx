@@ -5,10 +5,6 @@ import { FieldLabel } from "./FormSection";
 // Mesma política da API (packages/shared/password-policy)
 export const PASSWORD_CHECKS: { label: string; test: (p: string) => boolean }[] = [
   { label: "Pelo menos 8 caracteres", test: (p) => p.length >= 8 },
-  { label: "Uma letra minúscula", test: (p) => /[a-z]/.test(p) },
-  { label: "Uma letra maiúscula", test: (p) => /[A-Z]/.test(p) },
-  { label: "Um número", test: (p) => /\d/.test(p) },
-  { label: "Um caractere especial", test: (p) => /[^a-zA-Z0-9]/.test(p) },
 ];
 
 interface ResetPasswordModalProps {

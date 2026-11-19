@@ -1,12 +1,12 @@
 import crypto from 'node:crypto';
 import { AppError } from '../../middleware/errorHandler.js';
-import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
+import { generateAccessToken, generateRefreshToken, SESSION_TTL_SECONDS } from '../../lib/jwt.js';
 import { getRedis } from '../../lib/redis.js';
 import { emailService } from '../email/email.service.js';
 import { PublicTrialRepository } from '../../repository/public-trial.repository.js';
 import { createMagicLinkToken, hashMagicLinkToken, normalizePublicTrialSignup, type PublicTrialSignup } from './public-trial-signup.js';
 
-const REFRESH_TTL = 7 * 24 * 60 * 60;
+const TRIAL_SESSION_TTL = SESSION_TTL_SECONDS;
 
 export class PublicTrialService {
   constructor(
@@ -48,10 +48,11 @@ export class PublicTrialService {
     const result = await this.repository.consumeMagicLink(hashMagicLinkToken(rawToken));
     if (!result) throw new AppError(401, 'INVALID_MAGIC_LINK', 'Link inválido ou expirado.');
 
-    const accessToken = generateAccessToken({ userId: result.user.id, tenantId: result.user.tenantId, email: result.user.email, role: result.user.role });
-    const refreshToken = generateRefreshToken(result.user.id);
+    const sessionExpiresAt = Math.floor(Date.now() / 1000) + TRIAL_SESSION_TTL;
+    const accessToken = generateAccessToken({ userId: result.user.id, tenantId: result.user.tenantId, email: result.user.email, role: result.user.role }, sessionExpiresAt);
+    const refreshToken = generateRefreshToken(result.user.id, sessionExpiresAt);
     const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    await getRedis().setex(`refresh:${result.user.id}`, REFRESH_TTL, hash);
+    await getRedis().setex(`refresh:${result.user.id}`, TRIAL_SESSION_TTL, hash);
     return { token: accessToken, refreshToken, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, tenantId: result.user.tenantId, mustChangePassword: result.user.mustChangePassword } };
   }
 }

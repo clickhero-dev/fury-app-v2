@@ -24,11 +24,12 @@ const delegated = createChatDelegation(identity, secret);
 const base = `/api/chat/conversations/${conversation}/attachments`;
 const attachment = { id, filename: 'imagem.png', mimeType: 'image/png', sizeBytes: 3 };
 const attachments = { assertOwned: vi.fn(), upload: vi.fn(), download: vi.fn(), remove: vi.fn(), read: vi.fn(), cleanup: vi.fn(), cleanupDelegated: vi.fn() };
+const promotion = { logo: vi.fn(), library: vi.fn() };
 const transcription = { transcribe: vi.fn() }; const consume = vi.fn();
 function app(options = {}) {
   const server = express(); server.use(express.json({ limit: '32kb' }));
   server.use(createDelegationGuard({ secret, repository: () => ({ consume }) }));
-  server.use('/api/chat', authMiddleware, tenantMiddleware, createChatMediaRouter(new ChatMediaController(transcription as never, attachments as never), options));
+  server.use('/api/chat', authMiddleware, tenantMiddleware, createChatMediaRouter(new ChatMediaController(transcription as never, attachments as never, promotion as never), options));
   server.use((_req, res) => res.status(599).json({ proxy: true }));
   server.use(errorHandler); return server;
 }
@@ -39,6 +40,8 @@ beforeEach(() => {
   attachments.download.mockResolvedValue({ attachment, bytes: Buffer.from('PNG') });
   attachments.remove.mockResolvedValue(undefined); attachments.cleanup.mockResolvedValue(undefined);
   attachments.read.mockResolvedValue({ readings: [{ attachmentId: id, filename: 'imagem.png', content: 'azul' }], failures: [] });
+  promotion.logo.mockResolvedValue({ kind: 'logo', url: 'https://cdn/logo.png', colors: { primaryColor: '#112233', secondaryColor: '#445566' } });
+  promotion.library.mockResolvedValue({ kind: 'library', photos: [{ id: 'photo', kind: 'empresa' }] });
   transcription.transcribe.mockResolvedValue({ text: 'Olá' });
 });
 
@@ -59,6 +62,21 @@ describe('API mídia autenticada', () => {
     expect(result.status).toBe(200); expect(result.headers['content-type']).toContain('image/png');
     expect(result.headers['cache-control']).toBe('private, no-store'); expect(result.headers['x-content-type-options']).toBe('nosniff');
     expect(result.headers['content-security-policy']).toContain("default-src 'none'");
+  });
+  it('promove somente o anexo autenticado para logo ou biblioteca', async () => {
+    const logo = await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${bearer}`).send({ target: 'logo' });
+    expect(logo.status).toBe(201); expect(logo.body.data).toMatchObject({ kind: 'logo', colors: { primaryColor: '#112233' } });
+    expect(promotion.logo).toHaveBeenCalledWith(tenant, userId, conversation, id);
+    const library = await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${bearer}`).send({ target: 'library', kind: 'empresa' });
+    expect(library.status).toBe(201); expect(promotion.library).toHaveBeenCalledWith(tenant, userId, conversation, id, 'empresa');
+    expect((await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${bearer}`).send({ target: 'library', kind: 'secret' })).status).toBe(400);
+  });
+  it('aceita a promoção pelo token delegado sem permitir upload ou download', async () => {
+    const result = await request(app()).post(`${base}/${id}/promote`).set('Authorization', `Bearer ${delegated}`).send({ target: 'logo' });
+    expect(result.status).toBe(201);
+    expect(promotion.logo).toHaveBeenCalledWith(tenant, userId, conversation, id);
+    expect((await request(app()).post(base).set('Authorization', `Bearer ${delegated}`).attach('files', Buffer.from('x'), 'x.png')).status).toBe(403);
+    expect((await request(app()).get(`${base}/${id}`).set('Authorization', `Bearer ${delegated}`)).status).toBe(403);
   });
   it('delete unitário e cleanup retornam 204', async () => {
     expect((await request(app()).delete(`${base}/${id}`).set('Authorization', `Bearer ${bearer}`)).status).toBe(204);

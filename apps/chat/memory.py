@@ -1,4 +1,5 @@
 """Operações puras sobre fatos e suas origens."""
+from chat_history_sql import COMPLETED_OR_LEGACY_USER_SQL
 
 def remove_conversation(memory: dict, conversation_id: str) -> dict:
     facts = []
@@ -88,16 +89,35 @@ async def _summarize_facts_bounded(facts, summarize, *, force=False):
     return current
 
 
-async def consolidate(pool, conversation_id, summarize, min_responses=5, message_repository=None):
+async def consolidate(pool, conversation_id, summarize, min_responses=5, message_repository=None, *, owner_run=None):
     """Resume lotes limitados; só grava se o resumo e o snapshot forem válidos."""
     import json
     import asyncio
-    query = """SELECT id,role,content FROM chat_messages WHERE conversation_id=$1 AND (created_at,id) <= (SELECT created_at,id FROM chat_messages WHERE conversation_id=$1 AND role='assistant' ORDER BY created_at,id OFFSET $2 LIMIT 1) ORDER BY created_at,id"""
+    query = f"""SELECT m.id,m.role,m.content || COALESCE(
+        (SELECT E'\nPergunta de esclarecimento: ' || q.question || E'\nOpções: ' || q.choices::text
+         FROM chat_clarifications q WHERE q.message_id=m.id
+           AND q.conversation_id=m.conversation_id), '') AS content
+        FROM chat_messages m
+        LEFT JOIN chat_response_messages rm_outer ON rm_outer.message_id=m.id
+        LEFT JOIN chat_response_runs run_outer ON run_outer.id=rm_outer.run_id
+          AND run_outer.conversation_id=m.conversation_id
+        LEFT JOIN chat_messages owner ON owner.id=run_outer.user_message_id
+          AND owner.conversation_id=m.conversation_id
+        WHERE m.conversation_id=$1 AND (m.created_at,m.id) <= (
+            SELECT created_at,id FROM chat_messages
+            WHERE conversation_id=$1 AND role='assistant' AND NOT EXISTS (
+                SELECT 1 FROM chat_response_messages rm JOIN chat_response_runs r ON r.id=rm.run_id
+                WHERE rm.message_id=chat_messages.id
+                  AND r.assistant_message_id IS DISTINCT FROM chat_messages.id)
+            ORDER BY created_at,id OFFSET $2 LIMIT 1)
+        {COMPLETED_OR_LEGACY_USER_SQL}
+        ORDER BY COALESCE(owner.created_at,m.created_at),COALESCE(owner.id,m.id),
+          CASE WHEN owner.id IS NULL THEN 0 ELSE 1 END,rm_outer.position,m.created_at,m.id"""
 
     async def snapshot(conn, response_count, lock=False):
         if message_repository:
             return await message_repository.summary_rows(conn, conversation_id, response_count, lock=lock)
-        return await conn.fetch(query + (' FOR UPDATE' if lock else ''), conversation_id, response_count - 1)
+        return await conn.fetch(query + (' FOR UPDATE OF m' if lock else ''), conversation_id, response_count - 1)
 
     async with pool.acquire() as conn:
         previous_raw = await conn.fetchval('SELECT facts FROM chat_memories WHERE conversation_id=$1', conversation_id)
@@ -111,9 +131,38 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
         has_complete_batch = False
         for response_count in range(requested, 0, -1):
             candidate = await snapshot(conn, response_count)
-            if (sum(row['role'] == 'assistant' for row in candidate) < response_count
-                    or sum(row['role'] == 'user' for row in candidate) < response_count):
+            if owner_run and candidate:
+                # Never summarize turns that occurred after this request's input.
+                after_cutoff = await conn.fetchval('''SELECT EXISTS (SELECT 1 FROM chat_messages m
+                    WHERE m.conversation_id=$1 AND m.id=ANY($2::uuid[])
+                    AND (m.created_at,m.id) >= (SELECT created_at,id FROM chat_messages WHERE id=$3 AND conversation_id=$1))''',
+                    conversation_id, [r['id'] for r in candidate], owner_run[2])
+                if after_cutoff:
+                    continue
+            users = [row['id'] for row in candidate if row['role'] == 'user']
+            assistants = [row['id'] for row in candidate if row['role'] == 'assistant']
+            if assistants and await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM chat_clarifications
+                WHERE conversation_id=$1 AND message_id=ANY($2::uuid[])
+                AND dismissed_at IS NULL AND (selected_index IS NULL OR answer_message_id IS NULL OR NOT (answer_message_id=ANY($2::uuid[]))))''',
+                conversation_id, [row['id'] for row in candidate]):
                 continue
+            if len(users) != response_count or len(assistants) < response_count:
+                continue
+            if [row['role'] for row in candidate] != ['user', 'assistant'] * response_count:
+                # Every response and every user must belong to completed runs,
+                # and no selected run may have a reply outside this snapshot.
+                paired = await conn.fetchval('''SELECT count(DISTINCT r.user_message_id)=$4
+                    AND count(DISTINCT r.assistant_message_id)=$4
+                    AND NOT EXISTS (SELECT 1 FROM chat_response_messages rm
+                        WHERE rm.run_id=ANY(array_agg(r.id)) AND NOT (rm.message_id=ANY($3::uuid[])))
+                    AND (SELECT count(*) FROM chat_response_messages rm
+                        WHERE rm.run_id=ANY(array_agg(r.id)) AND rm.message_id=ANY($3::uuid[]))=cardinality($3::uuid[])
+                    FROM chat_response_runs r
+                    WHERE r.conversation_id=$1 AND r.status='completed'
+                    AND r.user_message_id=ANY($2::uuid[]) AND r.assistant_message_id=ANY($3::uuid[])''',
+                    conversation_id, users, assistants, response_count)
+                if not paired:
+                    continue
             has_complete_batch = True
             if _summary_payload_tokens(previous, candidate) <= SUMMARY_INPUT_TOKEN_BUDGET:
                 rows = candidate
@@ -132,6 +181,15 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', str(conversation_id))
+            # Beginning/completing a run uses this same row lock. Do not rewrite
+            # history or memory underneath any in-flight request.
+            await conn.fetchval('SELECT id FROM chat_conversations WHERE id=$1 FOR UPDATE', conversation_id)
+            if owner_run:
+                valid = await conn.fetchval("SELECT 1 FROM chat_response_runs WHERE id=$1 AND lease_id=$2 AND user_message_id=$3 AND conversation_id=$4 AND status='running' AND lease_until>clock_timestamp() FOR UPDATE", *owner_run, conversation_id)
+                if not valid:
+                    return False
+            if await conn.fetchval("SELECT 1 FROM chat_response_runs WHERE conversation_id=$1 AND status='running' AND lease_until>clock_timestamp() AND ($2::uuid IS NULL OR id<>$2) LIMIT 1", conversation_id, owner_run[0] if owner_run else None):
+                return False
             current = await snapshot(conn, selected_responses, lock=True)
             current_raw = await conn.fetchval('SELECT facts FROM chat_memories WHERE conversation_id=$1 FOR UPDATE', conversation_id)
             if [dict(row) for row in current] != [dict(row) for row in rows] or (json.loads(current_raw) if current_raw else []) != previous_original:
@@ -192,6 +250,6 @@ def estimate_request_tokens(instructions, history, tools, counter=count_tokens):
     """Estima instruções, mensagens e schemas Agno com reserva de resposta e framing."""
     import json
     from agno.tools import Function
-    schemas = [Function.from_callable(tool).to_dict() for tool in tools]
+    schemas = [(tool if isinstance(tool, Function) else Function.from_callable(tool)).to_dict() for tool in tools]
     request = {'instructions':instructions, 'messages':[dict(row) for row in history], 'tools':schemas}
     return counter(json.dumps(request, ensure_ascii=False)) + 4096 + 16 * (len(instructions) + len(history) + len(tools))

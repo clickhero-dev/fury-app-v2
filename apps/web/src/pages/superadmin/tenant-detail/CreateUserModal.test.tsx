@@ -51,3 +51,18 @@ describe('CreateUserModal', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Erro ao criar usuário');
   });
 });
+
+it('Dada a criação de usuário, quando revelo e oculto a senha, então mantém o valor sem enviar nem fechar', async () => {
+  const onSubmit = vi.fn();
+  const onClose = vi.fn();
+  render(<Harness onSubmit={onSubmit} onClose={onClose} />);
+  const password = screen.getByLabelText('Senha');
+  await userEvent.type(password, 'MinhaSenha123');
+  await userEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+  expect(password).toHaveAttribute('type', 'text');
+  expect(password).toHaveValue('MinhaSenha123');
+  await userEvent.click(screen.getByRole('button', { name: 'Ocultar senha' }));
+  expect(password).toHaveAttribute('type', 'password');
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+});

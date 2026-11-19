@@ -118,12 +118,14 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     expect(screen.queryByTestId('onboarding-page')).toBeNull();
   });
 
-  it('usuário pendente (accepted=false) é redirecionado para /politica', async () => {
+  it('permite acesso com política pendente e senha do trial pendente', async () => {
+    localStorage.setItem('fury-trial-password-pending', 'true');
     renderShell({ currentVersion: '1.0', accepted: false });
 
-    // Redirect síncrono no primeiro render: /politica monta, o shell desmonta.
-    expect(await screen.findByTestId('politica-page')).not.toBeNull();
-    expect(screen.queryByTestId('sidebar-root')).toBeNull();
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(screen.queryByTestId('politica-page')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Crie sua senha' })).toBeNull();
+    expect(localStorage.getItem('fury-trial-password-pending')).toBe('true');
     expect(policyCalls()).toHaveLength(0); // estado conhecido → zero fetch
   });
 
@@ -142,7 +144,7 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     expect(apiGet.mock.calls.some((call) => call[0] === '/meta/connections')).toBe(false);
   });
 
-  it('sessão antiga (policy=null) busca /policy/current UMA vez e bloqueia quando pendente', async () => {
+  it('sessão antiga consulta a política e permite acesso quando pendente', async () => {
     apiGet.mockImplementation((url: string) => {
       if (url === '/policy/current') {
         return Promise.resolve({
@@ -154,8 +156,9 @@ describe('AuthenticatedShell — gate de política de uso', () => {
 
     renderShell(null);
 
-    // Resolve como pendente → redirect para /politica.
-    expect(await screen.findByTestId('politica-page')).not.toBeNull();
+    await waitFor(() => expect(policyCalls()).toHaveLength(1));
+    expect(screen.queryByTestId('politica-page')).toBeNull();
+    expect(screen.getByTestId('sidebar-root')).not.toBeNull();
     expect(policyCalls()).toHaveLength(1);
   });
 

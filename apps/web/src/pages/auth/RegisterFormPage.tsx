@@ -17,10 +17,7 @@ const registerSchema = z.object({
   password: z
     .string()
     .min(8, 'Senha deve ter pelo menos 8 caracteres')
-    .regex(/[a-z]/, 'Inclua uma letra minúscula')
-    .regex(/[A-Z]/, 'Inclua uma letra maiúscula')
-    .regex(/\d/, 'Inclua um número')
-    .regex(/[^a-zA-Z0-9]/, 'Inclua um caractere especial'),
+    .max(255, 'Senha muito longa'),
   companyName: z.string().min(2, 'Nome da empresa é obrigatório'),
 });
 
@@ -87,7 +84,7 @@ export function RegisterFormPage() {
       localStorage.setItem('token', response.token);
       localStorage.setItem('refreshToken', response.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.user));
-      navigate('/dashboard');
+      navigate('/inicio');
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : 'Código inválido');
     }

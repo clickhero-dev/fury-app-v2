@@ -4,7 +4,7 @@ import { approvalFailureFromResponse, type ApprovalFailure } from './approval-ou
 const base = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/chat`;
 
 export class ChatRequestError extends Error {
-  constructor(public readonly status: number, public readonly approvalFailure: ApprovalFailure | null = null) {
+  constructor(public readonly status: number, public readonly approvalFailure: ApprovalFailure | null = null, public readonly code: string | null = null) {
     super('Não foi possível concluir a solicitação. Tente novamente.');
     this.name = 'ChatRequestError';
   }
@@ -26,8 +26,9 @@ export async function chatRequest(path: string, init: RequestInit = {}): Promise
     if (code === 'TOKEN_EXPIRED') response = await send(await refreshSession());
   }
   if (!response.ok) {
-    const body: unknown = response.status === 403 ? await response.json().catch(() => null) : null;
-    throw new ChatRequestError(response.status, approvalFailureFromResponse(response.status, body));
+    const body: unknown = response.status === 403 || response.status === 409 ? await response.json().catch(() => null) : null;
+    const code = body && typeof body === 'object' && 'code' in body && typeof body.code === 'string' ? body.code : null;
+    throw new ChatRequestError(response.status, approvalFailureFromResponse(response.status, body), code);
   }
   return response;
 }

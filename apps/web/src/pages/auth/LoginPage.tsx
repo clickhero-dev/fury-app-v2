@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { consumeLoginDestination } from './initialDestination';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,8 +39,12 @@ export function LoginPage() {
   const demoLoginMutation = useDemoLogin();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const entryHandled = useRef(false);
 
   useEffect(() => {
+    // O StrictMode repete effects de montagem; o destino de retorno é de uso único.
+    if (entryHandled.current) return;
+    entryHandled.current = true;
     // Handle social login redirect
     const params = new URLSearchParams(window.location.search);
     const socialData = params.get('social_login');
@@ -58,7 +63,7 @@ export function LoginPage() {
           tenantId: data.user.tenantId,
           policy: data.policy ?? null,
         }));
-        navigate('/dashboard');
+        navigate(consumeLoginDestination(), { replace: true });
         return;
       } catch {
         setError('Erro ao fazer login com Google');
@@ -72,12 +77,17 @@ export function LoginPage() {
       return;
     }
 
+    if (localStorage.getItem('token') && !params.has('fb_handoff')) {
+      navigate(consumeLoginDestination(), { replace: true });
+      return;
+    }
+
     // Retorno do login com Facebook: troca o handoff id pela sessão (sem token na URL)
     consumeFacebookHandoff(window.location.search)
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate('/dashboard');
+        navigate(consumeLoginDestination(), { replace: true });
       })
       .catch(() => {
         setError('Não foi possível concluir o login com Facebook. Tente novamente.');
@@ -98,7 +108,7 @@ export function LoginPage() {
     try {
       setError('');
       await loginMutation.mutateAsync({ email: data.email, password: data.password });
-      navigate('/dashboard');
+      navigate(consumeLoginDestination(), { replace: true });
     } catch (err) {
       setError(getFriendlyError(err));
     }
@@ -108,7 +118,7 @@ export function LoginPage() {
     try {
       setError('');
       await demoLoginMutation.mutateAsync();
-      navigate('/dashboard');
+      navigate(consumeLoginDestination(), { replace: true });
     } catch {
       setError('A conta demo está temporariamente indisponível. Tente novamente em instantes.');
     }

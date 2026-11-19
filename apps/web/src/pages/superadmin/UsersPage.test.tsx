@@ -91,3 +91,13 @@ describe('UsersPage — setup tenant', () => {
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 });
+
+it('Dado um novo cliente, quando revelo sua senha, então o formulário não é enviado', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await fillForm(user);
+  await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+  expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
+  expect(screen.getByLabelText('Senha')).toHaveValue('SenhaSegura1!');
+  expect(mockPost).not.toHaveBeenCalled();
+});

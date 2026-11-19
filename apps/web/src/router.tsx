@@ -1,3 +1,4 @@
+import { InitialDestinationPage } from './pages/auth/InitialDestinationPage';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
@@ -127,6 +128,7 @@ export const router = createBrowserRouter([
       </CampaignWizardProvider>
     ),
     children: [
+      { path: '/inicio', element: <InitialDestinationPage /> },
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },

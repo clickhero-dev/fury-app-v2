@@ -158,12 +158,12 @@ describe('Assistente', () => {
     render(<ChatPage/>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const header = document.querySelector('.ady-chat-header')!;
-    expect(within(header as HTMLElement).getByText('Assistente de IA')).toBeInTheDocument();
+    expect(within(header as HTMLElement).getByText('Assistente do Ady')).toBeInTheDocument();
     expect(header.querySelector('.ady-chat-avatar svg[aria-label="ady"]')).not.toBeNull();
-    expect(screen.getByText('Como posso ajudar?')).toBeInTheDocument();
+    expect(screen.getByText('Vamos preparar seu próximo post?')).toBeInTheDocument();
     expect(screen.queryByText(/Ideias melhores|DA IDEIA À CRIAÇÃO/)).toBeNull();
-    expect(screen.getByRole('button', {name:'Criar imagem'})).toBeEnabled();
-    expect(screen.getByRole('button', {name:'Criar vídeo'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Não sei o que postar'})).toBeEnabled();
+    expect(screen.getByRole('button', {name:'Usar uma foto minha'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Anexar arquivos'})).toBeEnabled();
     expect(screen.getByRole('button', {name:'Gravar mensagem'})).toBeEnabled();
   });
@@ -349,18 +349,19 @@ describe('Assistente', () => {
     expect(screen.getByLabelText('Mensagem')).toHaveValue('Minha ideia');
     expect(screen.getByRole('button', {name:'Enviar mensagem'})).toBeEnabled();
   });
-  /* Cenário: sugestão inicial
-   * Dado que acabei de abrir o chat, quando escolho Criar imagem,
-   * então o campo recebe a sugestão e o foco sem enviar nada.
-   */
-  it('preenche e foca a sugestão antes de iniciar conversa', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('[]'));
+   /* Cenário: falha na sugestão inicial
+    * Dado o chat vazio, quando o pedido não consegue iniciar a conversa,
+    * então recebo uma mensagem de erro e posso tentar novamente sem briefing.
+    */
+  it('mostra falha ao iniciar pedido direto e mantém atalhos disponíveis', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('[]')).mockResolvedValueOnce(new Response('{}', {status:500}));
     vi.stubGlobal('fetch', fetchMock); render(<ChatPage/>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', {name:'Criar imagem'}));
-    expect(screen.getByLabelText('Mensagem')).toHaveValue('Quero criar uma imagem');
-    expect(screen.getByLabelText('Mensagem')).toHaveFocus();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', {name:'Não sei o que postar'}));
+    expect(await screen.findByText('Não foi possível iniciar a conversa.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensagem')).toHaveValue('');
+    expect(screen.getByRole('button', {name:'Não sei o que postar'})).toBeEnabled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
   /* Cenário: histórico modal acessível
    * Dado o histórico recolhido, quando abro e pressiono Escape,
@@ -411,7 +412,7 @@ describe('Assistente', () => {
     fireEvent.change(screen.getByLabelText('Buscar conversas'), {target:{value:'inexistente'}});
     expect(screen.getByText('Nenhuma conversa encontrada. Tente outro termo.')).toBeInTheDocument();
     expect(screen.getByLabelText('Mensagem')).toHaveAccessibleDescription('Enter para enviar · Shift + Enter para nova linha');
-    expect(screen.getByRole('heading', {name:'Ady'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name:'Assistente do Ady'})).toBeInTheDocument();
   });
   /* Cenário: troca de conversa ainda carregando
    * Dado que escolhi outra conversa, quando o carregamento está pendente,
@@ -562,15 +563,15 @@ describe('Assistente', () => {
     render(<ChatPage />);
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
     expect(await screen.findByText('Minha ideia')).toBeTruthy();
-    expect(screen.queryByText('Como posso ajudar?')).toBeNull();
-    expect(screen.queryByRole('button', {name:/Criar imagem/})).toBeNull();
+    expect(screen.queryByText('Vamos preparar seu próximo post?')).toBeNull();
+    expect(screen.queryByRole('button', {name:/Não sei o que postar/})).toBeNull();
   });
   it('mostra sugestões em uma conversa vazia', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[],approvals:[]}))));
     render(<ChatPage />);
     fireEvent.click(await screen.findByRole('button', {name:'Projeto'}));
-    expect(await screen.findByRole('button', {name:/Criar imagem/})).toBeTruthy();
-    expect(screen.getByText('Como posso ajudar?')).toBeTruthy();
+    expect(await screen.findByRole('button', {name:/Não sei o que postar/})).toBeTruthy();
+    expect(screen.getByText('Vamos preparar seu próximo post?')).toBeTruthy();
   });
   it('identifica remetentes e rola até a mensagem mais recente', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[{id:'u',role:'user',content:'Minha ideia'},{id:'a',role:'assistant',content:'Resposta da Ady'}],approvals:[]}))));
@@ -622,6 +623,44 @@ describe('Assistente', () => {
     fireEvent.click(screen.getByRole('button', {name:'Enviar mensagem'}));
     expect(await screen.findByText('Recuperada')).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+  it('preserva erro terminal do provedor em vez de tratá-lo como conexão interrompida', async () => {
+    const stream = new ReadableStream({start(c) {
+      c.enqueue(new TextEncoder().encode('event: error\ndata: {"message":"Não foi possível gerar a resposta agora. Tente retomar."}\n\n'));
+      c.close();
+    }});
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([])))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'1',title:'Nova conversa'})))
+      .mockResolvedValueOnce(new Response(stream)));
+    render(<ChatPage />);
+    fireEvent.click(await screen.findByRole('button', {name: /nova conversa/i}));
+    await waitFor(() => expect(screen.getByLabelText('Mensagem').hasAttribute('disabled')).toBe(false));
+    fireEvent.change(screen.getByLabelText('Mensagem'), {target:{value:'Oi'}});
+    fireEvent.click(screen.getByRole('button', {name:'Enviar mensagem'}));
+    expect(await screen.findByText('Não foi possível gerar a resposta agora. Tente retomar.')).toBeTruthy();
+    expect(screen.queryByText(/A conexão foi interrompida/)).toBeNull();
+  });
+  it('mostra a tentativa de recuperação e a remove quando a resposta conclui', async () => {
+    let controller!: ReadableStreamDefaultController;
+    const stream = new ReadableStream({start(c) { controller = c; }});
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([])))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'1',title:'Nova conversa'})))
+      .mockResolvedValueOnce(new Response(stream)));
+    render(<ChatPage />);
+    fireEvent.click(await screen.findByRole('button', {name: /nova conversa/i}));
+    await waitFor(() => expect(screen.getByLabelText('Mensagem').hasAttribute('disabled')).toBe(false));
+    fireEvent.change(screen.getByLabelText('Mensagem'), {target:{value:'Oi'}});
+    fireEvent.click(screen.getByRole('button', {name:'Enviar mensagem'}));
+    await act(async () => controller.enqueue(new TextEncoder().encode('event: retrying\ndata: {"attempt":2,"maxAttempts":11,"retryInMs":1000}\n\n')));
+    expect(await screen.findByText('Reconectando ao modelo — tentativa 2 de 11…')).toBeTruthy();
+    await act(async () => {
+      controller.enqueue(new TextEncoder().encode('event: done\ndata: {"message":{"content":"Resposta recuperada"}}\n\n'));
+      controller.close();
+    });
+    expect(await screen.findByText('Resposta recuperada')).toBeTruthy();
+    expect(screen.queryByText('Reconectando ao modelo — tentativa 2 de 11…')).toBeNull();
   });
   it('confirma somente a ação apresentada', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([{id:'1',title:'Projeto'}]))).mockResolvedValueOnce(new Response(JSON.stringify({messages:[],approvals:[{id:'a1',action:'Agendar',parameters:{data:'amanhã'},status:'pending'}]}))).mockResolvedValueOnce(new Response(JSON.stringify({status:'completed',result:{imageUrl:'https://example.com/image.png'}})));
