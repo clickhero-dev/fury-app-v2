@@ -14,6 +14,6 @@ A jornada manual só pode criar campanha após verificar, na conta autenticada e
 
 ## Situação
 
-Os passos 1–2 estão implementados em caráter conservador; passo 3 é parcial. Passos 4–5 permanecem pendentes: não há evidência do responsável, margem aprovada, tenant real ou rotina operacional de aviso. Nenhuma alteração de saldo está autorizada por esta especificação. A conta pode consumir cota entre o pré-voo e a geração; a leitura não reserva créditos. O próprio endpoint de geração continua responsável por aplicar o limite.
+Os passos 1–4 têm implementação e testes locais; a entrega efetiva do aviso depende do agendamento na branch padrão e de notificações verificadas. O passo 5 permanece pendente: não há evidência do responsável, margem aprovada, tenant real, processo ou periodicidade efetivos. Sem esses dados não se pode configurar o gate nem considerar o critério operacional concluído. Nenhuma alteração de saldo está autorizada por esta especificação. A conta pode consumir cota entre o pré-voo e a geração; a leitura não reserva créditos. O próprio endpoint de geração continua responsável por aplicar o limite.
 
 Referências: [geração](https://app.clickup.com/t/1dfch0anar8), [login demo](https://app.clickup.com/t/1dfch0anarb). Não alterar status desses cards.

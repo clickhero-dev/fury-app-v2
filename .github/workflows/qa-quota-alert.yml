@@ -1,0 +1,30 @@
+name: QA - aviso de cota
+
+# O agendamento do GitHub executa somente na branch padrão; habilitar após aprovação operacional.
+on:
+  schedule:
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aviso-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testar contrato do aviso
+        run: node --test scripts/ci/qa-readiness.node-test.mjs scripts/ci/qa-quota-alert.node-test.mjs
+      - name: Verificar cota e elegibilidade
+        env:
+          QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_QUOTA_MARGIN: ${{ vars.QA_QUOTA_MARGIN }}
+          QA_QUOTA_OWNER: ${{ vars.QA_QUOTA_OWNER }}
+        run: node scripts/ci/qa-quota-alert.mjs

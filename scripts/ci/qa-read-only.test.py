@@ -32,7 +32,7 @@ class ReadOnlyQAContract(unittest.TestCase):
         self.assertLess(spec.index("test.step('Pré-voo"), spec.index("test.step('Criar campanha"))
         self.assertLess(spec.index("test.step('Pré-voo"), spec.index("test.step('Gerar imagem"))
         self.assertIn('if (token && creationStarted)', spec)
-        self.assertIn('if (!result.ok)', spec)
+        self.assertIn('await runWhenReady(', spec)
 
     def test_safe_journey_is_the_default(self):
         source = WORKFLOW.read_text()

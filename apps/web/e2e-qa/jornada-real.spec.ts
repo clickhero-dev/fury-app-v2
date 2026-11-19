@@ -12,6 +12,8 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
 import { expect, test, type Page, type Response } from '@playwright/test';
 // @ts-expect-error módulo compartilhado com os testes Node do CI
 import { checkReadiness } from '../../../scripts/ci/qa-readiness.mjs';
+// @ts-expect-error módulo compartilhado com os testes Node do CI
+import { runWhenReady } from '../../../scripts/ci/qa-quota-alert.mjs';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
@@ -134,138 +136,139 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       expect(token, 'token salvo após login').not.toBe('');
     });
 
-    await test.step('Pré-voo de assinatura e cota', async () => {
-      const result = await checkReadiness(
-        { margin: process.env.QA_QUOTA_MARGIN, owner: process.env.QA_QUOTA_OWNER },
-        () => page.request.get(`${apiURL}/billing/subscription`, {
-          headers: { Authorization: `Bearer ${token}` }, timeout: 15_000,
-        }),
-      );
-      if (!result.ok) {
-        throw new Error(`PRÉ-VOO QA BLOQUEADO (${result.reason}). Consulte docs/operations/qa-quota-readiness.md para responsável, reposição e verificação.`);
-      }
-      log('Pré-voo de assinatura e cota aprovado.');
-    });
+    await runWhenReady(
+      () => test.step('Pré-voo de assinatura e cota', async () => {
+        const result = await checkReadiness(
+          { margin: process.env.QA_QUOTA_MARGIN, owner: process.env.QA_QUOTA_OWNER },
+          () => page.request.get(`${apiURL}/billing/subscription`, {
+            headers: { Authorization: `Bearer ${token}` }, timeout: 15_000,
+          }),
+        );
+        if (result.ok) log('Pré-voo de assinatura e cota aprovado.');
+        return result;
+      }),
+      async () => {
+        await test.step('Criar campanha (wizard)', async () => {
+          await page.goto('/criar-campanha');
+          const next = page.getByRole('button', { name: 'Continuar' });
 
-    await test.step('Criar campanha (wizard)', async () => {
-      await page.goto('/criar-campanha');
-      const next = page.getByRole('button', { name: 'Continuar' });
+          // objetivo: Direct do Instagram (antigo Gerar Conversas) + os dois cards de destino. A conta QA tem Meta conectado.
+          await page.getByRole('button', { name: /Atrair Clientes no Direct do Instagram/ }).click();
+          const instagram = page.getByRole('checkbox', { name: /instagram/i });
+          const facebook = page.getByRole('checkbox', { name: /facebook/i });
+          await expect(instagram).toBeVisible({ timeout: 60_000 });
+          await expect(facebook).toBeVisible({ timeout: 60_000 });
+          await instagram.click();
+          await facebook.click();
+          await expect(instagram).toBeChecked();
+          await expect(facebook).toBeChecked();
+          // O QA usa a API HMG implantada; publica com um destino simples, enquanto
+          // a combinação dos canais é coberta pelos testes de payload/backend do PR.
+          await instagram.click();
+          await expect(instagram).not.toBeChecked();
+          await expect(facebook).toBeChecked();
+          await expect(next).toBeEnabled({ timeout: 60_000 });
+          await next.click();
 
-      // objetivo: Direct do Instagram (antigo Gerar Conversas) + os dois cards de destino. A conta QA tem Meta conectado.
-      await page.getByRole('button', { name: /Atrair Clientes no Direct do Instagram/ }).click();
-      const instagram = page.getByRole('checkbox', { name: /instagram/i });
-      const facebook = page.getByRole('checkbox', { name: /facebook/i });
-      await expect(instagram).toBeVisible({ timeout: 60_000 });
-      await expect(facebook).toBeVisible({ timeout: 60_000 });
-      await instagram.click();
-      await facebook.click();
-      await expect(instagram).toBeChecked();
-      await expect(facebook).toBeChecked();
-      // O QA usa a API HMG implantada; publica com um destino simples, enquanto
-      // a combinação dos canais é coberta pelos testes de payload/backend do PR.
-      await instagram.click();
-      await expect(instagram).not.toBeChecked();
-      await expect(facebook).toBeChecked();
-      await expect(next).toBeEnabled({ timeout: 60_000 });
-      await next.click();
+          // criativo: a imagem mais antiga da galeria (última da grade; ignora vídeos)
+          await expect(page.getByRole('heading', { name: 'Qual imagem ou vídeo vai usar?' })).toBeVisible();
+          const gallery = page.locator('[data-testid="wizard-gallery-asset"][data-asset-type="image"]:not([disabled])');
+          await expect(gallery.first()).toBeVisible({ timeout: 60_000 });
+          await gallery.last().click();
+          await expect(page.getByText('1 selecionada').first()).toBeVisible();
+          await page.getByPlaceholder('Ex: Promoção imperdível este mês!').fill(label);
+          await page.getByPlaceholder('Descreva sua oferta de forma clara e atrativa.').fill(adText);
+          await expect(next).toBeEnabled();
+          await next.click();
 
-      // criativo: a imagem mais antiga da galeria (última da grade; ignora vídeos)
-      await expect(page.getByRole('heading', { name: 'Qual imagem ou vídeo vai usar?' })).toBeVisible();
-      const gallery = page.locator('[data-testid="wizard-gallery-asset"][data-asset-type="image"]:not([disabled])');
-      await expect(gallery.first()).toBeVisible({ timeout: 60_000 });
-      await gallery.last().click();
-      await expect(page.getByText('1 selecionada').first()).toBeVisible();
-      await page.getByPlaceholder('Ex: Promoção imperdível este mês!').fill(label);
-      await page.getByPlaceholder('Descreva sua oferta de forma clara e atrativa.').fill(adText);
-      await expect(next).toBeEnabled();
-      await next.click();
+          // orçamento mínimo da plataforma
+          await expect(page.getByRole('heading', { name: 'Quanto vai investir?' })).toBeVisible({ timeout: 60_000 });
+          await page.getByRole('button', { name: 'R$7', exact: true }).click();
+          await expect(next).toBeEnabled();
+          await next.click();
 
-      // orçamento mínimo da plataforma
-      await expect(page.getByRole('heading', { name: 'Quanto vai investir?' })).toBeVisible({ timeout: 60_000 });
-      await page.getByRole('button', { name: 'R$7', exact: true }).click();
-      await expect(next).toBeEnabled();
-      await next.click();
+          // publicar e esperar o retorno real do Meta
+          await expect(page.getByRole('heading', { name: 'Revisão e Publicação' }).last()).toBeVisible();
+          const publish = page.getByRole('button', { name: 'Publicar Campanha' });
+          await expect(publish, 'Publicar habilitado (público configurado)').toBeEnabled({ timeout: 30_000 });
+          creationStarted = true;
+          const creationRequest = page.waitForRequest((request) =>
+            request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/campaigns/create-wizard'),
+          );
+          const created = await awaitApi(
+            page,
+            'POST',
+            (p) => p.endsWith('/campaigns/create-wizard'),
+            () => publish.click(),
+            10 * 60_000,
+          );
+          expect((await creationRequest).postDataJSON().destinations).toEqual(['messenger']);
+          campaignId = created?.data?.campaign_id ?? created?.campaign_id;
+          expect(campaignId, 'campaign_id na resposta da criação').toBeTruthy();
+          log(`Campanha criada: ${campaignId}`);
+          await expect(page.getByText('Campanha publicada com sucesso!')).toBeVisible();
 
-      // publicar e esperar o retorno real do Meta
-      await expect(page.getByRole('heading', { name: 'Revisão e Publicação' }).last()).toBeVisible();
-      const publish = page.getByRole('button', { name: 'Publicar Campanha' });
-      await expect(publish, 'Publicar habilitado (público configurado)').toBeEnabled({ timeout: 30_000 });
-      creationStarted = true;
-      const creationRequest = page.waitForRequest((request) =>
-        request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/campaigns/create-wizard'),
-      );
-      const created = await awaitApi(
-        page,
-        'POST',
-        (p) => p.endsWith('/campaigns/create-wizard'),
-        () => publish.click(),
-        10 * 60_000,
-      );
-      expect((await creationRequest).postDataJSON().destinations).toEqual(['messenger']);
-      campaignId = created?.data?.campaign_id ?? created?.campaign_id;
-      expect(campaignId, 'campaign_id na resposta da criação').toBeTruthy();
-      log(`Campanha criada: ${campaignId}`);
-      await expect(page.getByText('Campanha publicada com sucesso!')).toBeVisible();
+          await expect
+            .poll(async () => (await api.campaigns()).find((c) => c.id === campaignId)?.name, {
+              message: 'campanha aparece na listagem',
+              timeout: 2 * 60_000,
+            })
+            .toBe(label);
+        });
 
-      await expect
-        .poll(async () => (await api.campaigns()).find((c) => c.id === campaignId)?.name, {
-          message: 'campanha aparece na listagem',
-          timeout: 2 * 60_000,
-        })
-        .toBe(label);
-    });
+        await test.step('Pausar campanha', async () => {
+          await page.goto('/campanhas');
+          await page.getByPlaceholder('Buscar campanha...').fill(label);
+          const row = page.locator('tr', { hasText: label });
+          await expect(row).toBeVisible({ timeout: 2 * 60_000 });
+          await row.getByRole('button', { name: 'Pausar' }).click();
+          await awaitApi(
+            page,
+            'PATCH',
+            // painel usa o id do Meta na URL
+            (p) => /\/campaigns\/[^/]+\/pause$/.test(p),
+            () => page.getByRole('button', { name: 'Confirmar pausa' }).click(),
+            5 * 60_000,
+          );
+          await expect(row.getByText('Pausado')).toBeVisible({ timeout: 2 * 60_000 });
 
-    await test.step('Pausar campanha', async () => {
-      await page.goto('/campanhas');
-      await page.getByPlaceholder('Buscar campanha...').fill(label);
-      const row = page.locator('tr', { hasText: label });
-      await expect(row).toBeVisible({ timeout: 2 * 60_000 });
-      await row.getByRole('button', { name: 'Pausar' }).click();
-      await awaitApi(
-        page,
-        'PATCH',
-        // painel usa o id do Meta na URL
-        (p) => /\/campaigns\/[^/]+\/pause$/.test(p),
-        () => page.getByRole('button', { name: 'Confirmar pausa' }).click(),
-        5 * 60_000,
-      );
-      await expect(row.getByText('Pausado')).toBeVisible({ timeout: 2 * 60_000 });
+          await expect
+            .poll(async () => (await api.campaigns()).find((c) => c.id === campaignId)?.status, {
+              message: 'status pausado na listagem',
+              timeout: 2 * 60_000,
+            })
+            .toBe('paused');
+        });
 
-      await expect
-        .poll(async () => (await api.campaigns()).find((c) => c.id === campaignId)?.status, {
-          message: 'status pausado na listagem',
-          timeout: 2 * 60_000,
-        })
-        .toBe('paused');
-    });
+        await test.step('Gerar imagem (Estúdio)', async () => {
+          await page.goto('/estudio');
+          const quickCreate = page.getByRole('button', { name: 'Criação rápida' });
+          await expect(quickCreate, 'Criação rápida habilitado').toBeEnabled({ timeout: 30_000 });
+          await quickCreate.click();
+          await page.getByPlaceholder(/Anúncio fashion minimalista/).fill(imagePrompt);
+          const generate = page.getByRole('button', { name: 'Gerar imagem' });
+          await expect(generate, 'Gerar imagem habilitado (cota mensal disponível)').toBeEnabled({ timeout: 30_000 });
+          const generated = await awaitApi(
+            page,
+            'POST',
+            (p) => p.endsWith('/studio/ai/generate-image'),
+            () => generate.click(),
+            10 * 60_000,
+          );
+          assetId = generated?.creativeAssetId;
+          expect(assetId, 'creativeAssetId na resposta da geração').toBeTruthy();
+          log(`Imagem criada: ${assetId}`);
+          await expect(page.getByText('Não foi possível gerar o anúncio')).toHaveCount(0);
 
-    await test.step('Gerar imagem (Estúdio)', async () => {
-      await page.goto('/estudio');
-      const quickCreate = page.getByRole('button', { name: 'Criação rápida' });
-      await expect(quickCreate, 'Criação rápida habilitado').toBeEnabled({ timeout: 30_000 });
-      await quickCreate.click();
-      await page.getByPlaceholder(/Anúncio fashion minimalista/).fill(imagePrompt);
-      const generate = page.getByRole('button', { name: 'Gerar imagem' });
-      await expect(generate, 'Gerar imagem habilitado (cota mensal disponível)').toBeEnabled({ timeout: 30_000 });
-      const generated = await awaitApi(
-        page,
-        'POST',
-        (p) => p.endsWith('/studio/ai/generate-image'),
-        () => generate.click(),
-        10 * 60_000,
-      );
-      assetId = generated?.creativeAssetId;
-      expect(assetId, 'creativeAssetId na resposta da geração').toBeTruthy();
-      log(`Imagem criada: ${assetId}`);
-      await expect(page.getByText('Não foi possível gerar o anúncio')).toHaveCount(0);
-
-      await expect
-        .poll(async () => (await api.assets()).some((a) => a.id === assetId), {
-          message: 'imagem aparece na biblioteca',
-          timeout: 2 * 60_000,
-        })
-        .toBe(true);
-    });
+          await expect
+            .poll(async () => (await api.assets()).some((a) => a.id === assetId), {
+              message: 'imagem aparece na biblioteca',
+              timeout: 2 * 60_000,
+            })
+            .toBe(true);
+        });
+      },
+    );
   } catch (err) {
     failed = true;
     throw err;
