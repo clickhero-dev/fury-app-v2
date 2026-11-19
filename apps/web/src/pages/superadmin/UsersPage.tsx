@@ -36,7 +36,10 @@ const SORTS = [
   ["client", "Cliente (A–Z)"],
 ] as const;
 
-const FILTER_KEYS = ["search", "role", "origin", "sort"] as const;
+// parceiro só alcança titular e usuário dos clientes dele
+const PARTNER_ROLE_FILTERS = ROLE_FILTERS.filter(([value]) => ["", "owner", "member"].includes(value));
+
+const FILTER_KEYS = ["search", "role", "origin", "tenantId", "sort"] as const;
 const selectCls = "bg-surface border border-border rounded-full px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
 interface UsersResponse {
@@ -56,6 +59,8 @@ export function UsersPage() {
   const currentRole = searchParams.get("role") || "";
   const currentOrigin = searchParams.get("origin") || "";
   const currentSort = searchParams.get("sort") || "";
+  const currentTenant = searchParams.get("tenantId") || "";
+  const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([]);
   const isSuper = getStoredPlatformRole() === "super_admin";
   const [partners, setPartners] = useState<Array<{ id: string; name: string }>>([]);
   const [filterError, setFilterError] = useState("");
@@ -79,7 +84,7 @@ export function UsersPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [checkingEmail, setCheckingEmail] = useState(false);
 
-  const fetchUsers = useCallback(async (page: number, search: string, role: string, origin: string, sort: string) => {
+  const fetchUsers = useCallback(async (page: number, search: string, role: string, origin: string, sort: string, tenantId: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -88,6 +93,7 @@ export function UsersPage() {
       if (search) params.set("search", search);
       if (role) params.set("role", role);
       if (origin) params.set("origin", origin);
+      if (tenantId) params.set("tenantId", tenantId);
       if (sort) params.set("sort", sort);
 
       const res = await api.get(`/admin/users?${params.toString()}`);
@@ -102,8 +108,17 @@ export function UsersPage() {
   }, []);
 
   useEffect(() => {
-    fetchUsers(currentPage, currentSearch, currentRole, currentOrigin, currentSort);
-  }, [currentPage, currentSearch, currentRole, currentOrigin, currentSort, fetchUsers]);
+    fetchUsers(currentPage, currentSearch, currentRole, currentOrigin, currentSort, currentTenant);
+  }, [currentPage, currentSearch, currentRole, currentOrigin, currentSort, currentTenant, fetchUsers]);
+
+  // clientes para o filtro (parceiro recebe só os dele)
+  useEffect(() => {
+    api.get("/admin/tenants")
+      .then((res) => setClientOptions((res.data.data as Array<{ id: string; name: string }>)
+        .map(({ id, name }) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))))
+      .catch((err) => setFilterError(errorMessage(err, "Não foi possível carregar os clientes do filtro")));
+  }, []);
 
   // parceiros para o filtro de origem (só super)
   useEffect(() => {
@@ -133,7 +148,7 @@ export function UsersPage() {
     updateParams({ page: String(p) });
   };
 
-  const hasFilters = Boolean(currentRole || currentOrigin || currentSort || currentSearch);
+  const hasFilters = Boolean(currentRole || currentOrigin || currentSort || currentSearch || currentTenant);
 
   // Validators
   function validateTenantName(v: string) {
@@ -325,7 +340,7 @@ export function UsersPage() {
 
       <div role="group" aria-label="Filtros de usuários" className="flex flex-wrap items-center gap-3 mb-4">
         <select aria-label="Filtrar por cargo" value={currentRole} onChange={(e) => updateParams({ role: e.target.value })} className={selectCls}>
-          {ROLE_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {(isSuper ? ROLE_FILTERS : PARTNER_ROLE_FILTERS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         {isSuper && (
           <select aria-label="Filtrar por origem" value={currentOrigin} onChange={(e) => updateParams({ origin: e.target.value })} className={selectCls}>
@@ -335,6 +350,10 @@ export function UsersPage() {
             {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
+        <select aria-label="Filtrar por cliente" value={currentTenant} onChange={(e) => updateParams({ tenantId: e.target.value })} className={`${selectCls} max-w-[16rem] truncate`}>
+          <option value="">Todos os clientes</option>
+          {clientOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
         <select aria-label="Ordenar por" value={currentSort || "recent"} onChange={(e) => updateParams({ sort: e.target.value === "recent" ? "" : e.target.value })} className={selectCls}>
           {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>

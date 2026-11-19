@@ -27,6 +27,7 @@ const mockPost = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({ default: { get: mockGet, post: mockPost } }));
 
+const CLIENTS = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Loja Beto' }, { id: '22222222-2222-4222-8222-222222222222', name: 'Loja Ana' }];
 const PARTNERS = [{ id: 'p-1', name: 'Parceiro Alfa', maxTenants: 5 }];
 const USERS = [
   { id: 'u-1', name: 'Ana', email: 'ana@x.com', role: 'owner', platformRole: 'user', tenantId: 't-1', tenantName: 'Loja Ana', partnerName: null, createdAt: '2026-11-01T00:00:00Z' },
@@ -61,7 +62,9 @@ beforeEach(() => {
       ? { data: { data: { exists: false } } }
       : url === '/admin/partners'
         ? { data: { data: PARTNERS } }
-        : { data: { data: { users: USERS, total: USERS.length, page: 1, pages: 1, limit: 10 } } },
+        : url === '/admin/tenants'
+          ? { data: { data: CLIENTS } }
+          : { data: { data: { users: USERS, total: USERS.length, page: 1, pages: 1, limit: 10 } } },
   ));
 });
 
@@ -123,7 +126,7 @@ it('Dado um novo cliente, quando revelo sua senha, então o formulário não é 
 
 describe('UsersPage — falha ao listar', () => {
   it('mostra o motivo em vez de lista vazia', async () => {
-    mockGet.mockImplementation((url: string) => (url === '/admin/partners' ? Promise.resolve({ data: { data: PARTNERS } }) : Promise.reject({ isAxiosError: true })));
+    mockGet.mockImplementation((url: string) => (url === '/admin/partners' || url === '/admin/tenants' ? Promise.resolve({ data: { data: url === '/admin/tenants' ? CLIENTS : PARTNERS } }) : Promise.reject({ isAxiosError: true })));
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent(/^Não foi possível carregar os usuários\. Sem conexão com o servidor/);
   });
@@ -133,7 +136,7 @@ describe('UsersPage — filtros e ordem', () => {
   it('cargo, origem e ordem vão para a API e voltam para a página 1', async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('Loja Ana');
+    await screen.findByText('Loja Ana', { selector: 'td' });
     await user.selectOptions(screen.getByLabelText('Filtrar por cargo'), 'member');
     expect(lastUsersUrl()).toBe('/admin/users?page=1&limit=10&role=member');
     await user.selectOptions(await screen.findByLabelText('Filtrar por origem'), 'Parceiro Alfa');
@@ -144,15 +147,15 @@ describe('UsersPage — filtros e ordem', () => {
 
   it('coluna Origem mostra ady ou o nome do parceiro', async () => {
     renderPage();
-    const beto = (await screen.findByText('Loja Beto')).closest('tr')!;
+    const beto = (await screen.findByText('Loja Beto', { selector: 'td' })).closest('tr')!;
     expect(beto).toHaveTextContent('Parceiro Alfa');
-    expect(screen.getByText('Loja Ana').closest('tr')).toHaveTextContent(/ady/);
+    expect(screen.getByText('Loja Ana', { selector: 'td' }).closest('tr')).toHaveTextContent(/ady/);
   });
 
   it('limpar filtros zera cargo, origem, ordem e busca', async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('Loja Ana');
+    await screen.findByText('Loja Ana', { selector: 'td' });
     await user.selectOptions(screen.getByLabelText('Filtrar por cargo'), 'owner');
     await user.click(screen.getByRole('button', { name: 'Limpar filtros' }));
     expect(lastUsersUrl()).toBe('/admin/users?page=1&limit=10');
@@ -162,7 +165,7 @@ describe('UsersPage — filtros e ordem', () => {
   it('parceiro não vê o filtro de origem nem a coluna, e não busca a lista de parceiros', async () => {
     localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
     renderPage();
-    await screen.findByText('Loja Ana');
+    await screen.findByText('Loja Ana', { selector: 'td' });
     expect(screen.queryByLabelText('Filtrar por origem')).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Origem' })).toBeNull();
     expect(mockGet).not.toHaveBeenCalledWith('/admin/partners');
@@ -171,9 +174,28 @@ describe('UsersPage — filtros e ordem', () => {
   it('falha ao buscar parceiros avisa sem esconder a lista', async () => {
     mockGet.mockImplementation((url: string) => (url === '/admin/partners'
       ? Promise.reject({ isAxiosError: true })
+      : url === '/admin/tenants' ? Promise.resolve({ data: { data: CLIENTS } })
       : Promise.resolve({ data: { data: { users: USERS, total: 2, page: 1, pages: 1, limit: 10 } } })));
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent(/^Não foi possível carregar os parceiros do filtro/);
-    expect(screen.getByText('Loja Ana')).toBeTruthy();
+    expect(screen.getByText('Loja Ana', { selector: 'td' })).toBeTruthy();
+  });
+
+  it('filtro por cliente, em ordem alfabética, vai para a API', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('Loja Ana', { selector: 'td' });
+    const select = screen.getByLabelText('Filtrar por cliente') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.text)).toEqual(['Todos os clientes', 'Loja Ana', 'Loja Beto']);
+    await user.selectOptions(select, 'Loja Beto');
+    expect(lastUsersUrl()).toBe('/admin/users?page=1&limit=10&tenantId=11111111-1111-4111-8111-111111111111');
+  });
+
+  it('parceiro vê só os cargos Titular e Usuário', async () => {
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    renderPage();
+    await screen.findByText('Loja Ana', { selector: 'td' });
+    const roles = [...(screen.getByLabelText('Filtrar por cargo') as HTMLSelectElement).options].map((o) => o.text);
+    expect(roles).toEqual(['Todos os cargos', 'Usuário Titular', 'Usuário']);
   });
 });

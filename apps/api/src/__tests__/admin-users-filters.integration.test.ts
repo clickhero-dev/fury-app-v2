@@ -17,6 +17,8 @@ describe('Lista de usuários do admin — filtros', () => {
   let partnerName: string;
   let partnerId: string;
   let otherPartnerId: string;
+  let cliTenant: string;
+  let adyTenant: string;
 
   const asSuper = () => ({ Authorization: `Bearer ${superToken}` });
   const asPartner = () => ({ Authorization: `Bearer ${partnerToken}` });
@@ -53,9 +55,11 @@ describe('Lista de usuários do admin — filtros', () => {
     partnerToken = partner.token;
 
     const cli = await register('cliparc');
+    cliTenant = cli.user.tenantId;
     await db.update(schema.tenants).set({ partnerId }).where(eq(schema.tenants.id, cli.user.tenantId));
 
     const ady = await register('ady');
+    adyTenant = ady.user.tenantId;
     await db.insert(schema.users).values([
       { tenantId: ady.user.tenantId, name: 'UF membro', email: `uf-membro-${id}@test.com`, passwordHash: 'x', role: 'member' },
       { tenantId: ady.user.tenantId, name: 'UF admin', email: `uf-admin-${id}@test.com`, passwordHash: 'x', role: 'admin' },
@@ -116,5 +120,25 @@ describe('Lista de usuários do admin — filtros', () => {
     expect(res.status).toBe(200);
     expect(emails(res)).toEqual(['cliparc']);
     expect(emails(await list('role=member', asPartner()))).toEqual([]);
+  });
+
+  it('filtro por cliente: super vê os usuários dele; parceiro não alcança cliente de fora', async () => {
+    expect(emails(await list(`tenantId=${adyTenant}&sort=email`))).toEqual(['admin', 'ady', 'membro']);
+    expect(emails(await list(`tenantId=${cliTenant}`, asPartner()))).toEqual(['cliparc']);
+    expect((await list(`tenantId=${adyTenant}`, asPartner())).body.data.total).toBe(0);
+    expect((await list('tenantId=xyz')).status).toBe(400);
+  });
+
+  it('dono da conta de parceiro excluído vira ady; cliente do parceiro mantém o nome', async () => {
+    await db.update(schema.adyPartners).set({ deletedAt: new Date() }).where(eq(schema.adyPartners.id, partnerId));
+    try {
+      const res = await list('sort=email');
+      const byTag = Object.fromEntries((res.body.data.users as Array<{ email: string; partnerName: string | null }>).map((u) => [u.email.split('-')[1], u.partnerName]));
+      expect(byTag.parceiro).toBeNull();
+      expect(byTag.cliparc).toBe(partnerName);
+      expect(emails(await list('origin=ady&sort=email'))).toContain('parceiro');
+    } finally {
+      await db.update(schema.adyPartners).set({ deletedAt: null }).where(eq(schema.adyPartners.id, partnerId));
+    }
   });
 });

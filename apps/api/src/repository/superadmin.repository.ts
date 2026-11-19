@@ -147,6 +147,8 @@ export interface UserListFilters {
   role?: (typeof USER_LIST_ROLES)[number];
   origin?: 'ady' | 'partner' | string;
   sort?: (typeof USER_LIST_SORTS)[number];
+  // só estreita: o escopo do parceiro continua valendo
+  tenantId?: string;
 }
 
 // dono do plano: null = ady, senão o parceiro
@@ -494,7 +496,8 @@ export class SuperAdminRepository extends TenantScopedRepository {
   /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant, filtros e ordem. */
   async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null, filters: UserListFilters = {}) {
     // parceiro do usuário: pelo cliente ou pela conta do parceiro
-    const userPartner = sql`coalesce(${tenants.partnerId}, ${users.partnerId})`;
+    // conta de parceiro excluído conta como ady (igual à origem dos clientes)
+    const userPartner = sql`coalesce(${tenants.partnerId}, (SELECT lp.id FROM ady_partners lp WHERE lp.id = ${users.partnerId} AND lp.deleted_at IS NULL))`;
     const notStaff = sql`coalesce(${users.platformRole}, 'user') NOT IN ('super_admin', 'admin_partner')`;
     const roleWhere =
       filters.role === 'super_admin' ? eq(users.platformRole, 'super_admin')
@@ -516,6 +519,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
         : undefined,
       roleWhere,
       originWhere,
+      filters.tenantId ? eq(users.tenantId, filters.tenantId) : undefined,
     );
 
     const [countResult] = await this.db

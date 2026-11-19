@@ -44,6 +44,7 @@ const userListFiltersSchema = z.object({
   role: z.enum(USER_LIST_ROLES).optional().or(z.literal("").transform(() => undefined)),
   origin: z.union([z.enum(["ady", "partner"]), z.string().uuid()]).optional().or(z.literal("").transform(() => undefined)),
   sort: z.enum(USER_LIST_SORTS).optional().or(z.literal("").transform(() => undefined)),
+  tenantId: z.string().uuid().optional().or(z.literal("").transform(() => undefined)),
 });
 
 // parceiro cria cliente: cargo, parceiro e slug nunca vêm do body
