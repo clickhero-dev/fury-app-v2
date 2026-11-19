@@ -43,6 +43,9 @@ export interface ClickUpTicketSummary {
   priority: TicketPriority | null;
   url: string;
   createdAt: string;
+  // conclusão no ClickUp (date_done ou date_closed); null = em aberto
+  doneAt: string | null;
+  assignees: Array<{ id: number; name: string }>;
   labels: TicketLabel[];
 }
 
@@ -69,7 +72,7 @@ export interface ClickUpTicketDetails {
 export class ClickUpTicketsError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT',
+    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT' | 'CLICKUP_TOO_MANY_TICKETS',
     message: string,
     public readonly clickupTaskUrl?: string,
   ) {
@@ -115,6 +118,9 @@ function toClickUpDescription(input: CreateClickUpTicketInput): string {
 }
 
 /** Adaptador do ClickUp para abertura de tickets — sem dependência de Express. */
+// teto de páginas (100 tickets cada) para não travar a tela
+const MAX_TICKET_PAGES = 50;
+
 export class ClickUpTicketsClient {
   constructor(private readonly config?: ClickUpTicketsConfig) {}
 
@@ -230,16 +236,28 @@ export class ClickUpTicketsClient {
 
   async listTickets(): Promise<ClickUpTicketSummary[]> {
     const { listId } = this.resolveConfig();
-    const payload = await this.getJson(`/list/${listId}/task?include_closed=true`) as { tasks?: unknown };
-    if (!Array.isArray(payload?.tasks)) {
-      throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
+    // ClickUp devolve 100 por página; lê até a última
+    const tasks: unknown[] = [];
+    for (let page = 0; ; page++) {
+      if (page >= MAX_TICKET_PAGES) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_TOO_MANY_TICKETS', `A lista de chamados passou de ${MAX_TICKET_PAGES * 100} tickets; arquive os antigos no ClickUp para carregar a lista.`);
+      }
+      const payload = await this.getJson(`/list/${listId}/task?include_closed=true&page=${page}`) as { tasks?: unknown; last_page?: unknown };
+      if (!Array.isArray(payload?.tasks)) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
+      }
+      tasks.push(...payload.tasks);
+      const last = typeof payload.last_page === 'boolean' ? payload.last_page : payload.tasks.length < 100;
+      if (last || payload.tasks.length === 0) break;
     }
 
-    return payload.tasks.map((task): ClickUpTicketSummary => {
+    return tasks.map((task): ClickUpTicketSummary => {
       const item = task as {
         id?: unknown; name?: unknown; url?: unknown; date_created?: unknown;
+        date_done?: unknown; date_closed?: unknown;
         status?: { status?: unknown; type?: unknown }; priority?: { priority?: unknown } | null;
         tags?: Array<{ name?: unknown }>;
+        assignees?: Array<{ id?: unknown; username?: unknown }>;
       };
       if (
         typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.url !== 'string' ||
@@ -253,10 +271,17 @@ export class ClickUpTicketsClient {
       const labels = Array.isArray(item.tags)
         ? item.tags.map((tag) => tag.name).filter((name): name is TicketLabel => typeof name === 'string' && (TICKET_LABELS as readonly string[]).includes(name))
         : [];
+      const doneRaw = typeof item.date_done === 'string' ? item.date_done : typeof item.date_closed === 'string' ? item.date_closed : null;
+      const doneMs = doneRaw ? Number(doneRaw) : NaN;
+      const assignees = Array.isArray(item.assignees)
+        ? item.assignees.flatMap((a) => (typeof a?.id === 'number' ? [{ id: a.id, name: typeof a.username === 'string' ? a.username : String(a.id) }] : []))
+        : [];
       return {
         id: item.id, name: item.name, url: item.url, status: item.status.status,
         statusType: item.status.type, priority,
         createdAt: new Date(Number(item.date_created)).toISOString(),
+        doneAt: Number.isFinite(doneMs) ? new Date(doneMs).toISOString() : null,
+        assignees,
         labels,
       };
     });

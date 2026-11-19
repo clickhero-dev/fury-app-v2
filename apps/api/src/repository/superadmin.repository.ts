@@ -15,7 +15,7 @@ import {
   adyRbacAuditLog,
   adyRbacPlanViewsBlocked,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import { provisionTrialSubscription } from '../services/billing/trial-signup.js';
 import { daysAgoSaoPauloYMD, todaySaoPauloYMD } from '../utils/date-sao-paulo.js';
@@ -134,6 +134,21 @@ export function mapRecentActivity(
 // usuários que o parceiro alcança: só os dos clientes, nunca contas de admin
 export const PARTNER_REACHABLE_ROLES = ['user', 'user_partner'];
 
+export interface TenantOrigin {
+  tenantId: string;
+  kind: 'ady' | 'partner_client' | 'partner_account';
+  partnerId: string | null;
+  partnerName: string | null;
+}
+
+export const USER_LIST_ROLES = ['super_admin', 'partner', 'owner', 'admin', 'member'] as const;
+export const USER_LIST_SORTS = ['recent', 'oldest', 'name', 'email', 'client', 'role'] as const;
+export interface UserListFilters {
+  role?: (typeof USER_LIST_ROLES)[number];
+  origin?: 'ady' | 'partner' | string;
+  sort?: (typeof USER_LIST_SORTS)[number];
+}
+
 // dono do plano: null = ady, senão o parceiro
 function planOwner(partnerId: string | null) {
   return partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId);
@@ -162,6 +177,19 @@ export class SuperAdminRepository extends TenantScopedRepository {
   // partnerId null = todos os clientes (super_admin)
   async listTenants(partnerId: string | null = null) {
     return this.db.query.tenants.findMany({ where: liveTenants(partnerId) });
+  }
+  // origem de cada cliente vivo; conta de parceiro excluído vira ady (igual findPartnerAccount)
+  async listTenantOrigins(): Promise<TenantOrigin[]> {
+    return (await this.db.execute(sql`SELECT t.id AS "tenantId",
+        CASE WHEN t.partner_id IS NOT NULL THEN 'partner_client' WHEN acc.partner_id IS NOT NULL THEN 'partner_account' ELSE 'ady' END AS "kind",
+        coalesce(t.partner_id, acc.partner_id) AS "partnerId", p.name AS "partnerName"
+      FROM tenants t
+      LEFT JOIN LATERAL (SELECT u.partner_id FROM users u
+        JOIN ady_partners lp ON lp.id = u.partner_id AND lp.deleted_at IS NULL
+        WHERE u.tenant_id = t.id AND u.platform_role = 'admin_partner' AND u.deleted_at IS NULL
+        ORDER BY u.created_at LIMIT 1) acc ON t.partner_id IS NULL
+      LEFT JOIN ady_partners p ON p.id = coalesce(t.partner_id, acc.partner_id)
+      WHERE t.deleted_at IS NULL`)) as unknown as TenantOrigin[];
   }
   async getTenantById(id: string, partnerId: string | null = null) {
     return this.db.query.tenants.findFirst({ where: and(eq(tenants.id, id), liveTenants(partnerId)) });
@@ -463,8 +491,22 @@ export class SuperAdminRepository extends TenantScopedRepository {
     return rows as Array<{ planId: string; count: number }>;
   }
 
-  /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant. */
-  async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null) {
+  /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant, filtros e ordem. */
+  async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null, filters: UserListFilters = {}) {
+    // parceiro do usuário: pelo cliente ou pela conta do parceiro
+    const userPartner = sql`coalesce(${tenants.partnerId}, ${users.partnerId})`;
+    const notStaff = sql`coalesce(${users.platformRole}, 'user') NOT IN ('super_admin', 'admin_partner')`;
+    const roleWhere =
+      filters.role === 'super_admin' ? eq(users.platformRole, 'super_admin')
+      : filters.role === 'partner' ? eq(users.platformRole, 'admin_partner')
+      : filters.role ? and(eq(users.role, filters.role), notStaff)
+      : undefined;
+    // origem só vale para o super; o parceiro já está preso ao escopo dele
+    const originWhere =
+      partnerId || !filters.origin ? undefined
+      : filters.origin === 'ady' ? sql`${userPartner} IS NULL`
+      : filters.origin === 'partner' ? sql`${userPartner} IS NOT NULL`
+      : sql`${userPartner} = ${filters.origin}`;
     const where = and(
       isNull(users.deletedAt),
       liveTenants(partnerId),
@@ -472,6 +514,8 @@ export class SuperAdminRepository extends TenantScopedRepository {
       search
         ? or(ilike(users.name, `%${search}%`), ilike(users.email, `%${search}%`), ilike(tenants.name, `%${search}%`))
         : undefined,
+      roleWhere,
+      originWhere,
     );
 
     const [countResult] = await this.db
@@ -481,6 +525,17 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .where(where);
 
     const total = Number((countResult as any)?.total ?? 0);
+
+    // cargo em blocos: super, parceiro, titular, administrador, usuário
+    const roleRank = sql`CASE WHEN ${users.platformRole} = 'super_admin' THEN 0 WHEN ${users.platformRole} = 'admin_partner' THEN 1 WHEN ${users.role} = 'owner' THEN 2 WHEN ${users.role} = 'admin' THEN 3 ELSE 4 END`;
+    const orderBy = {
+      recent: [desc(users.createdAt)],
+      oldest: [asc(users.createdAt)],
+      name: [sql`lower(${users.name})`, desc(users.createdAt)],
+      email: [sql`lower(${users.email})`],
+      client: [sql`lower(${tenants.name}) NULLS LAST`, sql`lower(${users.name})`],
+      role: [roleRank, sql`lower(${users.name})`],
+    }[filters.sort ?? 'recent'];
 
     const rows = await this.db
       .select({
@@ -492,11 +547,13 @@ export class SuperAdminRepository extends TenantScopedRepository {
         tenantId: users.tenantId,
         createdAt: users.createdAt,
         tenantName: tenants.name,
+        partnerName: adyPartners.name,
       })
       .from(users)
       .leftJoin(tenants, eq(users.tenantId, tenants.id))
+      .leftJoin(adyPartners, sql`${adyPartners.id} = ${userPartner}`)
       .where(where)
-      .orderBy(desc(users.createdAt))
+      .orderBy(...orderBy, asc(users.id))
       .limit(limit)
       .offset(offset);
 

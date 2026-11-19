@@ -3,7 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcrypt";
 import { users, clientGoals } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
-import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
+import { PARTNER_REACHABLE_ROLES, SuperAdminRepository, USER_LIST_ROLES, USER_LIST_SORTS, type TenantOrigin } from "../repository/superadmin.repository.js";
 import type { PartnerRepository } from "../repository/partner.repository.js";
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
@@ -30,7 +30,20 @@ const setupTenantSchema = z.object({
   userName: z.string().min(1).max(255),
   userEmail: z.string().email(),
   userPassword: z.string().min(8).max(255),
-  userRole: z.enum(["owner", "admin", "member"]).default("owner"),
+  // cliente novo sempre nasce com titular
+  userRole: z.literal("owner", { errorMap: () => ({ message: "Todo cliente novo nasce com o usuário titular" }) }).default("owner"),
+});
+
+// sem linha (corrida com exclusão) = ady
+function originOf(o: TenantOrigin | undefined) {
+  return o ? { kind: o.kind, partnerId: o.partnerId, partnerName: o.partnerName } : { kind: "ady" as const, partnerId: null, partnerName: null };
+}
+
+// filtros da lista de usuários; vazio = sem filtro
+const userListFiltersSchema = z.object({
+  role: z.enum(USER_LIST_ROLES).optional().or(z.literal("").transform(() => undefined)),
+  origin: z.union([z.enum(["ady", "partner"]), z.string().uuid()]).optional().or(z.literal("").transform(() => undefined)),
+  sort: z.enum(USER_LIST_SORTS).optional().or(z.literal("").transform(() => undefined)),
 });
 
 // parceiro cria cliente: cargo, parceiro e slug nunca vêm do body
@@ -280,6 +293,8 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const allTenants = await repo.listTenants(partnerOf(req));
+      // origem só para o super; o parceiro só vê os próprios clientes
+      const origins = partnerOf(req) ? null : new Map((await repo.listTenantOrigins()).map((o) => [o.tenantId, o]));
 
       const data = await Promise.all(
         allTenants.map(async (t) => {
@@ -296,6 +311,7 @@ export class SuperAdminController {
             ...t,
             userCount,
             subscription: sub ? { ...sub, plan } : null,
+            ...(origins ? { origin: originOf(origins.get(t.id)) } : {}),
           };
         }),
       );
@@ -1005,8 +1021,9 @@ export class SuperAdminController {
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
       const offset = (page - 1) * limit;
       const search = (req.query.search as string)?.trim() || null;
+      const filters = userListFiltersSchema.parse(req.query);
 
-      const { rows, total } = await this.repo.paginateUsersAdmin(search ?? '', limit, offset, partnerOf(req));
+      const { rows, total } = await this.repo.paginateUsersAdmin(search ?? '', limit, offset, partnerOf(req), filters);
       const pages = Math.ceil(total / limit);
 
       res.json({

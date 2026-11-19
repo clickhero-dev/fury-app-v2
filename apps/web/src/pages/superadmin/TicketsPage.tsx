@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Paperclip, Plus, RefreshCw, Send, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { TicketStats } from './TicketStats';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import api from '@/lib/api';
@@ -35,7 +36,7 @@ const ticketSchema = z.object({
 type TicketForm = z.infer<typeof ticketSchema>;
 type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
 type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
-type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
+type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; doneAt?: string | null; assignees?: Array<{ id: number; name: string }>; labels?: TicketLabel[] };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
 type TicketStatus = { value: string; label: string; type: string; color?: string };
 type Assignee = { id: number; name: string; email: string | null };
@@ -126,11 +127,30 @@ function normalizeStatus(status: string): string {
   return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
 }
 
+// nível vem do nome: "[N3] Assunto"
+const ticketLevel = (name: string) => /^\s*\[(N[1-5])\]/i.exec(name)?.[1].toUpperCase() ?? '';
+const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+type TicketSort = 'recent' | 'oldest' | 'priority' | 'level';
+const TICKET_SORTS: Array<[TicketSort, string]> = [['recent', 'Mais recentes'], ['oldest', 'Mais antigos'], ['priority', 'Prioridade (urgente primeiro)'], ['level', 'Nível (N1 primeiro)']];
+const filterSelectCls = 'mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
+
+function sortTickets(list: Ticket[], sort: TicketSort): Ticket[] {
+  const byDate = (a: Ticket, b: Ticket) => b.createdAt.localeCompare(a.createdAt);
+  return [...list].sort((a, b) =>
+    sort === 'oldest' ? a.createdAt.localeCompare(b.createdAt)
+    : sort === 'priority' ? (PRIORITY_RANK[a.priority ?? ''] ?? 9) - (PRIORITY_RANK[b.priority ?? ''] ?? 9) || byDate(a, b)
+    : sort === 'level' ? ticketLevel(a.name).localeCompare(ticketLevel(b.name)) || byDate(a, b)
+    : byDate(a, b));
+}
+
 function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: TicketLists; loading: boolean; onStatusChange: (ticket: Ticket) => void; onReview: (ticket: Ticket) => void }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [sort, setSort] = useState<TicketSort>('recent');
   const statusOptions = Array.from(new Map(
     [...lists.open, ...lists.resolved].map((ticket) => {
       const value = normalizeStatus(ticket.status);
@@ -145,8 +165,11 @@ function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: Tick
     result[key] = lists[key].filter((ticket) => {
       const matchesSearch = !normalizedSearch || ticket.name.toLocaleLowerCase().includes(normalizedSearch);
       const matchesStatus = !statusFilter || normalizeStatus(ticket.status) === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesLevel = !levelFilter || ticketLevel(ticket.name) === levelFilter;
+      const matchesPriority = !priorityFilter || (priorityFilter === 'none' ? !ticket.priority : ticket.priority?.toLowerCase() === priorityFilter);
+      return matchesSearch && matchesStatus && matchesLevel && matchesPriority;
     });
+    result[key] = sortTickets(result[key], sort);
     return result;
   }, { open: [], resolved: [] } as TicketLists);
   const tickets = filteredLists[queue];
@@ -157,6 +180,8 @@ function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: Tick
   const selectQueue = (next: Queue) => { setQueue(next); setPage(0); };
   const updateSearch = (value: string) => { setSearch(value); setPage(0); };
   const updateStatus = (value: string) => { setStatusFilter(value); setPage(0); };
+  const hasFilters = Boolean(search || statusFilter || levelFilter || priorityFilter || sort !== 'recent');
+  const clearFilters = () => { setSearch(''); setStatusFilter(''); setLevelFilter(''); setPriorityFilter(''); setSort('recent'); setPage(0); };
 
   return <section className="rounded-xl border border-border bg-surface">
     <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-border p-2">
@@ -180,24 +205,45 @@ function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: Tick
       })}
     </div>
     <div role="tabpanel" id={`panel-${queue}`} aria-labelledby={`tab-${queue}`} className="p-5 pt-4">
-      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)_auto] sm:items-end">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(8rem,1fr))_auto] lg:items-end">
         <label className="block text-sm text-text-secondary">
           Pesquisar por assunto
           <input type="search" aria-label="Pesquisar por assunto" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Digite parte do assunto" className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
         </label>
         <label className="block text-sm text-text-secondary">
           Status
-          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className={filterSelectCls}>
             <option value="">Todos os status</option>
             {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => { updateSearch(''); updateStatus(''); }} disabled={!search && !statusFilter} className="ady-btn rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
+        <label className="block text-sm text-text-secondary">
+          Nível
+          <select aria-label="Nível" value={levelFilter} onChange={(event) => { setLevelFilter(event.target.value); setPage(0); }} className={filterSelectCls}>
+            <option value="">Todos os níveis</option>
+            {['N1', 'N2', 'N3', 'N4', 'N5'].map((level) => <option key={level} value={level}>{level}</option>)}
+          </select>
+        </label>
+        <label className="block text-sm text-text-secondary">
+          Prioridade
+          <select aria-label="Prioridade" value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value); setPage(0); }} className={filterSelectCls}>
+            <option value="">Todas</option>
+            {Object.entries(priorityStyles).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+            <option value="none">Sem prioridade</option>
+          </select>
+        </label>
+        <label className="block text-sm text-text-secondary">
+          Ordenar
+          <select aria-label="Ordenar" value={sort} onChange={(event) => { setSort(event.target.value as TicketSort); setPage(0); }} className={filterSelectCls}>
+            {TICKET_SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={clearFilters} disabled={!hasFilters} className="ady-btn rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
       </div>
       {loading ? <p className="text-sm text-text-secondary" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg bg-admin-bg px-3 py-2.5">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
-          <p className="text-sm text-text-secondary">{search || statusFilter ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
+          <p className="text-sm text-text-secondary">{hasFilters ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
         </div>
       ) : (
         <>
@@ -546,17 +592,22 @@ export function TicketsPage() {
   const [listWarning, setListWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // refresh = buscar no ClickUp agora (botão e depois de alterar um chamado)
+  const load = useCallback(async (refresh = false) => {
     try {
-      const [ticketsResult, assigneesResult, statusesResult] = await Promise.allSettled([api.get('/admin/tickets'), api.get('/admin/tickets/assignees'), api.get('/admin/tickets/statuses')]);
+      const [ticketsResult, assigneesResult, statusesResult] = await Promise.allSettled([api.get(refresh ? '/admin/tickets?refresh=1' : '/admin/tickets'), api.get('/admin/tickets/assignees'), api.get('/admin/tickets/statuses')]);
       const ticketsResponse = ticketsResult.status === 'fulfilled' ? ticketsResult.value : null;
       const assigneesResponse = assigneesResult.status === 'fulfilled' ? assigneesResult.value : null;
       const statusesResponse = statusesResult.status === 'fulfilled' ? statusesResult.value : null;
       setLists(ticketsResponse?.data.data ?? { open: [], resolved: [] });
+      setSyncedAt(ticketsResponse?.data.syncedAt ?? null);
       setAssignees(assigneesResponse?.data.data ?? []);
       setStatuses(statusesResponse?.data.data ?? []);
-      if (!ticketsResponse || !assigneesResponse || !statusesResponse || ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar todos os dados dos chamados agora. Tente novamente.');
+      const failures = (ticketsResponse?.data.partial_failures ?? []) as Array<{ reason?: string }>;
+      if (failures.some((f) => f.reason === 'too_many_tickets')) setListWarning('A lista de chamados passou de 5.000 tickets e não foi carregada. Arquive os antigos no ClickUp.');
+      else if (!ticketsResponse || !assigneesResponse || !statusesResponse || failures.length) setListWarning('Não foi possível atualizar todos os dados dos chamados agora. Tente novamente.');
     } catch (err) {
       setListWarning(errorMessage(err, 'Não foi possível atualizar os chamados'));
     } finally { setLoading(false); }
@@ -566,7 +617,7 @@ export function TicketsPage() {
     setListWarning(null);
     setLists({ open: [], resolved: [] });
     setAssignees([]); setStatuses([]);
-    void load();
+    void load(true);
     setLoading(true);
   }, [load]);
 
@@ -580,6 +631,9 @@ export function TicketsPage() {
       <div>
         <h1 className="text-2xl font-bold">Chamados</h1>
         <p className="mt-1 text-sm text-text-secondary">Acompanhe e abra chamados na fila de suporte da Ady.</p>
+        <p className="mt-0.5 text-xs text-text-secondary">
+          Dados do ClickUp atualizados de hora em hora{syncedAt ? ` · última atualização às ${new Date(syncedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+        </p>
       </div>
       <div className="flex gap-2">
         <button type="button" onClick={refresh} disabled={loading} className="ady-btn inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:opacity-60">
@@ -596,6 +650,7 @@ export function TicketsPage() {
       {loading ? 'Carregando chamados…' : 'Chamados carregados.'}
     </p>
     {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
+    <TicketStats open={lists.open} resolved={lists.resolved} loading={loading} labelName={(value) => allLabels.find(([v]) => v === value)?.[1] ?? value} />
     <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} onReview={setReviewingTicket} />
     <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
     <details className="group rounded-xl border border-border bg-surface">
@@ -620,9 +675,9 @@ export function TicketsPage() {
       onComplete={(decision) => {
         setReviewingTicket(null);
         showSnack(decision === 'approve' ? 'Ticket aprovado.' : 'Ticket reprovado e devolvido para implementação.', 'success');
-        void load();
+        void load(true);
       }}
     />
-    <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load()} />
+    <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load(true)} />
   </div>;
 }

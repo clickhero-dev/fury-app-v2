@@ -200,6 +200,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0077_ady_partner_plans' },
   { tag: '0078_partner_account_members' },
   { tag: '0079_automation_not_blockable' },
+  { tag: '0080_ady_support_tickets' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -257,6 +258,8 @@ export const REQUIRED_TABLES = [
   'ady_partner_payments',
   'ady_partner_plans',
   'ady_partner_plan_views_blocked',
+  'ady_support_tickets',
+  'ady_support_tickets_sync',
   'notifications',
   'public_trial_accounts',
   'public_trial_magic_links',

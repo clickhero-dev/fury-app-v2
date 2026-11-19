@@ -27,6 +27,28 @@ interface Tenant {
     currentPeriodEnd: string;
     plan: { name: string } | null;
   } | null;
+  origin?: { kind: "ady" | "partner_client" | "partner_account"; partnerId: string | null; partnerName: string | null };
+}
+
+type Sort = "recent" | "oldest" | "name" | "users";
+const SORTS: Array<[Sort, string]> = [["recent", "Mais recentes"], ["oldest", "Mais antigos"], ["name", "Nome (A–Z)"], ["users", "Mais usuários"]];
+const NO_SUB = "__none";
+const selectCls = "bg-surface border border-border rounded-full px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
+
+// texto curto da origem do cliente
+function originLabel(o: Tenant["origin"]): string {
+  if (!o || o.kind === "ady") return "Cliente ady";
+  const name = o.partnerName ?? "parceiro";
+  return o.kind === "partner_account" ? `Conta do parceiro ${name}` : `Parceiro ${name}`;
+}
+
+// valor do filtro de origem: tipo ou parceiro específico (p:<id>)
+function matchesOrigin(t: Tenant, filter: string): boolean {
+  if (!filter) return true;
+  const o = t.origin ?? { kind: "ady", partnerId: null, partnerName: null };
+  if (filter.startsWith("p:")) return o.partnerId === filter.slice(2);
+  if (filter === "partner") return o.kind !== "ady";
+  return o.kind === filter;
 }
 
 export function TenantsPage() {
@@ -42,6 +64,10 @@ export function TenantsPage() {
   const [view, setView] = useState<"ativos" | "excluidos">("ativos");
   const [deleted, setDeleted] = useState<DeletedTenant[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [originFilter, setOriginFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [planFilter, setPlanFilter] = useState("");
+  const [sort, setSort] = useState<Sort>("recent");
 
   function loadDeleted() {
     api.get("/admin/deleted-tenants").then((res) => setDeleted(res.data.data)).catch((err) => setMsg(errorMessage(err, "Não foi possível carregar os clientes excluídos")));
@@ -70,11 +96,30 @@ export function TenantsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = tenants.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.slug.toLowerCase().includes(search.toLowerCase()),
-  );
+  // opções vindas da própria lista
+  const partnerOptions = [...new Map(tenants.filter((t) => t.origin?.partnerId).map((t) => [t.origin!.partnerId!, t.origin!.partnerName ?? "Parceiro"])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  const statusOptions = [...new Set(tenants.map((t) => t.subscription?.status).filter((v): v is string => Boolean(v)))].sort();
+  const planOptions = [...new Set(tenants.map((t) => t.subscription?.plan?.name).filter((v): v is string => Boolean(v)))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const filtered = tenants
+    .filter(
+      (t) =>
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        t.slug.toLowerCase().includes(search.toLowerCase()),
+    )
+    .filter((t) => matchesOrigin(t, originFilter))
+    .filter((t) => !statusFilter || (statusFilter === NO_SUB ? !t.subscription : t.subscription?.status === statusFilter))
+    .filter((t) => !planFilter || (planFilter === NO_SUB ? !t.subscription?.plan : t.subscription?.plan?.name === planFilter))
+    .sort((a, b) =>
+      sort === "name" ? a.name.localeCompare(b.name, "pt-BR")
+      : sort === "users" ? b.userCount - a.userCount
+      : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt)
+      : b.createdAt.localeCompare(a.createdAt),
+    );
+  const hasFilters = Boolean(search || originFilter || statusFilter || planFilter || sort !== "recent");
+  // filtro novo volta para a página 1
+  const setFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); pagedActive.setPage(1); };
   const pagedActive = usePagination(filtered);
   const pagedDeleted = usePagination(deleted);
 
@@ -180,6 +225,44 @@ export function TenantsPage() {
       )}
 
       {view === "ativos" && (
+      <div role="group" aria-label="Filtros de clientes" className="flex flex-wrap items-center gap-3 mb-4">
+        {isSuperAdmin && (
+          <select aria-label="Filtrar por origem" value={originFilter} onChange={(e) => setFilter(setOriginFilter)(e.target.value)} className={selectCls}>
+            <option value="">Todas as origens</option>
+            <option value="ady">Clientes ady</option>
+            <option value="partner">Todos de parceiros</option>
+            <option value="partner_client">Clientes de parceiros</option>
+            <option value="partner_account">Contas dos parceiros</option>
+            {partnerOptions.map(([id, name]) => <option key={id} value={`p:${id}`}>{name}</option>)}
+          </select>
+        )}
+        <select aria-label="Filtrar por situação" value={statusFilter} onChange={(e) => setFilter(setStatusFilter)(e.target.value)} className={selectCls}>
+          <option value="">Todas as situações</option>
+          {statusOptions.map((v) => <option key={v} value={v}>{statusLabel(v)}</option>)}
+          <option value={NO_SUB}>Sem assinatura</option>
+        </select>
+        <select aria-label="Filtrar por plano" value={planFilter} onChange={(e) => setFilter(setPlanFilter)(e.target.value)} className={`${selectCls} max-w-[16rem] truncate`}>
+          <option value="">Todos os planos</option>
+          {planOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+          <option value={NO_SUB}>Sem plano</option>
+        </select>
+        <select aria-label="Ordenar por" value={sort} onChange={(e) => setFilter(setSort)(e.target.value as Sort)} className={selectCls}>
+          {SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </select>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(""); setOriginFilter(""); setStatusFilter(""); setPlanFilter(""); setSort("recent"); pagedActive.setPage(1); }}
+            className="ady-btn rounded-full border border-border px-4 py-2 text-sm text-text-secondary hover:bg-surface-secondary transition-colors"
+          >
+            Limpar filtros
+          </button>
+        )}
+        <span className="text-xs text-text-tertiary">{filtered.length} de {tenants.length}</span>
+      </div>
+      )}
+
+      {view === "ativos" && (
       <div className="grid gap-3">
         {filtered.length === 0 && (
           <div className="text-center py-12 text-text-tertiary text-sm">
@@ -198,7 +281,9 @@ export function TenantsPage() {
               </div>
               <div>
                 <div className="font-semibold text-text-primary">{tenant.name}</div>
-                <div className="text-xs text-text-tertiary mt-0.5">{tenant.slug}</div>
+                <div className="text-xs text-text-tertiary mt-0.5">
+                  {tenant.slug}{tenant.origin && ` · ${originLabel(tenant.origin)}`}
+                </div>
               </div>
             </div>
 

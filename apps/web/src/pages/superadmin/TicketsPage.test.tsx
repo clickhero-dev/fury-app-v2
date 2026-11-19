@@ -157,7 +157,7 @@ function mockTicketsData(ticketLists?: { open: MockTicket[]; resolved: MockTicke
     resolved: [ticket('done-1', '[N1] Dúvida resolvida', { status: 'concluído' })],
   };
   mockGet.mockImplementation((url: string) => {
-    if (url === '/admin/tickets') return Promise.resolve({ data: { data: lists, partial_failures: [] } });
+    if (url.startsWith('/admin/tickets') && !url.startsWith('/admin/tickets/')) return Promise.resolve({ data: { data: lists, partial_failures: [] } });
     if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] } });
     if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'pendente', label: 'pendente', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }, { value: 'concluído', label: 'concluído', type: 'closed' }] } });
     return Promise.reject(new Error(`Unexpected URL ${url}`));
@@ -316,6 +316,58 @@ describe('TicketsPage', () => {
     );
   });
 
+  it('mostra as estatísticas acima da lista', async () => {
+    render(<TicketsPage />);
+    const stats = await screen.findByRole('region', { name: 'Estatísticas dos chamados' });
+    expect(within(stats).getByText('Abertos agora').parentElement).toHaveTextContent('0 urgentes · 1 altos');
+  });
+
+  it('avisa o motivo quando a lista passa do limite do ClickUp', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.startsWith('/admin/tickets') && !url.startsWith('/admin/tickets/')) return Promise.resolve({ data: { data: { open: [], resolved: [] }, partial_failures: [{ provider: 'clickup', reason: 'too_many_tickets' }] } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    render(<TicketsPage />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('A lista de chamados passou de 5.000 tickets e não foi carregada. Arquive os antigos no ClickUp.');
+  });
+
+  it('mostra a hora da última atualização e o botão busca no ClickUp na hora', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.startsWith('/admin/tickets') && !url.startsWith('/admin/tickets/')) return Promise.resolve({ data: { data: { open: [], resolved: [] }, syncedAt: '2026-10-06T17:05:00.000Z', partial_failures: [] } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    render(<TicketsPage />);
+    const expected = new Date('2026-10-06T17:05:00.000Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    expect(await screen.findByText(`Dados do ClickUp atualizados de hora em hora · última atualização às ${expected}`)).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledWith('/admin/tickets');
+    await setupUser().click(screen.getByRole('button', { name: 'Atualizar' }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/admin/tickets?refresh=1'));
+  });
+
+  it('filtra por nível e prioridade e ordena por prioridade', async () => {
+    mockTicketsData({
+      open: [
+        ticket('a', '[N3] Baixa recente', { priority: 'low', createdAt: '2026-10-05T12:00:00.000Z' }),
+        ticket('b', '[N1] Urgente antiga', { priority: 'urgent', createdAt: '2026-10-01T12:00:00.000Z' }),
+        ticket('c', '[N3] Alta', { priority: 'high', createdAt: '2026-10-03T12:00:00.000Z' }),
+      ],
+      resolved: [],
+    });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const panel = await screen.findByRole('tabpanel');
+    const names = () => within(panel).getAllByRole('listitem').map((li) => li.getAttribute('aria-label')!.replace('Alterar status de ', ''));
+    expect(names()).toEqual(['[N3] Baixa recente', '[N3] Alta', '[N1] Urgente antiga']);
+    await user.selectOptions(within(panel).getByRole('combobox', { name: 'Ordenar' }), 'priority');
+    expect(names()).toEqual(['[N1] Urgente antiga', '[N3] Alta', '[N3] Baixa recente']);
+    await user.selectOptions(within(panel).getByRole('combobox', { name: 'Nível' }), 'N3');
+    expect(names()).toEqual(['[N3] Alta', '[N3] Baixa recente']);
+    await user.selectOptions(within(panel).getByRole('combobox', { name: 'Prioridade' }), 'low');
+    expect(names()).toEqual(['[N3] Baixa recente']);
+    await user.click(within(panel).getByRole('button', { name: 'Limpar filtros' }));
+    expect(names()).toHaveLength(3);
+  });
+
   it('mostra uma lista única com abas Abertos e Resolvidos e contagens', async () => {
     render(<TicketsPage />);
 
@@ -400,7 +452,7 @@ describe('TicketsPage', () => {
     const panel = await screen.findByRole('tabpanel');
 
     expect(within(panel).getAllByText('Em progresso')).toHaveLength(2);
-    expect(within(panel).getByText('Alta')).toBeInTheDocument();
+    expect(within(within(panel).getByRole('listitem')).getByText('Alta')).toBeInTheDocument();
   });
 
   it('exibe a idade relativa do ticket (há 3 dias)', async () => {
@@ -481,7 +533,7 @@ describe('TicketsPage', () => {
   it('preserva status selecionado que desaparece após atualizar e mostra zero resultados', async () => {
     let current = { open: [ticket('a', 'Ticket release', { status: 'release' })], resolved: [] as MockTicket[] };
     mockGet.mockImplementation((url: string) => {
-      if (url === '/admin/tickets') return Promise.resolve({ data: { data: current, partial_failures: [] } });
+      if (url.startsWith('/admin/tickets') && !url.startsWith('/admin/tickets/')) return Promise.resolve({ data: { data: current, partial_failures: [] } });
       if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
       if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'release', label: 'release', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }] } });
       return Promise.reject(new Error(`Unexpected URL ${url}`));
@@ -519,7 +571,7 @@ describe('TicketsPage', () => {
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'triagem');
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
     await waitFor(() => expect(mockShowSnack).toHaveBeenCalledWith('O status do ticket mudou no ClickUp. Os chamados foram recarregados.', 'error'));
-    expect(mockGet.mock.calls.filter(([url]) => url === '/admin/tickets').length).toBeGreaterThan(1);
+    expect(mockGet).toHaveBeenCalledWith('/admin/tickets?refresh=1');
   });
 
   it('abre revisão apenas ao selecionar ticket em homologação', async () => {
