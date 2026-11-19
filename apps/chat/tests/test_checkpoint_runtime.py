@@ -54,6 +54,8 @@ def runtime(monkeypatch):
     class Fence:
         def __init__(self, *_): pass
         async def complete_many(self, _, contents, **kwargs):
+            if state.get('completion_error'):
+                raise RuntimeError('private database error')
             completions.extend(contents)
             return [{'id': str(uuid4()), 'role': 'assistant', 'content': content} for content in contents]
 
@@ -105,6 +107,50 @@ def test_snapshot_is_saved_before_model(runtime):
     assert 'save' in events
     assert events.index('save') < events.index('model')
     assert state['snapshot'][1][-1]['content'] == 'Não sei o que postar'
+
+
+def test_tool_failure_is_not_reported_as_provider_failure(runtime, monkeypatch):
+    client, cid, _, _, completions, state = runtime
+    reports = []
+    async def report(*args, **kwargs):
+        reports.append(args)
+    monkeypatch.setattr(chat, 'report_provider_failure', report)
+    state['tool_error'] = True
+    response = client.post(f'/conversations/{cid}/messages',
+                           headers={'Authorization': 'Bearer synthetic'},
+                           json={'content': 'Prepare um post'})
+    assert 'event: error' in response.text
+    assert not completions
+    assert reports == []
+
+
+def test_runtime_routes_turn_through_multi_provider_core(runtime, monkeypatch):
+    client, cid, _, _, completions, _ = runtime
+    calls = []
+    async def stream(context, **options):
+        calls.append((context, options))
+        yield SimpleNamespace(content='Resposta do núcleo.')
+    monkeypatch.setattr(chat, 'stream_agent', stream, raising=False)
+    response = client.post(f'/conversations/{cid}/messages',
+                           headers={'Authorization': 'Bearer synthetic'},
+                           json={'content': 'Olá'})
+    assert 'event: done' in response.text
+    assert completions == ['Resposta do núcleo.']
+    assert calls[0][1]['agent_options']['tools']
+    assert calls[0][1]['agent_options']['tool_hooks']
+
+
+def test_database_completion_failure_has_sanitized_layer_diagnostic(runtime, monkeypatch, caplog):
+    client, cid, _, _, _, state = runtime
+    async def stream(*_args, **_kwargs):
+        yield SimpleNamespace(content='Resposta.')
+    monkeypatch.setattr(chat, 'stream_agent', stream)
+    state['completion_error'] = True
+    response = client.post(f'/conversations/{cid}/messages',
+                           headers={'Authorization': 'Bearer synthetic'}, json={'content': 'Olá'})
+    assert 'event: error' in response.text
+    assert 'phase=persistence' in caplog.text
+    assert 'private database error' not in caplog.text
 
 
 def test_recovery_exposes_uncertain_journal_without_mutation_tools(runtime):
