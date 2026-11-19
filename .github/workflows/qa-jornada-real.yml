@@ -50,7 +50,7 @@ jobs:
       - name: Validate QA read-only contract
         run: |
           python scripts/ci/qa-read-only.test.py
-          node --test scripts/ci/qa-readiness.test.mjs
+          node --test scripts/ci/qa-readiness.node-test.mjs
 
       - uses: actions/setup-node@v4
         with:
