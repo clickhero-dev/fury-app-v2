@@ -5,11 +5,19 @@ const actions = [
   ['Organizar minha semana', 'semana'],
   ['Usar uma foto minha', 'foto'],
 ];
+const specificActions = [
+  ['Criar post para o Instagram', 'post para o Instagram'],
+  ['Agendar posts da semana', 'agendar os posts da semana'],
+  ['Criar Reels para o Instagram', 'Reels para o Instagram'],
+  ['Criar vídeo para o negócio', 'vídeo para meu negócio'],
+  ['Aumentar seguidores no Instagram', 'aumentar seguidores'],
+  ['Atrair clientes pelo WhatsApp', 'clientes pelo WhatsApp'],
+];
 // Funcionalidade: iniciar ações úteis com segurança em telas pequenas e desktop.
 // Dado o chat isolado, nada é enviado até o clique. O clique prepara o entregável
 // sem briefing nem autorização de publicação, mídia paga ou geração com custo.
 for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844,height:390},{width:1440,height:900}]) {
-  test(`encaixe e três pedidos diretos ${viewport.width}x${viewport.height}`, async ({page}) => {
+  test(`encaixe e pedidos diretos ${viewport.width}x${viewport.height}`, async ({page}) => {
     test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     const requests: string[] = [];
@@ -44,7 +52,8 @@ for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844
     };
     await expect(page.getByRole('heading',{name:'Assistente do Ady'})).toBeVisible();
     await fit();
-    for (const [label,prompt] of actions) {
+    await expect(page.getByRole('group',{name:'Ações específicas'}).getByRole('button')).toHaveCount(6);
+    for (const [label,prompt] of [...actions,...specificActions]) {
       await expect(page.getByRole('group',{name:'Ações para começar'}).getByRole('button')).toHaveCount(3);
       expect(requests).toEqual([]);
       await page.getByRole('button',{name:label,exact:true}).click();
