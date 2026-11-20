@@ -1,4 +1,5 @@
 """Operações puras sobre fatos e suas origens."""
+from chat_history_sql import COMPLETED_OR_LEGACY_USER_SQL
 
 def remove_conversation(memory: dict, conversation_id: str) -> dict:
     facts = []
@@ -92,7 +93,26 @@ async def consolidate(pool, conversation_id, summarize, min_responses=5, message
     """Resume lotes limitados; só grava se o resumo e o snapshot forem válidos."""
     import json
     import asyncio
-    query = """SELECT m.id,m.role,m.content || COALESCE((SELECT E'\nPergunta de esclarecimento: ' || q.question || E'\nOpções: ' || q.choices::text FROM chat_clarifications q WHERE q.message_id=m.id AND q.conversation_id=m.conversation_id), '') AS content FROM chat_messages m LEFT JOIN chat_response_messages rm_outer ON rm_outer.message_id=m.id LEFT JOIN chat_response_runs run_outer ON run_outer.id=rm_outer.run_id AND run_outer.conversation_id=m.conversation_id LEFT JOIN chat_messages owner ON owner.id=run_outer.user_message_id AND owner.conversation_id=m.conversation_id WHERE m.conversation_id=$1 AND (m.created_at,m.id) <= (SELECT created_at,id FROM chat_messages WHERE conversation_id=$1 AND role='assistant' AND NOT EXISTS (SELECT 1 FROM chat_response_messages rm JOIN chat_response_runs r ON r.id=rm.run_id WHERE rm.message_id=chat_messages.id AND r.assistant_message_id IS DISTINCT FROM chat_messages.id) ORDER BY created_at,id OFFSET $2 LIMIT 1) ORDER BY COALESCE(owner.created_at,m.created_at),COALESCE(owner.id,m.id),CASE WHEN owner.id IS NULL THEN 0 ELSE 1 END,rm_outer.position,m.created_at,m.id"""
+    query = f"""SELECT m.id,m.role,m.content || COALESCE(
+        (SELECT E'\nPergunta de esclarecimento: ' || q.question || E'\nOpções: ' || q.choices::text
+         FROM chat_clarifications q WHERE q.message_id=m.id
+           AND q.conversation_id=m.conversation_id), '') AS content
+        FROM chat_messages m
+        LEFT JOIN chat_response_messages rm_outer ON rm_outer.message_id=m.id
+        LEFT JOIN chat_response_runs run_outer ON run_outer.id=rm_outer.run_id
+          AND run_outer.conversation_id=m.conversation_id
+        LEFT JOIN chat_messages owner ON owner.id=run_outer.user_message_id
+          AND owner.conversation_id=m.conversation_id
+        WHERE m.conversation_id=$1 AND (m.created_at,m.id) <= (
+            SELECT created_at,id FROM chat_messages
+            WHERE conversation_id=$1 AND role='assistant' AND NOT EXISTS (
+                SELECT 1 FROM chat_response_messages rm JOIN chat_response_runs r ON r.id=rm.run_id
+                WHERE rm.message_id=chat_messages.id
+                  AND r.assistant_message_id IS DISTINCT FROM chat_messages.id)
+            ORDER BY created_at,id OFFSET $2 LIMIT 1)
+        {COMPLETED_OR_LEGACY_USER_SQL}
+        ORDER BY COALESCE(owner.created_at,m.created_at),COALESCE(owner.id,m.id),
+          CASE WHEN owner.id IS NULL THEN 0 ELSE 1 END,rm_outer.position,m.created_at,m.id"""
 
     async def snapshot(conn, response_count, lock=False):
         if message_repository:

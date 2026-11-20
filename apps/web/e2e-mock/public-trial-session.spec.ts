@@ -33,7 +33,7 @@ test('trial preserva sessão ao navegar, abrir outra aba e reiniciar o navegador
     context = await startBrowser();
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${app}/trial/acesso#token=${'a'.repeat(64)}`);
-    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page).toHaveURL(/\/inicio$/);
     await expect.poll(() => page.evaluate(() => localStorage.getItem('refreshToken'))).toBe('trial-refresh');
     await page.goto(`${app}/configuracoes`);
     await expect(page).toHaveURL(/\/configuracoes/);
@@ -82,7 +82,7 @@ test('login por senha recupera a sessão após reiniciar o navegador', async () 
     await page.getByPlaceholder('seu@email.com').fill('ana@example.test');
     await page.locator('input[type="password"]').fill('Senha1!');
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/inicio$/);
     await context.close();
     context = await startBrowser();
     const reopened = context.pages()[0] ?? await context.newPage();

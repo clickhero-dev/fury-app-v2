@@ -9,6 +9,8 @@ export function useChatViewport(root: RefObject<HTMLDivElement | null>) {
     const update = () => {
       // Pinch zoom should remain a browser operation, not reflow the conversation.
       if (viewport.scale !== 1) return;
+      element.style.setProperty('--chat-viewport-width', `${viewport.width}px`);
+      element.style.setProperty('--chat-viewport-left', `${viewport.offsetLeft}px`);
       element.style.setProperty('--chat-viewport-height', `${viewport.height}px`);
       element.style.setProperty('--chat-viewport-top', `${viewport.offsetTop}px`);
     };

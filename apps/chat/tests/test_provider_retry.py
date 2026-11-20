@@ -2,10 +2,22 @@
 import asyncio
 
 import httpx
+import pytest
 
 from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
 from model_request_budget import create_budgeted_http_client
+
+
+@pytest.fixture(autouse=True)
+def no_provider_wait(monkeypatch):
+    """Provider retries are tested deterministically without sleeping."""
+    import model_request_budget as budget
+
+    async def immediate_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(budget.asyncio, 'sleep', immediate_sleep)
 
 
 def test_provider_error_payload_is_not_exposed_to_stream_or_logs(capfd):
@@ -45,6 +57,63 @@ def test_bounded_retry_only_for_transient_before_side_effects():
     assert asyncio.run(run(429)) == (3, 200)
     assert asyncio.run(run(401)) == (1, 401)
     assert asyncio.run(run(503, True)) == (1, 503)
+
+
+def test_retries_ten_times_before_the_eleventh_transient_attempt_succeeds(monkeypatch):
+    import model_request_budget as budget
+    waits = []
+
+    async def no_wait(delay):
+        waits.append(delay)
+
+    monkeypatch.setattr(budget.asyncio, 'sleep', no_wait)
+    monkeypatch.setattr(budget.random, 'uniform', lambda _minimum, _maximum: 0)
+
+    async def run():
+        calls = []
+
+        def handler(_request):
+            calls.append(1)
+            return httpx.Response(503 if len(calls) < 11 else 200, json={'choices': []})
+
+        async with create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
+            with budget.provider_retry_scope():
+                response = await client.post('https://openrouter.ai/api/v1/chat/completions', json={'model': 'x'})
+        return calls, response
+
+    calls, response = asyncio.run(run())
+    assert response.status_code == 200
+    assert len(calls) == 11
+    assert waits == [1, 2, 4, 8, 15, 15, 15, 15, 15, 15]
+
+
+def test_retry_scope_reports_safe_progress_before_waiting(monkeypatch):
+    import model_request_budget as budget
+    notices = []
+
+    async def no_wait(_delay):
+        return None
+
+    async def notice(attempt, max_attempts, retry_in_ms):
+        notices.append((attempt, max_attempts, retry_in_ms))
+
+    monkeypatch.setattr(budget.asyncio, 'sleep', no_wait)
+
+    async def run():
+        calls = []
+
+        def handler(_request):
+            calls.append(1)
+            return httpx.Response(503 if len(calls) == 1 else 200, json={'choices': []})
+
+        async with create_budgeted_http_client(transport=httpx.MockTransport(handler)) as client:
+            with budget.provider_retry_scope(on_retry=notice):
+                return await client.post('https://openrouter.ai/api/v1/chat/completions', json={'model': 'x'})
+
+    assert asyncio.run(run()).status_code == 200
+    assert len(notices) == 1
+    assert notices[0][0:2] == (2, 11)
+    assert notices[0][2] >= 100
 
 
 def test_runerror_is_never_forwarded_as_token():
@@ -191,7 +260,7 @@ def test_stream_read_timeout_is_classified_and_retried():
                 try: await client.post('https://example.com/chat/completions', json={'model':'x','stream':True})
                 except httpx.TimeoutException as exc: return len(calls), state['error_kind'], str(exc)
     calls, kind, message = asyncio.run(run())
-    assert calls == 3 and kind == 'timeout' and 'read-secret' not in message
+    assert calls == 11 and kind == 'timeout' and 'read-secret' not in message
 
 
 def test_transient_sse_error_retries_before_output():
@@ -379,7 +448,7 @@ def test_agno_retries_role_only_then_read_timeout_bounded():
             agent = Agent(model=OpenRouter(id="test", api_key="test", http_client=client, max_retries=0, retries=0), telemetry=False)
             with provider_retry_scope() as state:
                 events = [e async for e in agent.arun("hello", stream=True)]
-        assert len(calls) == 3
+        assert len(calls) == 11
         assert state["error_kind"] == "timeout"
         assert any(e.event == "RunError" for e in events)
         assert "private-timeout" not in str(events)

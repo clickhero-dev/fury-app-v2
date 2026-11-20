@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 Funcionalidade: manter referência visual no chat mobile
 Cenário: envio e recebimento no fim acompanham a conversa sem rolar a página
 Cenário: leitura antiga preserva posição e permite voltar às mensagens recentes
-Cenário: teclado virtual mantém compositor acessível e controles ficam em coluna
+Cenário: teclado virtual mantém compositor acessível e controles ficam na mesma faixa
 */
 async function setup(page: Page) {
   await page.addInitScript(() => {
@@ -49,12 +49,12 @@ for (const width of [375,390,1280,1440]) {
     await page.screenshot({path:info.outputPath(`chat-${width}.png`)});
   });
 }
-test('coluna mobile reserva espaço e mantém alvos de 44px',async ({page},info)=>{
+test('faixa mobile reserva espaço e mantém alvos de 44px',async ({page},info)=>{
   await page.setViewportSize({width:375,height:812}); await setup(page);
   const a=(await page.getByRole('button',{name:/Ativar modo/}).boundingBox())!;
   const bell=page.getByRole('button',{name:'Notificações, 1 não lida',exact:true});
   const b=(await bell.boundingBox())!;
-  expect(a.x).toBe(b.x); expect(b.y).toBeGreaterThanOrEqual(a.y+a.height+8);
+  expect(a.y).toBe(b.y); expect(b.x).toBeGreaterThanOrEqual(a.x+a.width+8);
   expect(a.width).toBeGreaterThanOrEqual(44); expect(b.height).toBeGreaterThanOrEqual(44);
   const header=(await page.locator('.ady-chat-header').boundingBox())!;
   expect(header.y+header.height).toBeGreaterThanOrEqual(b.y+b.height);

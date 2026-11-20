@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CreditCard,
   LayoutGrid,
+  House,
   LogOut,
   Megaphone,
   Palette,
@@ -45,6 +46,7 @@ const sections: { label: string; items: NavItem[] }[] = [
   {
     label: 'Gestão',
     items: [
+      { to: '/inicio', label: 'Início', icon: House },
       { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
       { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
       { to: '/leads', label: 'Clientes', icon: Users },

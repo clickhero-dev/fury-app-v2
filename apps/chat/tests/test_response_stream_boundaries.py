@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 import app as chat
 
+pytestmark = pytest.mark.usefixtures('checkpoint_store')
+
 
 def run_response(monkeypatch, chunks, *, modern=True, fail=False):
     cid, tenant, user = uuid4(), uuid4(), uuid4()

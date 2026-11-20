@@ -3,6 +3,7 @@ from uuid import uuid4
 import json
 
 from attachment_repository import AttachmentRepository, ConversationError
+from turn_recovery import TurnRecovery
 
 
 class ConversationRepository:
@@ -50,7 +51,7 @@ class ConversationRepository:
     async def interrupt_expired(self, conn, conversation_id):
         await conn.execute("UPDATE chat_response_runs SET status='interrupted',updated_at=clock_timestamp() WHERE conversation_id=$1 AND status='running' AND lease_until<=clock_timestamp()", conversation_id)
 
-    async def begin_run(self, conversation_id, content='', *, retry=False, retry_run_id=None, attachment_ids=(), client_key=None, clarification_id=None, choice_index=None):
+    async def begin_run(self, conversation_id, content='', *, retry=False, retry_run_id=None, attachment_ids=(), client_key=None, clarification_id=None, choice_index=None, automatic=False):
         lease_id = uuid4()
         async with self.db.acquire() as conn:
             async with conn.transaction():
@@ -59,10 +60,22 @@ class ConversationRepository:
                 if client_key is not None and not await conn.fetchval("INSERT INTO chat_send_keys(conversation_id,client_key) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING client_key", conversation_id, client_key):
                     raise ConversationError(409, 'Envio já registrado. Atualize a conversa.')
                 if retry:
-                    # Summaries do not carry a causal watermark. Their facts may
-                    # describe turns newer than the target, so never guess.
+                    # Legacy summaries have no causal watermark. New turns have
+                    # a frozen snapshot, so later compaction cannot contaminate
+                    # their retry. Do not use some other turn's checkpoint.
                     if await conn.fetchval('SELECT 1 FROM chat_memories WHERE conversation_id=$1', conversation_id):
-                        raise ConversationError(409, 'Não é possível retentar após a compactação desta conversa.', code='retry_compacted')
+                        snapshot = await conn.fetchval('''SELECT 1 FROM chat_turn_checkpoints
+                            WHERE conversation_id=$1 AND user_message_id=(
+                                SELECT r.user_message_id FROM chat_response_runs r
+                                WHERE r.conversation_id=$1 AND ($2::uuid IS NULL OR r.id=$2)
+                                AND NOT EXISTS (SELECT 1 FROM chat_response_runs newer
+                                    WHERE newer.conversation_id=r.conversation_id
+                                    AND newer.user_message_id=r.user_message_id
+                                    AND (newer.created_at,newer.id)>(r.created_at,r.id))
+                                ORDER BY r.created_at DESC,r.id DESC LIMIT 1)''',
+                            conversation_id, retry_run_id)
+                        if not snapshot:
+                            raise ConversationError(409, 'Não é possível retentar após a compactação desta conversa.', code='retry_compacted')
                     previous = await conn.fetchrow("""SELECT r.user_message_id,r.status FROM chat_response_runs r
                         WHERE r.conversation_id=$1 AND ($2::uuid IS NULL OR r.id=$2)
                         AND NOT EXISTS (SELECT 1 FROM chat_response_runs newer
@@ -72,7 +85,23 @@ class ConversationRepository:
                     if previous is None or previous['status'] not in ('failed', 'interrupted'):
                         raise ConversationError(409, 'Não há resposta interrompida para retentar.')
                     message_id = previous['user_message_id']
+                    # Legacy turns only enter durable recovery through explicit
+                    # human retry; never backfill and replay old effects in a scan.
+                    if not automatic:
+                        await TurnRecovery(self.db,self.tenant_id,self.user_id).register(conn,conversation_id,message_id)
+                    await TurnRecovery(self.db,self.tenant_id,self.user_id).claim(conn,conversation_id,message_id,automatic=automatic)
                 else:
+                    # Preserve concurrent *original* requests (0072), but stop
+                    # obsolete background continuations when the human moves on.
+                    await conn.execute("""UPDATE chat_response_runs r SET status='interrupted',
+                        lease_until=clock_timestamp(),updated_at=clock_timestamp()
+                        WHERE r.conversation_id=$1 AND r.status='running' AND EXISTS (
+                            SELECT 1 FROM chat_turn_recovery t WHERE t.user_message_id=r.user_message_id
+                            AND t.status='running' AND t.attempts>0)""",conversation_id)
+                    await conn.execute("""UPDATE chat_turn_recovery t SET status='stopped'
+                        WHERE conversation_id=$1 AND status IN ('queued','running')
+                        AND (attempts>0 OR EXISTS (SELECT 1 FROM chat_response_runs r
+                            WHERE r.user_message_id=t.user_message_id AND r.status IN ('failed','interrupted')))""",conversation_id)
                     if clarification_id is not None:
                         clarification = await conn.fetchrow('''SELECT q.choices,q.selected_index,q.dismissed_at,
                             EXISTS (SELECT 1 FROM chat_response_runs r
@@ -96,6 +125,8 @@ class ConversationRepository:
                         await conn.execute('UPDATE chat_clarifications SET selected_index=$2,answer_message_id=$3 WHERE id=$1', clarification_id, choice_index, message_id)
                     await AttachmentRepository(conn, self.tenant_id, self.user_id).bind(conversation_id, message_id, attachment_ids)
                 run_id = await conn.fetchval("INSERT INTO chat_response_runs(conversation_id,user_message_id,lease_id,status,lease_until,created_at,client_key) VALUES($1,$2,$3,'running',clock_timestamp()+interval '45 seconds',clock_timestamp(),$4) RETURNING id", conversation_id, message_id, lease_id, client_key)
+                if not retry:
+                    await TurnRecovery(self.db,self.tenant_id,self.user_id).register(conn,conversation_id,message_id)
                 return run_id, lease_id, message_id
 
     async def delete(self, conversation_id, cleanup):
