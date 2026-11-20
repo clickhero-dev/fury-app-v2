@@ -113,17 +113,17 @@ export function LibraryUploadFlow({ request, onClose }: Props) {
   if (step === 'kind') {
     return (
       <StudioDialogShell open onClose={onClose} className={isArte ? 'max-w-md' : 'max-w-xl'}>
-          <DialogHeader>
+          <DialogHeader className="pr-12 sm:pr-8">
             <DialogTitle>{isArte ? 'Enviar foto para a arte' : 'Enviar imagens'}</DialogTitle>
             <DialogDescription>{isArte ? 'O que aparece na foto?' : 'O que você vai enviar?'}</DialogDescription>
           </DialogHeader>
-          <div className={`grid gap-3 ${request.kinds.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`grid gap-3 ${request.kinds.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
             {request.kinds.map((k) => {
               const Icon = KIND_ICON[k];
               return (
                 <label
                   key={k}
-                  className="group flex cursor-pointer flex-col items-center gap-3 rounded-xl border border-border p-5 text-center transition-all hover:border-brand/50 hover:bg-brand/5"
+                  className="group focus-within:ring-2 focus-within:ring-brand flex cursor-pointer flex-col items-center gap-3 rounded-xl border border-border p-5 text-center transition-all hover:border-brand/50 hover:bg-brand/5"
                 >
                   <input
                     type="file"
@@ -173,7 +173,7 @@ export function LibraryUploadFlow({ request, onClose }: Props) {
 
   return (
     <StudioDialogShell open onClose={() => !upload.isPending && onClose()} className="max-w-xl">
-        <DialogHeader>
+        <DialogHeader className="pr-12 sm:pr-8">
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle>Conferir antes de enviar</DialogTitle>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${KIND_META[k].badgeClass}`}>{KIND_META[k].label}</span>
