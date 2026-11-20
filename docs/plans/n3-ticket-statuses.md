@@ -40,7 +40,7 @@ ADR-0002 ausente na base; aplicar externalFetch, timeout e erros sanitizados.
    retornar erro imediatamente, sem antecipar Retry-After.
 4. Falha final continua HTTP 502 TICKET_PROVIDER_UNAVAILABLE e mensagem segura.
    Diagnóstico interno: razão em enum, status externo quando disponível, ambiente
-   APP_ENV (ou NODE_ENV, ou unknown) e requestId do request logger, com UUID quando
+   APP_ENV (ou unknown quando ausente ou vazio) e requestId do request logger, com UUID quando
    ausente. Não inferir produção de NODE_ENV=production; configurar APP_ENV com
    o ambiente de implantação. Nenhum token, body ou erro bruto do provedor.
 5. Evento ticket_clickup_statuses_failed e exceção backend compartilham diagnóstico.
@@ -75,3 +75,48 @@ ADR-0002 ausente na base; aplicar externalFetch, timeout e erros sanitizados.
   limite real de timeout persistente e correlação controller → serviço → exceção.
 - PR: https://github.com/clickhero-dev/fury-app-v2/pull/463. Base origin/hmg ecd4206c
   incorporada. Sem merge nem deploy. Correlação histórica continua pendente.
+
+## Retorno à implementação — 18/11/2026
+
+A PR #463 foi mesclada em hmg no commit 58f11031. O trabalho restante é
+investigativo e de infraestrutura; a instrumentação nova não prova a causa dos
+acontecimentos anteriores. Especificação para encerramento:
+
+1. Obter os oito eventos originais do PostHog, incluindo IDs, timestamps exatos,
+   release, ambiente e requestId quando existirem. Consultar os logs históricos da
+   API em ambos os ambientes e do ClickUp no intervalo; para cada evento, registrar
+   correspondência verificável ou fonte consultada e razão da impossibilidade.
+   Classificar causa e ambiente apenas com evidência suficiente; ausência de log
+   não prova ausência de falha. Não publicar credenciais ou dados pessoais.
+2. Executar `QA - jornada real` no head da nova PR com a conta de QA em condição
+   de gerar imagem, sem alterar expectativas. Registrar link, commit e resultado;
+   validar os demais checks e ausência de conflitos com hmg atualizado.
+3. Manter os testes existentes de sucesso, timeout, 429/5xx, payload inválido,
+   resposta sanitizada e recuperação da tela. Não há cache para testar como fallback.
+
+### Fontes verificadas nesta sessão
+
+- PostHog e logs históricos da API/provedor não estão disponíveis nas ferramentas
+  desta sessão. O relato contém somente os limites do intervalo e a contagem: não
+  fornece IDs nem os seis timestamps intermediários. Portanto, nenhum dos oito
+  eventos pode ser individualmente associado a release, requestId, causa ou
+  ambiente com os dados disponíveis; não é possível afirmar que todas as fontes
+  históricas foram esgotadas.
+- A consulta ao ticket relacionado pelo conector ClickUp retornou limite diário
+  excedido; o cliente REST do projeto não está presente neste repositório. A
+  indisponibilidade do conector não demonstra a causa das exceções históricas.
+- O run 44249870927 de 18/11/2026 confirmou 0/20 imagens restantes na conta QA;
+  login, criação, pausa e limpeza da campanha passaram. A falha não valida o novo
+  head nem substitui um resultado verde. Não se altera a cota ou o teste para
+  mascarar esse impedimento.
+
+## Correção do diagnóstico de ambiente — 18/11/2026
+
+- Aceitação: evento e exceção usam APP_ENV explicitamente configurado; se ausente
+  ou vazio, usam `unknown`, independentemente de NODE_ENV. A resposta HTTP continua
+  sanitizada e conserva apenas requestId público.
+- Passos: reproduzir com APP_ENV ausente e NODE_ENV=production; corrigir a origem
+  comum do diagnóstico; validar evento e exceção e executar a suíte focada.
+- A investigação histórica continua aberta: sem IDs/timestamps individuais e acesso
+  aos logs, não é possível produzir oito correlações verificáveis nem afirmar que
+  as fontes foram esgotadas. A PR deve manter essa limitação explícita.

@@ -15,3 +15,11 @@ it.each([['CLICKUP_RATE_LIMITED', 'rate_limited'], ['CLICKUP_TIMEOUT', 'timeout'
   expect(captureServerEvent).toHaveBeenCalledWith('ticket_clickup_statuses_failed', expect.objectContaining({ reason, environment: 'hmg', requestId: 'req-123', providerStatus: 429 }));
   expect(JSON.stringify(vi.mocked(captureServerEvent).mock.calls)).not.toContain('credential-secret');
 });
+
+it.each([undefined, ''])('usa unknown com APP_ENV ausente ou vazio (%s), mesmo com NODE_ENV production', async (appEnv) => {
+  vi.stubEnv('APP_ENV', appEnv);
+  vi.stubEnv('NODE_ENV', 'production');
+  const service = new TicketService({ listStatuses: vi.fn().mockRejectedValue(new Error('indisponível')) } as any);
+  await expect(service.listStatuses('req-unknown')).rejects.toMatchObject({ diagnostics: { environment: 'unknown' } });
+  expect(captureServerEvent).toHaveBeenCalledWith('ticket_clickup_statuses_failed', expect.objectContaining({ environment: 'unknown', requestId: 'req-unknown' }));
+});
