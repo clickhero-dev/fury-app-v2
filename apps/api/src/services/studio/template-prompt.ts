@@ -12,7 +12,7 @@ export const TEMPLATE_ANALYSIS_MODEL = 'google/gemini-3.8-flash';
 export const TEMPLATE_IMAGE_MODEL = 'google/gemini-3.1-flash-image';
 
 const blockSchema = z.object({
-  position: z.string().min(1).max(300),
+  position: z.string().trim().min(1).max(300),
   original: z.string().max(500),
   kind: z.enum(['generic', 'specific']),
   style: z.string().max(400).optional().default(''),
@@ -20,7 +20,7 @@ const blockSchema = z.object({
 });
 
 const planSchema = z.object({
-  layout: z.string().min(1).max(2000),
+  layout: z.string().trim().min(1).max(2000),
   palette: z.array(z.string().max(100)).max(12),
   typography: z.string().max(500),
   blocks: z.array(blockSchema).min(1).max(30),
@@ -110,13 +110,19 @@ REGRAS:
 }
 
 /** Valida o JSON da IA; resposta fora do formato vira erro (sem gerar às cegas). */
-export function parseTemplatePlan(raw: string): TemplatePlan {
+export function parseTemplatePlan(raw: unknown): TemplatePlan {
+  const invalid = (reason: string): never => {
+    throw new AppError(502, 'TEMPLATE_ANALYSIS_INVALID',
+      'Não foi possível interpretar o modelo. Revise o texto ou escolha outro modelo e tente novamente. Sua cota foi devolvida.', { reason });
+  };
+  if (typeof raw !== 'string') return invalid('unexpected_type');
   const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
-  try {
-    return planSchema.parse(JSON.parse(cleaned));
-  } catch {
-    throw new AppError(502, 'TEMPLATE_ANALYSIS_INVALID', 'Não foi possível analisar o modelo. Tente novamente.');
-  }
+  if (!cleaned) return invalid('empty');
+  let value: unknown;
+  try { value = JSON.parse(cleaned); } catch { return invalid('invalid_json'); }
+  const parsed = planSchema.safeParse(value);
+  if (!parsed.success) return invalid('invalid_schema');
+  return parsed.data;
 }
 
 // campos livres vêm de uma imagem enviada pelo usuário: sem quebras de linha nem aspas

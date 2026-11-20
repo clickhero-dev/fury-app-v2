@@ -13,6 +13,8 @@ describe('ambiente nas exceções backend', () => {
     ['production', 'production', 'production'],
     [undefined, 'development', 'development'],
     ['', 'test', 'test'],
+    ['   ', 'test', 'test'],
+    [' hmg ', 'production', 'hmg'],
     [undefined, undefined, 'unknown'],
   ])('Dado APP_ENV=%s e NODE_ENV=%s, então identifica %s', async (appEnv, nodeEnv, expected) => {
     vi.stubEnv('POSTHOG_API_KEY', 'phc_test');

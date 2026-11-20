@@ -1,3 +1,4 @@
+import { analyzeTemplate } from './template-analysis.js';
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -27,7 +28,6 @@ import {
   buildTemplateGenerationPrompt,
   buildTemplateVerificationPrompt,
   findTemplateTextIssues,
-  parseTemplatePlan,
   parseTranscript,
   sanitizeTemplatePlan,
   type TemplateCompanyData,
@@ -486,14 +486,11 @@ export class StudioAiService {
     const photoUrls = photos.map((p) => p.url);
     const withSubject = photos.length > 0;
     // a análise vê as fotos para planejar onde encaixar
-    const analysis = await this.llm.chatWithImages({
-      model: TEMPLATE_ANALYSIS_MODEL,
+    const analysis = await analyzeTemplate((options) => this.llm.chatWithImages(options), {
       text: buildTemplateAnalysisPrompt(payload.prompt, company, photos),
       imageUrls: [templateUrl, ...photoUrls],
-      temperature: 0.1,
-      jsonMode: true,
     });
-    const plan = sanitizeTemplatePlan(parseTemplatePlan(analysis.content), payload.prompt, company);
+    const plan = sanitizeTemplatePlan(analysis.plan, payload.prompt, company);
     if (!plan.blocks.some((b) => b.new_text)) {
       throw new AppError(422, 'TEMPLATE_NO_TEXT', 'Não encontramos no seu texto informações para colocar no modelo. Descreva o que deve aparecer no anúncio.');
     }

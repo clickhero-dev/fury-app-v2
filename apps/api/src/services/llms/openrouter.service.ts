@@ -1,4 +1,4 @@
-import { externalFetch } from '../../lib/http-client.js';
+import { externalFetch, ExternalHttpError } from '../../lib/http-client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
 import { resolveAiKey } from '../../lib/ai-key-context.js';
@@ -500,34 +500,52 @@ export const openrouterService = {
     jsonMode?: boolean;
   }): Promise<{ content: string; costUsd: number | null }> {
     const apiKey = await getClient();
-    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: options.model,
-        temperature: options.temperature ?? 0.1,
-        ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: options.text },
-            ...options.imageUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
-          ],
-        }],
-      }),
-    });
+    let response: Response;
+    try {
+      response = await externalFetch(`${OPENROUTER_BASE}/chat/completions`, {
+        signal: AbortSignal.timeout(30_000),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: options.model,
+          temperature: options.temperature ?? 0.1,
+          ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: options.text },
+              ...options.imageUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+            ],
+          }],
+        }),
+      });
+    } catch (error) {
+      const timeout = error instanceof ExternalHttpError && error.code === 'TIMEOUT';
+      throw new AppError(502, timeout ? 'OPENROUTER_CHAT_TIMEOUT' : 'OPENROUTER_CHAT_NETWORK',
+        'Falha ao acessar o serviço de análise.', { retryable: true });
+    }
+    let body: string;
+    try { body = await response.text(); } catch (error) {
+      const timeout = error instanceof DOMException && ['TimeoutError', 'AbortError'].includes(error.name);
+      throw new AppError(502, timeout ? 'OPENROUTER_CHAT_TIMEOUT' : 'OPENROUTER_CHAT_NETWORK',
+        'Falha ao receber a análise.', { retryable: true });
+    }
     if (!response.ok) {
-      const err = await response.text();
-      if (isInsufficientCreditsError(err)) {
+      if (isInsufficientCreditsError(body)) {
         throw new AppError(402, 'OPENROUTER_INSUFFICIENT_CREDITS', INSUFFICIENT_CREDITS_MESSAGE);
       }
-      console.error('[openrouter] chatWithImages error:', err.slice(0, 2000));
-      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao analisar a imagem. Tente novamente.');
+      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao analisar a imagem. Tente novamente.', {
+        providerStatus: response.status,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+      });
     }
-    const data = (await response.json()) as any;
+    let data: any;
+    try { data = JSON.parse(body); } catch {
+      throw new AppError(502, 'OPENROUTER_CHAT_RESPONSE_INVALID', 'Resposta inválida do serviço de análise.', { retryable: false });
+    }
     return {
-      content: data.choices?.[0]?.message?.content ?? '',
-      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
+      content: data?.choices?.[0]?.message?.content ?? '',
+      costUsd: typeof data?.usage?.cost === 'number' ? data.usage.cost : null,
     };
   },
 
