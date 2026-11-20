@@ -48,7 +48,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate QA read-only contract
-        run: python scripts/ci/qa-read-only.test.py
+        run: |
+          python scripts/ci/qa-read-only.test.py
+          node --test scripts/ci/qa-readiness.node-test.mjs
 
       - uses: actions/setup-node@v4
         with:
@@ -80,6 +82,8 @@ jobs:
         working-directory: apps/web
         env:
           QA_ALLOW_MUTATIONS: 'true'
+          QA_QUOTA_MARGIN: ${{ vars.QA_QUOTA_MARGIN }}
+          QA_QUOTA_OWNER: ${{ vars.QA_QUOTA_OWNER }}
           QA_BASE_URL: http://127.0.0.1:5173
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
           QA_EMAIL: ${{ secrets.QA_EMAIL }}
