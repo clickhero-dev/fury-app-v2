@@ -27,6 +27,13 @@ class ReadOnlyQAContract(unittest.TestCase):
                 self.assertEqual(result, expected)
         self.assertIn('pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-real.spec.ts', step.group(1))
 
+    def test_preflight_precedes_all_product_mutations_and_cleanup(self):
+        spec = (WORKFLOW.parents[2] / 'apps/web/e2e-qa/jornada-real.spec.ts').read_text()
+        self.assertLess(spec.index("test.step('Pré-voo"), spec.index("test.step('Criar campanha"))
+        self.assertLess(spec.index("test.step('Pré-voo"), spec.index("test.step('Gerar imagem"))
+        self.assertIn('if (token && creationStarted)', spec)
+        self.assertIn('await runWhenReady(', spec)
+
     def test_safe_journey_is_the_default(self):
         source = WORKFLOW.read_text()
         self.assertRegex(source, r'allow_mutations:[\s\S]*?type: boolean\s+default: false')
