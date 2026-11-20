@@ -6,7 +6,6 @@ import {
   House,
   LogOut,
   Megaphone,
-  MessageCircle,
   Palette,
   Plug,
   Settings,
@@ -57,7 +56,6 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: 'Criação',
     items: [
       { to: '/estudio', label: 'Estúdio', icon: Palette },
-      { to: '/chat', label: 'Assistente', icon: MessageCircle },
       { to: '/calendario', label: 'Planejamento', icon: CalendarDays, alsoActive: ['/planejador'] },
     ],
   },

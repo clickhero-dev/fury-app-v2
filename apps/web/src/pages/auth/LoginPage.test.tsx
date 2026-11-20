@@ -1,18 +1,5 @@
-/*
-# Language: pt-BR
+// @vitest-environment jsdom
 
-Funcionalidade: acesso comercial direto à conta demo
-
-  Cenário: visitante abre a demonstração sem preencher credenciais
-    Dado que a API de sessão demo está disponível
-    Quando clica em "Conhecer o ady com uma conta demo"
-    Então a sessão demo é solicitada e o visitante é levado à Home
-
-  Cenário: indisponibilidade da demo informa uma alternativa
-    Dado que a API de sessão demo falha
-    Quando clica no acesso demo
-    Então vê uma mensagem amigável de indisponibilidade
-*/
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { StrictMode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -20,14 +7,12 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from './LoginPage';
-import { store } from '@/store';
 import { rememberLoginDestination } from './initialDestination';
+import { store } from '@/store';
 
-const mutateAsync = vi.hoisted(() => vi.fn());
 const loginMutateAsync = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useLogin', () => ({
-  useDemoLogin: () => ({ mutateAsync, isPending: false }),
   useLogin: () => ({ mutateAsync: loginMutateAsync, isPending: false }),
 }));
 vi.mock('@/components/auth/GoogleLoginButton', () => ({ GoogleLoginButton: () => null }));
@@ -40,8 +25,7 @@ vi.mock('@/lib/social-login', () => ({
 }));
 
 function LocationProbe() {
-  const location = useLocation();
-  return <output data-testid="location">{location.pathname + location.search + location.hash}</output>;
+  return <output data-testid="location">{useLocation().pathname}</output>;
 }
 
 function renderPage() {
@@ -58,49 +42,35 @@ function renderPage() {
   );
 }
 
-describe('BDD: LoginPage conta demo', () => {
+describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    sessionStorage.clear();
-    window.history.replaceState({}, '', '/login');
   });
 
-  it('Cenário: visitante abre a demonstração sem preencher credenciais', async () => {
-    mutateAsync.mockResolvedValueOnce({});
-    renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/inicio'));
-  });
-
-  it('Cenário: indisponibilidade da demo informa uma alternativa', async () => {
-    mutateAsync.mockRejectedValueOnce(new Error('offline'));
-    renderPage();
-
-    fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
-
-    expect(await screen.findByText(/conta demo está temporariamente indisponível/i)).toBeInTheDocument();
-  });
-
-  it('Cenário: sessão autenticada conserva deep link mesmo em StrictMode', async () => {
+  it('retains deep link for an authenticated session under StrictMode', async () => {
     localStorage.setItem('token', 'session');
     rememberLoginDestination('/estudio/imagem?origem=convite#criar');
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/estudio/imagem?origem=convite#criar'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/estudio/imagem'));
   });
 
-  it('Cenário: retorno Google conserva deep link mesmo em StrictMode', async () => {
+  it('retains deep link after Google login under StrictMode', async () => {
     rememberLoginDestination('/calendario?view=week#hoje');
     const session = { token: 'session', refreshToken: 'refresh', user: { name: 'Teste', email: 'test@example.invalid', role: 'owner', tenantId: 'test' } };
     window.history.replaceState({}, '', `/login?social_login=${encodeURIComponent(JSON.stringify(session))}`);
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/calendario?view=week#hoje'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/calendario'));
+  });
+
+  it('não oferece acesso direto à conta demo e mantém o formulário de login', () => {
+    renderPage();
+
+    expect(screen.queryByRole('button', { name: /demo|demonstração/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /^entrar$/i })).not.toBeNull();
+    expect(screen.getByLabelText(/e-mail/i)).not.toBeNull();
+    expect(screen.getByLabelText(/^senha/i)).not.toBeNull();
   });
 });
-// @vitest-environment jsdom
-
-import '../../test/setup';
-
