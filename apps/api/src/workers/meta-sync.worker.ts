@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { db, metaConnections, tenants } from '../lib/db.js';
 import { eq, isNull } from 'drizzle-orm';
-import { getMetaSyncQueue } from '../lib/queue.js';
+import { getMetaSyncQueue, getRedisConnection } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
 import { captureServerException, captureServerEvent } from '../lib/analytics.js';
@@ -198,7 +198,7 @@ export async function startMetaSyncWorker(): Promise<Worker> {
       }
     },
     {
-      connection: (await import('../lib/redis.js')).getRedis().duplicate(),
+      connection: await getRedisConnection(),
       concurrency: 2,
       ...getWorkerMetricsOptions('meta-sync-worker'),
     }
