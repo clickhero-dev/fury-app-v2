@@ -197,6 +197,7 @@ const STEPS: MigrationStep[] = [
   },
   { tag: '0056_demo_tenant' },
   { tag: '0063_ady_rbac_plan_views_blocked' },
+  { tag: '0075_repair_legacy_demo' },
   { tag: '0082_chat_batch_approvals' },
   { tag: '0083_chat_media_publish' },
 ];

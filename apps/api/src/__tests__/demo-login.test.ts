@@ -15,6 +15,7 @@ Funcionalidade: acesso direto à conta demo
 */
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../services/core/auth.service.js';
+import { getRedis } from '../lib/redis.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 vi.mock('../lib/redis.js', () => ({
@@ -62,4 +63,47 @@ describe('BDD: AuthService.demoLogin', () => {
       new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível'),
     );
   });
+});
+
+describe('Funcionalidade: falhas e recuperação da sessão demo', () => {
+  it.each([null, { ...demoUser }])('Cenário: usuário ausente ou inativo não gera tokens (%s)', async user => {
+    const service = makeService({
+      findTenantBySlug: vi.fn().mockResolvedValue({ id: 'demo-tenant', isDemo: true }),
+      findUserByTenant: vi.fn().mockResolvedValue(user),
+      isAccountActive: vi.fn().mockResolvedValue(false),
+    });
+    const jwt = (service as any).deps.jwt;
+    await expect(service.demoLogin()).rejects.toMatchObject({ code: 'DEMO_UNAVAILABLE' });
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
+    expect(jwt.generateRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: indisponibilidade temporária na consulta permite retry sem criar estado', async () => {
+    const repo = {
+      findTenantBySlug: vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValue({ id: 'demo-tenant', isDemo: true }),
+      findUserByTenant: vi.fn().mockResolvedValue(demoUser),
+      isAccountActive: vi.fn().mockResolvedValue(true),
+    };
+    const service = makeService(repo);
+    const jwt = (service as any).deps.jwt;
+    await expect(service.demoLogin()).rejects.toThrow('timeout');
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
+    await expect(service.demoLogin()).resolves.toHaveProperty('tokens.accessToken', 'access');
+    expect(jwt.generateAccessToken).toHaveBeenCalledOnce();
+    expect(repo.findTenantBySlug).toHaveBeenCalledTimes(2);
+  });
+});
+
+it('Cenário: Redis indisponível não retorna sessão e retry reutiliza uma única chave', async () => {
+  const setex = vi.fn().mockRejectedValueOnce(new Error('Redis unavailable')).mockResolvedValue('OK');
+  vi.mocked(getRedis).mockReturnValueOnce({ setex } as any).mockReturnValueOnce({ setex } as any);
+  const service = makeService({
+    findTenantBySlug: vi.fn().mockResolvedValue({ id: 'demo-tenant', isDemo: true }),
+    findUserByTenant: vi.fn().mockResolvedValue(demoUser),
+    isAccountActive: vi.fn().mockResolvedValue(true),
+  });
+  await expect(service.demoLogin()).rejects.toThrow('Redis unavailable');
+  await expect(service.demoLogin()).resolves.toHaveProperty('tokens.refreshToken', 'refresh');
+  expect(setex).toHaveBeenCalledTimes(2);
+  expect(new Set(setex.mock.calls.map(call => call[0]))).toEqual(new Set(['refresh:demo-user']));
 });
