@@ -97,7 +97,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await page.reload(); await page.getByRole('button',{name:'Proposta isolada'}).click();
     const video = page.getByRole('article').filter({hasText:'Criar vídeo'});
     await video.getByRole('button',{name:'Confirmar ação'}).click();
-    await expect(video.locator('video[aria-label="Vídeo gerado"]')).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
+    await expect(video.getByLabel('Vídeo gerado', { exact: true })).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     const videoStatus = await db`select status,result from chat_approvals where id=${videoApproval}`;
     expect(videoStatus[0].status).toBe('completed'); expect(videoStatus[0].result.job.status).toBe('done');
     const imageEditApproval = randomUUID(), imageAsset = randomUUID();
@@ -113,7 +113,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await page.reload(); await page.getByRole('button',{name:'Proposta isolada'}).click();
     const videoEdit = page.getByRole('article').filter({hasText:'Editar vídeo'});
     await videoEdit.getByRole('button',{name:'Confirmar ação'}).click();
-    await expect(videoEdit.locator('video[aria-label="Vídeo gerado"]')).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
+    await expect(videoEdit.getByLabel('Vídeo gerado', { exact: true })).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     const post = await db`select id,xmin::text as version from social_posts where tenant_id=${tenant} and caption=${caption}`;
     const cancelApproval = randomUUID(), cancelPath = `/api/planner/posts/${post[0].id}/chat-cancel`;
     await db`insert into chat_approvals(id,tenant_id,user_id,conversation_id,method,path,body,expires_at) values (${cancelApproval},${tenant},${user},${conversation},'PATCH',${cancelPath},${db.json({version:post[0].version})}::jsonb,now()+interval '1 hour')`;
