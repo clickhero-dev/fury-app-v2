@@ -5,6 +5,14 @@ const actions = [
   ['Organizar minha semana', 'semana'],
   ['Usar uma foto minha', 'foto'],
 ];
+const specificActions = [
+  ['Criar post para o Instagram', 'criar um post para o Instagram'],
+  ['Agendar posts da semana', 'agendar os posts da semana'],
+  ['Criar Reels para o Instagram', 'criar um Reels'],
+  ['Criar vídeo para o negócio', 'criar um vídeo'],
+  ['Aumentar seguidores no Instagram', 'aumentar seguidores'],
+  ['Atrair clientes pelo WhatsApp', 'atrair novos clientes'],
+];
 // Funcionalidade: iniciar ações úteis com segurança em telas pequenas e desktop.
 // Dado o chat isolado, nada é enviado até o clique. O clique prepara o entregável
 // sem briefing nem autorização de publicação, mídia paga ou geração com custo.
@@ -44,6 +52,25 @@ for (const viewport of [{width:320,height:568},{width:390,height:844},{width:844
     };
     await expect(page.getByRole('heading',{name:'Assistente do Ady'})).toBeVisible();
     await fit();
+    for (const [label,prompt] of specificActions) {
+      await page.getByRole('button',{name:label,exact:true}).click();
+      expect(requests).toEqual([]);
+      await expect(page.getByRole('heading',{name:label})).toBeVisible();
+      await expect(page.getByRole('button',{name:'Continuar',exact:true})).toBeDisabled();
+      await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+      expect(requests).toEqual([]);
+      await page.getByRole('button',{name:label,exact:true}).click();
+      await page.getByRole('textbox',{name:'Resposta'}).fill('Detalhes para meu negócio');
+      const previousSends = sends.length;
+      await page.getByRole('button',{name:'Continuar',exact:true}).click();
+      await expect.poll(() => sends.length).toBe(previousSends + 1);
+      expect(sends.at(-1)).toContain(prompt);
+      expect(sends.at(-1)).toContain('confirmação explícita');
+      await page.evaluate(() => sessionStorage.clear());
+      await page.reload();
+      await expect(page.getByRole('button',{name:label,exact:true})).toBeVisible();
+      requests.length=0;
+    }
     for (const [label,prompt] of actions) {
       await expect(page.getByRole('group',{name:'Ações para começar'}).getByRole('button')).toHaveCount(3);
       expect(requests).toEqual([]);
