@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { StudioAsset, GenerateCreativeResponse, StudioVideoJob } from '@/types/studio';
 import { formatDuration, parseVideoMeta, useActiveStudioVideoJobs, useStudioVideoOptions } from '@/hooks/useStudioVideo';
 import { CreativeResult } from './components/CreativeResult';
+import { applyTextChoice, type TextChoice } from './quick-create-text';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
@@ -99,6 +100,8 @@ export function EstudioHome() {
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
+  const [textChoice, setTextChoice] = useState<TextChoice>('auto');
+  const [artHeadline, setArtHeadline] = useState('');
   const [orAspectRatio, setOrAspectRatio] = useState<'1:1' | '9:16'>('1:1');
   const [templatePhoto, setTemplatePhoto] = useState<LibraryPhoto | null>(null);
   const [artPhotos, setArtPhotos] = useState<LibraryPhoto[]>([]);
@@ -224,6 +227,8 @@ export function EstudioHome() {
 
   const handleStartQuickCreate = () => {
     setOrPrompt('');
+    setTextChoice('auto');
+    setArtHeadline('');
     setQuotaErrorMessage(null);
     setTemplatePhoto(null);
     setArtPhotos([]);
@@ -292,7 +297,7 @@ export function EstudioHome() {
 
   const handleQuickCreate = async () => {
     const finalPrompt = orPrompt.trim();
-    if (finalPrompt.length < 10) return;
+    if (finalPrompt.length < 10 || (!templatePhoto && textChoice === 'explicit' && (!artHeadline.trim() || /[\"\n\r]/.test(artHeadline)))) return;
     setView('loading');
     // cronômetro começa no clique — cobre enhance-prompt + geração
     const startedAt = Date.now();
@@ -321,9 +326,9 @@ export function EstudioHome() {
         photo_kinds: artPhotos.length ? artPhotos.map((p) => p.kind) : undefined,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
-      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt, aspect_ratio: orAspectRatio, photo_ids });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: applyTextChoice(enhancedPrompt, textChoice, artHeadline), aspect_ratio: orAspectRatio, photo_ids });
     } catch {
-      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt, aspect_ratio: orAspectRatio, photo_ids });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: applyTextChoice(finalPrompt, textChoice, artHeadline), aspect_ratio: orAspectRatio, photo_ids });
     }
   };
 
@@ -712,6 +717,17 @@ export function EstudioHome() {
                   </span>
                 </div>
 
+                {!templatePhoto && (
+                  <fieldset className="space-y-2 border-t border-border pt-4 text-sm text-text-primary">
+                    <legend className="font-semibold">Texto na arte</legend>
+                    <label className="block"><input type="radio" name="art-text" checked={textChoice === 'auto'} onChange={() => setTextChoice('auto')} /> Sugerir uma frase a partir do contexto</label>
+                    <label className="block"><input type="radio" name="art-text" checked={textChoice === 'explicit'} onChange={() => setTextChoice('explicit')} /> Escrever uma frase</label>
+                    {textChoice === 'explicit' && <div><label htmlFor="art-headline">Frase na imagem</label><input id="art-headline" value={artHeadline} maxLength={120} onChange={(e) => setArtHeadline(e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-surface-muted px-4 py-2" /><p className="text-xs text-text-tertiary">Digite a frase em português, sem aspas.</p></div>}
+                    <label className="block"><input type="radio" name="art-text" checked={textChoice === 'none'} onChange={() => setTextChoice('none')} /> Sem texto</label>
+                  </fieldset>
+                )}
+                <p className="text-xs text-text-tertiary">Confira se a pessoa gerada corresponde à foto enviada: a fidelidade pode variar.</p>
+
                 {/* Imagens: modelo (copia o estilo) e fotos na arte (aparecem no anúncio) */}
                 <div className="ady-decor space-y-2.5 border-t border-border pt-4">
                   <div className="flex items-baseline gap-2">
@@ -894,7 +910,7 @@ export function EstudioHome() {
                   <button
                     type="button"
                     onClick={handleQuickCreate}
-                    disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
+                    disabled={orPrompt.trim().length < 10 || (!templatePhoto && textChoice === 'explicit' && (!artHeadline.trim() || /[\"\n\r]/.test(artHeadline))) || orImageMutation.isPending || quotaReached}
                     className={`ady-btn ml-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
                   >
                     {orImageMutation.isPending ? (
