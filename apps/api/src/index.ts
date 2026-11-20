@@ -63,6 +63,7 @@ app.set('trust proxy', 1);
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true),
   credentials: true,
+  exposedHeaders: ['x-request-id'],
 }));
 
 app.use(express.json({ limit: '10mb', verify: (req, _res, buffer) => {

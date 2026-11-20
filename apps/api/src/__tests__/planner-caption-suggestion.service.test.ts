@@ -1,3 +1,4 @@
+import { SuggestionProviderError } from '../services/llms/suggestion-runner.js';
 /*
 # Language: pt-BR
 
@@ -46,7 +47,7 @@ describe('BDD: PlannerCaptionSuggestionService', () => {
   });
 
   it('Cenário: falha do primeiro modelo → tenta o fallback', async () => {
-    chat.mockRejectedValueOnce(new Error('timeout'))
+    chat.mockRejectedValueOnce(new SuggestionProviderError('timeout'))
       .mockResolvedValueOnce('{"caption":"Legenda de fallback."}');
     const result = await service().suggest('tenant-1', { context: 'tema' });
     expect(result.caption).toBe('Legenda de fallback.');
@@ -141,5 +142,13 @@ describe('BDD: contexto explícito da chave de IA', () => {
     await new PlannerCaptionSuggestionService({ chat: localChat }, repoFactory).suggest('caption-isolated-tenant', { context: 'tema' });
     expect(findAiKeyByTenant).toHaveBeenCalledWith('caption-isolated-tenant');
     delete process.env.OPENROUTER_API_KEY;
+  });
+});
+
+describe('BDD: indisponibilidade transitória da legenda', () => {
+  it.each(['timeout', '503'])('Cenário: %s persistente → duas chamadas e erro seguro', async kind => {
+    chat.mockReset().mockRejectedValue(new SuggestionProviderError(kind === '503' ? 'http' : 'timeout', kind === '503' ? 503 : undefined));
+    await expect(service().suggest('tenant', { context: 'tema' })).rejects.toMatchObject({ code: 'CAPTION_SUGGESTION_UNAVAILABLE', statusCode: 503 });
+    expect(chat).toHaveBeenCalledTimes(2);
   });
 });

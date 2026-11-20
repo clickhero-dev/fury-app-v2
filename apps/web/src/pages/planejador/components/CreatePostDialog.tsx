@@ -293,6 +293,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const closeDialog = () => { closed.current = true; generation.current++; onClose(); };
   const currentRequest = (id: number) => !closed.current && generation.current === id;
   const suggestMutation = useMutation({
+    retry: false,
     mutationFn: async () => {
       const id = generation.current;
       const context = caption.trim();
@@ -308,6 +309,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
           ...(context ? { context } : {}),
           ...(url ? kind === 'video' ? { videoUrl: url } : { imageUrl: url } : {}),
         });
+        if (typeof data?.data?.caption !== 'string' || !data.data.caption.trim() || data.data.caption.length > 5000) throw new Error('Invalid suggestion');
         return { ...data.data as { caption: string; imageUsed: boolean }, id, requestedImage: Boolean(url && kind !== 'video') };
       } catch (error) {
         if (currentRequest(id)) throw error;

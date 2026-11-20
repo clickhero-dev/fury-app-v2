@@ -37,7 +37,7 @@ api.interceptors.response.use(
     }
 
     const err = error as {
-      response?: { status?: number; data?: { error?: { code?: string } } };
+      response?: { headers?: Record<string, string>; status?: number; data?: { error?: { code?: string } } };
       config?: InternalAxiosRequestConfig & { _retry?: boolean };
     };
 
@@ -52,6 +52,7 @@ api.interceptors.response.use(
         method: originalConfig?.method,
         url: originalConfig?.url,
         status,
+        requestId: err.response?.headers?.['x-request-id'],
         code,
       });
     }

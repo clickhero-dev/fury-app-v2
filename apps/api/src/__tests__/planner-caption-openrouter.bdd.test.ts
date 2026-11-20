@@ -23,3 +23,20 @@ describe('BDD: timeout e sanitização da geração de legenda', () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain('secret prompt');
   });
 });
+
+it.each([401, 429, 503])('Cenário: status upstream %s → conserva apenas metadados seguros', async status => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('secret body', { status })));
+  try {
+    await expect(openrouterService.chat([])).rejects.toMatchObject({ kind: 'http', upstreamStatus: status, code: 'OPENROUTER_CHAT_ERROR' });
+  } finally { vi.unstubAllGlobals(); }
+});
+it('Cenário: falha de rede → diagnóstico sanitizado', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('secret url')));
+  try { await expect(openrouterService.chat([])).rejects.toMatchObject({ kind: 'network', message: 'Falha ao gerar o texto. Tente novamente.' }); }
+  finally { vi.unstubAllGlobals(); }
+});
+it.each([null, { choices: [{ message: { content: 42 } }] }])('Cenário: envelope inválido %j → nenhuma sugestão utilizável', async body => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })));
+  try { expect(await openrouterService.chat([])).toBe(''); }
+  finally { vi.unstubAllGlobals(); }
+});

@@ -197,3 +197,26 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
     expect(next[0].id).toBe('c2');
   });
 });
+
+describe('BDD: sugestão recuperável e concorrente', () => {
+  it('Cenário: edição manual durante geração → ignora sugestão tardia e bloqueia cliques duplicados', async () => {
+    let resolve!: (data: unknown) => void;
+    mockApiPost.mockReturnValue(new Promise(r => { resolve = r; }));
+    render(<Harness initial={[makeCreative({ assetUrl: 'https://cdn.example.com/a.jpg', headline: 'Original', primaryText: 'Texto original' })]} />);
+    const button = await screen.findByRole('button', { name: 'Sugestão IA' });
+    fireEvent.click(button); fireEvent.click(button);
+    fireEvent.change(screen.getByPlaceholderText('Ex: Promoção imperdível este mês!'), { target: { value: 'Manual' } });
+    resolve({ data: { data: { headline: 'Tardia', primaryText: 'Tardio' } } });
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.getByDisplayValue('Manual')).toBeInTheDocument();
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
+  });
+  it.each([null, { headline: 42, primaryText: 'x' }, { headline: 'ok', primaryText: '' }])('Cenário: resposta inválida %j → mantém campos e erro seguro', async data => {
+    mockApiPost.mockResolvedValue({ data: { data } });
+    render(<Harness initial={[makeCreative({ assetUrl: 'https://cdn.example.com/a.jpg', headline: 'Original', primaryText: 'Manual' })]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sugestão IA' }));
+    await screen.findByText(/Não foi possível gerar sugestões/);
+    expect(screen.getByDisplayValue('Original')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Manual')).toBeInTheDocument();
+  });
+});

@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CreatePostDialog } from './CreatePostDialog';
 const post = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api', () => ({ default: { get: vi.fn().mockResolvedValue({ data: { assets: [] } }), post, patch: vi.fn(), defaults: { baseURL: 'https://api.example.com/api' } } }));
+const patch = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/api', () => ({ default: { get: vi.fn().mockResolvedValue({ data: { assets: [] } }), post, patch: patch, defaults: { baseURL: 'https://api.example.com/api' } } }));
 function setup(kind = 'image', caption = '') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(['studio/assets'], { assets: [] });
@@ -115,4 +116,22 @@ it('Cenário: carrossel → geração envia apenas primeira mídia; envio final 
   await waitFor(() => expect(onCreated).toHaveBeenCalled());
   expect(uploads).toBe(2);
   expect(post.mock.calls.find(c => c[0].endsWith('/publish-now'))?.[1].imageUrls).toEqual(['https://media.example.com/1.png', 'https://media.example.com/2.png']);
+});
+
+describe('BDD: legenda com resposta inválida ou indisponível', () => {
+  beforeEach(() => { vi.resetAllMocks(); });
+  it.each(['timeout', '503', 'invalid'])('Cenário: %s → preserva texto e permite salvar manualmente', async kind => {
+    if (kind === 'invalid') post.mockResolvedValueOnce({ data: { data: { caption: 42 } } });
+    else post.mockRejectedValueOnce(new Error(kind));
+    patch.mockResolvedValue({ data: { data: {} } });
+    setup('image', 'Minha legenda');
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar legenda automática' }));
+    await screen.findByRole('alert');
+    expect(screen.getByDisplayValue('Minha legenda')).toBeTruthy();
+    const save = screen.getByRole('button', { name: 'Salvar' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/planner/posts/p1', expect.objectContaining({ caption: 'Minha legenda' })));
+    expect(post).toHaveBeenCalledTimes(1);
+  });
 });
