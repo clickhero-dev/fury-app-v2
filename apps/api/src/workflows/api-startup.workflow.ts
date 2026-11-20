@@ -1,13 +1,31 @@
 import type { WorkflowDefinition } from '../services/stateMachine/stageInterface.js';
 import { RetryDependencyError, WorkflowFailedError } from '../services/stateMachine/workflow.engine.js';
 import { db } from '@fury/db';
-import { sql } from 'drizzle-orm';
+import { probeDatabase } from '../lib/database-probe.js';
 import { waitForRedisReady } from '../lib/redis.js';
 import { runMigrationsAndValidate } from '@fury/db/migrate';
-import { setCheck, setStatus, handleCriticalFailure, getMissingEnvs } from '../lib/api-state.js';
+import { setCheck, setStatus, handleCriticalFailure, getMissingEnvs, databaseCheckErrorDetail, classifyDatabaseError } from '../lib/api-state.js';
+import { captureServerEvent } from '../lib/analytics.js';
 
 export interface ApiStartupContext {
   startedAt: string;
+}
+
+let dbAttempt = 0;
+let dbHadFailure = false;
+
+function runtimeEnvironment(): 'production' | 'homologation' | 'development' | 'test' | 'unknown' {
+  const value = process.env.APP_ENV;
+  return value === 'production' || value === 'homologation' || value === 'development' || value === 'test'
+    ? value : 'unknown';
+}
+
+function captureProbeEvent(event: string, properties: Record<string, unknown>): void {
+  try {
+    captureServerEvent(event, properties);
+  } catch {
+    // Telemetria nunca deve interferir na inicialização nem registrar dados do erro.
+  }
 }
 
 export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
@@ -20,11 +38,41 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
       artifactKey: 'dbStatus',
       retryPolicy: { maxAttempts: 3, backoffMs: 2_000, backoffType: 'fixed' },
       execute: async (_ctx, _artifacts) => {
+        dbAttempt += 1;
         const start = Date.now();
-        await db.execute(sql`SELECT 1`);
-        const latencyMs = Date.now() - start;
-        setCheck('db', true, `latency ${latencyMs}ms`);
-        return { ok: true, latencyMs };
+        try {
+          await probeDatabase(() => db.$client.unsafe('SELECT 1'));
+          const latencyMs = Date.now() - start;
+          setCheck('db', true, `latency ${latencyMs}ms`);
+          if (dbHadFailure) {
+            captureProbeEvent('db_health_probe_recovered', {
+              service: 'api',
+              environment: runtimeEnvironment(),
+              category: 'healthy',
+              attempt: dbAttempt,
+              latency_ms: latencyMs,
+            });
+            dbHadFailure = false;
+          }
+          return { ok: true, latencyMs };
+        } catch (error) {
+          const category = classifyDatabaseError(error);
+          dbHadFailure = true;
+          setCheck('db', false, databaseCheckErrorDetail(error), category);
+          captureProbeEvent('db_health_probe_failed', {
+            service: 'api',
+            environment: runtimeEnvironment(),
+            category,
+            attempt: dbAttempt,
+            latency_ms: Date.now() - start,
+          });
+          // O alvo atual é ES2020, cujo tipo de Error ainda não aceita `cause`
+          // no construtor. A causa é preservada para diagnóstico interno sem
+          // deixar a mensagem crua chegar ao motor de workflow.
+          const sanitizedError = new Error(databaseCheckErrorDetail(error));
+          (sanitizedError as Error & { cause?: unknown }).cause = error;
+          throw sanitizedError;
+        }
       },
     },
     {
@@ -37,10 +85,10 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
           await runMigrationsAndValidate();
           setCheck('migrate', true, 'all 26 tables exist');
           return { ok: true };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+        } catch {
+          const msg = 'migration validation failed';
           setCheck('migrate', false, msg);
-          handleCriticalFailure(`Migration validation failed: ${msg}`);
+          handleCriticalFailure(msg);
           throw new WorkflowFailedError('api-startup-global', 'migrate', msg);
         }
       },
@@ -80,7 +128,6 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
       // Mantém degraded — o loop de log/restart já foi iniciado no stage
       return { planId: undefined };
     }
-    setStatus('healthy');
     return { planId: undefined };
   },
 };

@@ -11,6 +11,7 @@ const { campaignsService } = await import('./services/campaigns/campaigns.servic
 campaignsService.updateChatCampaign = async args => ({ id: args.campaignId, status: 'PAUSED' });
 campaignsService.createChatAd = async () => ({id:'12345',status:'PAUSED'});
 campaignsService.updateChatAd = async args => ({ id: args.adId, status: 'PAUSED' });
-const { default: app } = await import('./index.js');
+// This isolated server starts after the gate provisions its dependencies.
+const { default: app } = await import('./__tests__/ready-app.js');
 const port = Number(process.env.PORT ?? 3199);
 app.listen(port, '127.0.0.1', () => console.log(`Chat E2E API listening on ${port}`));
