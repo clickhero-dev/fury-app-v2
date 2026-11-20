@@ -358,6 +358,24 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/enhance-prompt', expect.anything());
   });
 
+  it('Dada análise inválida, quando tentar novamente, então preserva os dados para correção sem gerar automaticamente', async () => {
+    const message = 'Não foi possível interpretar o modelo. Revise o texto ou escolha outro modelo e tente novamente. Sua cota foi devolvida.';
+    mockApiPost.mockRejectedValue({ response: { data: { error: { code: 'TEMPLATE_ANALYSIS_INVALID', message } } } });
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(await screen.findByRole('button', { name: /usar imagem: modelo/i }));
+    const text = 'Empresa de exemplo em Joinville';
+    await user.type(screen.getByLabelText(/o que muda no modelo/i), text);
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    expect(screen.getByLabelText(/o que muda no modelo/i)).toHaveValue(text);
+    expect(screen.getByText('Modelo escolhido')).toBeInTheDocument();
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
+  });
+
   it('com modelo escolhido na lateral: muda o texto da caixa, esconde o seletor de IA e gera sem aprimorar', async () => {
     renderWithProviders();
     const user = userEvent.setup();
