@@ -1,3 +1,4 @@
+import './chat-websocket-test-mock';
 // @vitest-environment jsdom
 /* Funcionalidade: compositor multimídia conectado
  * Cenário: selecionar anexo — Dado um rascunho sem conversa, Quando seleciono, Então crio uma conversa e envio multipart sem enviar mensagem.

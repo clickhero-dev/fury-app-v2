@@ -1,6 +1,62 @@
 # Serviço de chat (em desenvolvimento)
 
-Crie um ambiente Python 3.12 e instale `requirements.txt` (ou `requirements-dev.txt` para executar testes). Configure no ambiente ou em `apps/chat/.env` as variáveis `DATABASE_URL`, `CHAT_DELEGATION_SECRET`, `ADY_API_URL`, `OPENROUTER_API_KEY` e `MODEL_CHATBOT`. `POSTHOG_API_KEY` e `POSTHOG_HOST` são opcionais para telemetria sanitizada. O segredo de delegação deve ser o mesmo da API e ter pelo menos 32 caracteres. Inicie em `apps/chat` com `uvicorn app:app --port 8000`; o serviço deve permanecer acessível apenas pela API principal.
+Crie um ambiente Python 3.12 e instale `requirements.txt` (ou `requirements-dev.txt` para executar testes). Configure no ambiente ou em `apps/chat/.env` as variáveis `DATABASE_URL`, `CHAT_DELEGATION_SECRET`, `ADY_API_URL`, `OPENROUTER_API_KEY` e `MODEL_CHATBOT`. `POSTHOG_API_KEY` e `POSTHOG_HOST` são opcionais para telemetria sanitizada. O segredo de delegação deve ser o mesmo da API e ter pelo menos 32 caracteres. Inicie em `apps/chat` com `uvicorn app:app --port 8000`; somente `/ws` pode ser exposto ao navegador, conforme as condições abaixo.
+
+### WebSocket direto: implantação e contrato
+
+* Aplique a migration `0085_chat_websocket_tickets` com o runner antes do rollout.
+  Todas as réplicas precisam compartilhar o mesmo banco.
+* Configure `CHAT_WS_ALLOWED_ORIGINS` no processo/container do chat como lista
+  separada por vírgulas de origins exatas, por exemplo
+  `https://app.example.com,https://admin.example.com`. Origin ausente, `null`,
+  não listado ou configuração vazia é recusado. Para desenvolvimento local,
+  inclua explicitamente a origin HTTP do Vite. O compose repassa essa variável
+  ao container; quando vazia, o WebSocket permanece fechado.
+* Publique exclusivamente o caminho `/ws` no proxy de borda, com upgrade
+  WebSocket, por HTTPS/WSS com TLS válido; mantenha `/websocket-ticket`,
+  `/conversations`, `/approvals` e demais rotas na rede interna. A API autenticada
+  emite o ticket pelo POST interno `/websocket-ticket`, com delegação Bearer
+  habitual. Não passe credenciais em URL, logs ou query strings. Proteja emissão
+  de tickets e upgrades com rate limiting e limites de conexões na borda.
+* Defina `VITE_CHAT_WS_URL=wss://host-publico/ws` no **build** do frontend;
+  alterar a variável somente no runtime do container estático não atualiza o bundle.
+  Configure também CSP `connect-src` e o proxy para o host WSS.
+* O container limita frames a 65536 bytes com `--ws-max-size 65536` no Uvicorn
+  (backend `websockets`); aplique limite equivalente no proxy e em qualquer
+  comando alternativo antes de aceitar tráfego. A verificação após a leitura
+  não substitui esse limite de transporte. O servidor usa ping/pong de protocolo;
+  mantenha heartbeat habilitado e configure os timeouts ociosos do balanceador
+  acima do intervalo e timeout de ping do servidor (padrão Uvicorn: 20 s cada).
+  Enquanto espera eventos, o app também emite `{event:"heartbeat",data:{}}`
+  a cada 15 s sem cancelar a leitura em andamento. Em caso de outro
+  servidor/proxy, configure ping/pong equivalente e monitore.
+* POST retorna `{ticket, expiresIn}` com `Cache-Control: no-store`. O ticket
+  aleatório dura até 30 s, nunca mais que a delegação, e é consumido atomicamente
+  uma vez no PostgreSQL; conexões precisam de ticket novo. A tabela guarda
+  uma asserção assinada com audience exclusivo `ady-ws-ticket`, inutilizável como
+  Bearer nas ferramentas, vinculada ao hash do ticket; uma delegação é recriada
+  somente no resgate, sem estender a validade original nem delegar intenção humana.
+  A emissão exige delegação válida para `ady-chat` **e** `ady-api`; não amplia
+  credenciais com audience restrita.
+  Restrinja acesso ao banco; tickets vencidos são removidos na próxima emissão.
+* Primeiro frame JSON: `{ticket, path, body}`. Paths permitidos são
+  `/conversations/{id}/messages`, `/conversations/{id}/retry` (opcional
+  `?run_id={id}`), e `/conversations/{id}/clarifications/{id}/answer`.
+  `body` é o mesmo dos endpoints HTTP, incluindo `clientKey`,
+  `responseCapabilities`, `attachmentIds`, `automatic` e `choiceIndex`.
+  No WebSocket, `clientKey` UUID é obrigatório para todas essas operações;
+  as rotas HTTP legadas continuam aceitando-o como opcional.
+  O servidor autentica, valida, verifica tenant e usuário e admite o run antes
+  de enviar `{event:"ack",data:{}}`; depois transmite `{event,data}` usando
+  os mesmos eventos do SSE. Após todos os eventos, inclusive `title` posterior
+  a `done`, envia `{event:"end",data:{}}`; `done` não encerra a conexão.
+  Fechamento antes de `end` significa stream incompleta. Falhas anteriores ao ack usam `event:"error"` e
+  `data.status`/`data.code` quando disponível. Tickets inválidos fecham com 1008.
+* O socket não garante entrega nem replay de tokens. Uma desconexão não autoriza
+  repetir automaticamente efeitos: consulte o histórico/run e use a recuperação
+  existente com o mesmo `clientKey` quando aplicável. O produtor é destacado e
+  pode terminar após a desconexão; retries continuam somente leitura com fencing
+  e limites existentes.
 
 Execute os testes com `PYTHONPATH=apps/chat pytest apps/chat/tests`. O gate completo
 usa PostgreSQL **descartável** em loopback, banco com sufixo `_isolated`, nunca

@@ -1,3 +1,4 @@
+import './chat-websocket-test-mock';
 // @vitest-environment jsdom
 /*
 Funcionalidade: conversar com a assistente
@@ -632,7 +633,8 @@ describe('Assistente', () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify([])))
       .mockResolvedValueOnce(new Response(JSON.stringify({id:'1',title:'Nova conversa'})))
-      .mockResolvedValueOnce(new Response(stream)));
+      .mockResolvedValueOnce(new Response(stream))
+      .mockResolvedValueOnce(new Response(JSON.stringify({messages:[], approvals:[], response_runs:[]}))));
     render(<ChatPage />);
     fireEvent.click(await screen.findByRole('button', {name: /nova conversa/i}));
     await waitFor(() => expect(screen.getByLabelText('Mensagem').hasAttribute('disabled')).toBe(false));

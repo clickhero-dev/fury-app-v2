@@ -42,6 +42,11 @@ def test_configuracao_do_container_inclui_chaves_dos_tres_provedores():
     assert any(line.startswith('anthropic') for line in requirements.splitlines())
 
 
+def test_compose_repassa_origins_do_websocket():
+    compose = (Path(__file__).resolve().parents[1] / '../../infra/docker-compose.yml').resolve().read_text()
+    assert 'CHAT_WS_ALLOWED_ORIGINS: ${CHAT_WS_ALLOWED_ORIGINS:-}' in compose
+
+
 @pytest.mark.skipif(shutil.which('docker') is None, reason='Docker indisponível')
 def test_perfil_chat_tem_rede_e_configuracao_local():
     root = Path(__file__).resolve().parents[3]

@@ -11,7 +11,7 @@ from uuid import UUID
 import asyncpg
 import jwt
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -42,8 +42,10 @@ from checkpoints import CheckpointRepository, redact_checkpoint_data
 from checkpoint_tools import ToolGuard, ToolFailure
 from assistant_metrics import report_assistant_event
 from guided_setup import GuidedSetup, GuidedSetupTools
+from websocket_transport import issue_ticket, consume_ticket, decode_request, decode_event, TICKET_TTL_SECONDS
 
 load_dotenv()
+WS_HEARTBEAT_SECONDS = 15
 
 
 def identity(authorization: str | None = Header(default=None)):
@@ -544,6 +546,104 @@ def create_app():
                 heartbeat_task.cancel()
                 await asyncio.gather(heartbeat_task, return_exceptions=True)
         return StreamingResponse(start_stream(app.state.tasks, produce), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+    @app.post('/websocket-ticket')
+    async def websocket_ticket(request: Request, user=Depends(identity)):
+        audience = user.get('aud')
+        if not (audience == 'ady-api' or isinstance(audience, list) and 'ady-api' in audience):
+            raise HTTPException(401, 'Credencial inválida')
+        ticket = await issue_ticket(await pool(), user, os.environ['CHAT_DELEGATION_SECRET'])
+        return JSONResponse({'ticket': ticket, 'expiresIn': TICKET_TTL_SECONDS},
+                            headers={'Cache-Control': 'no-store'})
+
+    @app.websocket('/ws')
+    async def websocket_chat(websocket: WebSocket):
+        allowed_origins = {value.strip() for value in os.environ.get('CHAT_WS_ALLOWED_ORIGINS', '').split(',') if value.strip()}
+        if not websocket.headers.get('origin') or websocket.headers['origin'] not in allowed_origins:
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        stream = None
+        acknowledged = False
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+            if len(raw.encode('utf-8')) > 65536:
+                await websocket.close(code=1009)
+                return
+            frame = json.loads(raw)
+            if not isinstance(frame, dict):
+                raise ValueError('invalid frame')
+            delegation = await consume_ticket(await pool(), frame.get('ticket'), os.environ['CHAT_DELEGATION_SECRET'])
+            if not delegation:
+                await websocket.close(code=1008)
+                return
+            try:
+                user = identity('Bearer ' + delegation)
+            except HTTPException:
+                await websocket.close(code=1008)
+                return
+            conversation_id, kwargs = decode_request(
+                frame.get('path'), frame.get('body'), MessageInput, RetryInput, ClarificationInput,
+            )
+            # Generation uses this delegation for the same downstream tool authorization as HTTP.
+            request = Request({'type': 'http', 'method': 'POST', 'path': '/',
+                               'headers': [(b'authorization', ('Bearer ' + delegation).encode())]})
+            response = await generate_response(conversation_id, request, user, **kwargs)
+            stream = response.body_iterator
+            await websocket.send_json({'event': 'ack', 'data': {}})
+            acknowledged = True
+            terminal = False
+            pending = None
+            try:
+                while True:
+                    if pending is None:
+                        pending = asyncio.create_task(anext(stream))
+                    done, _ = await asyncio.wait({pending}, timeout=WS_HEARTBEAT_SECONDS)
+                    if not done:
+                        await websocket.send_json({'event': 'heartbeat', 'data': {}})
+                        continue
+                    try:
+                        chunk = pending.result()
+                    except StopAsyncIteration:
+                        break
+                    finally:
+                        pending = None
+                    event = decode_event(chunk)
+                    terminal = terminal or event['event'] in ('done', 'error')
+                    await websocket.send_json(event)
+            finally:
+                if pending is not None:
+                    pending.cancel()
+                    await asyncio.gather(pending, return_exceptions=True)
+            if terminal:
+                await websocket.send_json({'event': 'end', 'data': {}})
+                await websocket.close()
+            else:
+                await websocket.close(code=1011)
+        except WebSocketDisconnect:
+            pass
+        except (ValueError, TypeError, json.JSONDecodeError):
+            if not acknowledged:
+                await websocket.send_json({'event': 'error', 'data': {'message': 'Dados inválidos.', 'status': 400}})
+            await websocket.close(code=1011 if acknowledged else 1008)
+        except (HTTPException, ConversationError) as error:
+            if not acknowledged:
+                await websocket.send_json({'event': 'error', 'data': {'message': error.detail, 'status': error.status_code,
+                    **({'code': error.code} if isinstance(error, ConversationError) and error.code else {})}})
+            await websocket.close(code=1011 if acknowledged else 1000)
+        except asyncio.TimeoutError:
+            await websocket.close(code=1008)
+        except Exception:
+            logging.getLogger('ady.chat').warning('websocket_transport_failure')
+            try:
+                if not acknowledged:
+                    await websocket.send_json({'event': 'error', 'data': {'message': 'Não foi possível concluir a resposta.', 'status': 500}})
+                await websocket.close(code=1011)
+            except Exception:
+                pass
+        finally:
+            if stream is not None and hasattr(stream, 'aclose'):
+                await stream.aclose()
 
     @app.post('/conversations/{conversation_id}/clarifications/{clarification_id}/answer')
     async def answer_clarification(conversation_id: UUID, clarification_id: UUID, body: ClarificationInput, request: Request, user=Depends(identity)):

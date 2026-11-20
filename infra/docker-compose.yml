@@ -9,6 +9,7 @@ services:
       DATABASE_URL: ${CHAT_DATABASE_URL:-postgresql://fury:fury_local@postgres:5432/fury_dev}
       ADY_API_URL: ${ADY_API_URL:-http://host.docker.internal:3000}
       CHAT_DELEGATION_SECRET: ${CHAT_DELEGATION_SECRET:-}
+      CHAT_WS_ALLOWED_ORIGINS: ${CHAT_WS_ALLOWED_ORIGINS:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}

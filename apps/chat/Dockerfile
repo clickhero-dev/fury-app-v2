@@ -7,5 +7,6 @@ COPY action_outcomes.py approval_repository.py video_availability.py tool_budget
 COPY assistant_policy.py checkpoints.py checkpoint_tools.py provider_policy.py guided_setup.py multi_provider_core.py stream_lifecycle.py ./
 COPY approval_actions.py assistant_metrics.py editorial_evaluation.py turn_recovery.py ./
 COPY chat_history_sql.py ./
+COPY websocket_transport.py ./
 COPY tokenizer ./tokenizer
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "65536"]
