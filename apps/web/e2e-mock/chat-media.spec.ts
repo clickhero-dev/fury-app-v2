@@ -164,8 +164,13 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByRole('img', { name: 'referencia.png', exact: true })).toBeVisible();
     await expect.poll(() => page.getByRole('img', { name: 'referencia.png', exact: true }).evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Abrir referencia.png', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Visualização de referencia.png' })).toBeVisible();
+    const viewer = page.getByRole('dialog', { name: 'Visualização de referencia.png' });
+    const image = viewer.getByRole('img', { name: 'referencia.png', exact: true });
+    await expect(viewer).toBeVisible();
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Fechar visualização' }).click();
+    await expect(viewer).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath(`media-${theme}-history.png`), fullPage: true });
     expect(errors).toEqual([]);
   });

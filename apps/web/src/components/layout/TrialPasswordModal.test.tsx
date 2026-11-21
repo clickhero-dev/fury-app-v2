@@ -12,10 +12,13 @@ describe('TrialPasswordModal', () => {
   it('mostra os requisitos e impede o envio de senha fraca', () => {
     render(<TrialPasswordModal onComplete={vi.fn()} />);
     expect(screen.getByText(/8 a 255 caracteres/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Nova senha'), { target: { value: 'abcdefg' } });
-    fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: 'abcdefg' } });
+    fireEvent.change(screen.getByLabelText('Nova senha'), { target: { value: 'abcdefgh' } });
+    fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: 'abcdefgh' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar senha' }));
     expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText(/letra maiúscula/i)).toBeInTheDocument();
+    expect(screen.getByText(/número/i)).toBeInTheDocument();
+    expect(screen.getByText(/caractere especial/i)).toBeInTheDocument();
   });
 
   it('informa confirmação diferente e salva somente quando as senhas são válidas e iguais', async () => {
