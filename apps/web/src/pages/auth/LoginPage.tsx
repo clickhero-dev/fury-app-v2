@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { consumeLoginDestination } from './initialDestination';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
-import { useDemoLogin, useLogin } from '@/hooks/useLogin';
+import { useLogin } from '@/hooks/useLogin';
 import { AdySymbol } from '@/components/AdySymbol';
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
@@ -36,11 +37,14 @@ function getFriendlyError(err: unknown): string {
 export function LoginPage() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
-  const demoLoginMutation = useDemoLogin();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const entryHandled = useRef(false);
 
   useEffect(() => {
+    // O StrictMode repete effects de montagem; o destino de retorno é de uso único.
+    if (entryHandled.current) return;
+    entryHandled.current = true;
     // Handle social login redirect
     const params = new URLSearchParams(window.location.search);
     const socialData = params.get('social_login');
@@ -59,7 +63,7 @@ export function LoginPage() {
           tenantId: data.user.tenantId,
           policy: data.policy ?? null,
         }));
-        navigate('/inicio', { replace: true });
+        navigate(consumeLoginDestination(), { replace: true });
         return;
       } catch {
         setError('Erro ao fazer login com Google');
@@ -73,12 +77,17 @@ export function LoginPage() {
       return;
     }
 
+    if (localStorage.getItem('token') && !params.has('fb_handoff')) {
+      navigate(consumeLoginDestination(), { replace: true });
+      return;
+    }
+
     // Retorno do login com Facebook: troca o handoff id pela sessão (sem token na URL)
     consumeFacebookHandoff(window.location.search)
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate('/inicio', { replace: true });
+        navigate(consumeLoginDestination(), { replace: true });
       })
       .catch((err) => {
         setError(errorMessage(err, 'Não foi possível concluir o login com Facebook'));
@@ -99,19 +108,9 @@ export function LoginPage() {
     try {
       setError('');
       await loginMutation.mutateAsync({ email: data.email, password: data.password });
-      navigate('/inicio', { replace: true });
+      navigate(consumeLoginDestination(), { replace: true });
     } catch (err) {
       setError(getFriendlyError(err));
-    }
-  };
-
-  const enterDemo = async () => {
-    try {
-      setError('');
-      await demoLoginMutation.mutateAsync();
-      navigate('/dashboard');
-    } catch (err) {
-      setError(errorMessage(err, 'Não foi possível abrir a conta demo'));
     }
   };
 
@@ -226,14 +225,7 @@ export function LoginPage() {
 
           <FacebookLoginButton />
 
-          <button
-            type="button"
-            onClick={enterDemo}
-            disabled={demoLoginMutation.isPending || loginMutation.isPending}
-            className="w-full rounded-xl border border-[#17708A]/40 bg-[#17708A]/5 py-3 text-sm font-semibold text-[#17708A] transition-colors hover:bg-[#17708A]/10 disabled:opacity-60 dark:text-[#2A9BC0]"
-          >
-            {demoLoginMutation.isPending ? 'Abrindo demonstração...' : 'Conhecer o ady com uma conta demo'}
-          </button>
+
 
           {error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">

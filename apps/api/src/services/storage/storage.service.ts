@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
-const r2 = new S3Client({
+export const r2 = new S3Client({
   region: 'auto',
   endpoint: process.env.R2_ENDPOINT,
   credentials: {
@@ -10,7 +10,7 @@ const r2 = new S3Client({
   },
 });
 
-const BUCKET = 'fury-studio-assets';
+export const BUCKET = 'fury-studio-assets';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL;
 
 export async function uploadAsset(buffer: Buffer, fileName: string, mimeType = 'image/png'): Promise<string> {

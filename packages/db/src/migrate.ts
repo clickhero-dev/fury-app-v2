@@ -186,6 +186,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0072_chat_concurrent_runs' },
   { tag: '0073_chat_plan_run_fencing' },
   { tag: '0074_chat_response_messages' },
+  { tag: '0080_chat_turn_checkpoints' },
+  { tag: '0081_chat_turn_recovery' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
@@ -200,6 +202,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0077_ady_partner_plans' },
   { tag: '0078_partner_account_members' },
   { tag: '0079_automation_not_blockable' },
+  { tag: '0082_chat_batch_approvals' },
+  { tag: '0083_chat_media_publish' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -366,6 +370,34 @@ export async function runMigrationsAndValidate(): Promise<void> {
   const validation = await validateRequiredTables();
   if (!validation.ok) {
     throw new Error(`Migration validation failed: missing tables ${validation.missing.join(', ')}`);
+  }
+  await validateRatingConstraint();
+}
+
+/** The table alone is insufficient for ON CONFLICT: verify its actual arbiter.
+ * Read-only: schema drift must be investigated before any corrective DDL. */
+export async function validateRatingConstraint(): Promise<void> {
+  const client = postgres(connectionString, { max: 1 });
+  try {
+    const [result] = await client<{ valid: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_index i ON i.indexrelid = c.conindid
+        WHERE c.conrelid = to_regclass('public.creative_asset_ratings')
+          AND c.contype = 'u' AND NOT c.condeferrable
+          AND i.indisvalid AND i.indisready AND i.indisunique
+          AND ARRAY(
+            SELECT a.attname FROM unnest(c.conkey) AS k(attnum)
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+            ORDER BY a.attname
+          ) = ARRAY['creative_asset_id', 'tenant_id', 'user_id']::name[]
+      ) AS valid
+    `;
+    if (!result?.valid) {
+      throw new Error('Migration validation failed: creative_asset_ratings: missing valid immediate unique constraint');
+    }
+  } finally {
+    await client.end();
   }
 }
 

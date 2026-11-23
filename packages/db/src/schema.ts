@@ -664,7 +664,7 @@ export const brandKits = pgTable(
 );
 
 // Biblioteca de imagens do Estúdio, cada uma com tipo
-export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe', 'empresa']);
 
 export const brandKitPhotos = pgTable(
   'brand_kit_photos',

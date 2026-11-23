@@ -3,9 +3,9 @@ import {
   CalendarDays,
   CreditCard,
   LayoutGrid,
+  House,
   LogOut,
   Megaphone,
-  MessageCircle,
   Palette,
   Plug,
   Settings,
@@ -46,6 +46,7 @@ const sections: { label: string; items: NavItem[] }[] = [
   {
     label: 'Gestão',
     items: [
+      { to: '/inicio', label: 'Início', icon: House },
       { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
       { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
       { to: '/leads', label: 'Clientes', icon: Users },
@@ -55,7 +56,6 @@ const sections: { label: string; items: NavItem[] }[] = [
     label: 'Criação',
     items: [
       { to: '/estudio', label: 'Estúdio', icon: Palette },
-      { to: '/chat', label: 'Assistente', icon: MessageCircle },
       { to: '/calendario', label: 'Planejamento', icon: CalendarDays, alsoActive: ['/planejador'] },
     ],
   },

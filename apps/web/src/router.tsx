@@ -69,7 +69,7 @@ import { FaqPublicPage } from './pages/help/FaqPublicPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/dashboard" replace />,
   },
   {
     path: '/login',
@@ -96,7 +96,6 @@ export const router = createBrowserRouter([
     element: <ResetPasswordSuccessPage />,
   },
   { path: '/trial/acesso', element: <TrialAccessPage /> },
-  { path: '/inicio', element: <InitialDestinationPage /> },
   {
     path: '/onboarding/conectar-meta',
     element: <ConectarMetaPage />,
@@ -130,6 +129,7 @@ export const router = createBrowserRouter([
       </CampaignWizardProvider>
     ),
     children: [
+      { path: '/inicio', element: <InitialDestinationPage /> },
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },

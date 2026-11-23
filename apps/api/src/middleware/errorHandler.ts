@@ -9,7 +9,8 @@ class AppError extends Error {
     public statusCode: number,
     public code: string,
     message: string,
-    public details?: Record<string, unknown>
+    public details?: Record<string, unknown>,
+    public diagnostics?: { requestId: string; reason: string; environment: string; providerStatus?: number }
   ) {
     super(message);
     Error.captureStackTrace(this, this.constructor);
@@ -83,6 +84,7 @@ export function errorHandler(
       path: req.originalUrl,
       statusCode,
       code,
+      ...(err instanceof AppError ? err.diagnostics : {}),
     });
   }
 

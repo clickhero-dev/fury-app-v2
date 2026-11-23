@@ -13,6 +13,10 @@ export function TrialPasswordModal({ onComplete }: { onComplete: () => void }) {
   const mismatch = confirmation.length > 0 && password !== confirmation;
   const requirements = [
     { label: `${PASSWORD_RULES.minLength} a ${PASSWORD_RULES.maxLength} caracteres`, met: password.length >= PASSWORD_RULES.minLength && password.length <= PASSWORD_RULES.maxLength },
+    { label: 'Uma letra maiúscula', met: /[A-Z]/.test(password) },
+    { label: 'Uma letra minúscula', met: /[a-z]/.test(password) },
+    { label: 'Um número', met: /\d/.test(password) },
+    { label: 'Um caractere especial (ex.: !, @, #)', met: /[^a-zA-Z0-9]/.test(password) },
   ];
 
   async function save() {

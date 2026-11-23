@@ -17,7 +17,6 @@ import { AuthRepository } from '../../repository/auth.repository.js';
 import { slugify } from '../../lib/slug.js';
 import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
-const REFRESH_TOKEN_TTL = SESSION_TTL_SECONDS;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export const DEMO_TENANT_SLUG = 'fashion-demo';
@@ -68,11 +67,11 @@ function generateSecureOtp(): string {
   return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 }
 
-async function storeRefreshTokenHash(userId: string, refreshToken: string, ttl = REFRESH_TOKEN_TTL): Promise<void> {
+async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   const key = `refresh:${userId}`;
-  await redis.setex(key, ttl, hash);
+  await redis.setex(key, SESSION_TTL_SECONDS, hash);
 }
 
 async function verifyRefreshTokenHash(userId: string, refreshToken: string): Promise<boolean> {
@@ -203,31 +202,22 @@ export class AuthService {
   }
 
   async refresh(data: { refreshToken: string }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
-    const t0 = Date.now();
     const payload = this.deps.jwt.verifyRefreshToken(data.refreshToken);
-    const t1 = Date.now();
     const isValid = await verifyRefreshTokenHash(payload.userId, data.refreshToken);
-    const t2 = Date.now();
     if (!isValid) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sessão expirada. Entre novamente.');
 
     const user = await this.repo('').findUserById(payload.userId);
-    const t3 = Date.now();
     if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
 
-    const remainingTtl = payload.sessionExpiresAt === undefined ? undefined : payload.sessionExpiresAt - Math.floor(Date.now() / 1000);
-    if (remainingTtl !== undefined && remainingTtl <= 0) throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
-    await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
       role: user.role,
-    }, payload.sessionExpiresAt);
-    const refreshToken = this.deps.jwt.generateRefreshToken(user.id, payload.sessionExpiresAt);
-    await storeRefreshTokenHash(user.id, refreshToken, remainingTtl);
-    const t4 = Date.now();
-    console.log(`[refresh] jwt=${t1 - t0}ms redis.get=${t2 - t1}ms pg.user=${t3 - t2}ms redis.setex=${t4 - t3}ms total=${t4 - t0}ms`);
-
+    }, payload.exp);
+    // O refresh token é estável até o vencimento absoluto da sessão. Isso
+    // permite retries e requisições concorrentes sem perder a sessão.
+    const refreshToken = data.refreshToken;
     return { tokens: { accessToken, refreshToken } };
   }
 

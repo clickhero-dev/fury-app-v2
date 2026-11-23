@@ -95,6 +95,7 @@ describe('Sidebar — navegação', () => {
   it('renderiza os itens principais de cada seção com seus destinos', () => {
     renderSidebar();
 
+    expect(screen.getByRole('link', { name: 'Início', exact: true })).toHaveAttribute('href', '/inicio');
     expect(screen.getByRole('link', { name: /painel/i })).toHaveAttribute('href', '/dashboard');
     expect(screen.getByRole('link', { name: /campanhas/i })).toHaveAttribute('href', '/campanhas');
     expect(screen.getByRole('link', { name: /clientes/i })).toHaveAttribute('href', '/leads');
@@ -234,21 +235,18 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
   });
 
-  /*
-  Funcionalidade: a sidebar respeita RBAC sem esconder rotas acessíveis
-  Cenário: Assistente mantém a seção Criação mesmo com os outros itens bloqueados
-    Dado que Estúdio, Planejamento e Integrações estão bloqueados
-    Quando a sidebar é renderizada
-    Então Assistente permanece acessível e a seção Criação continua visível
-  */
-  it('mantém Assistente na seção Criação quando os demais itens estão bloqueados', () => {
+  it('oculta o Assistente mantendo os demais itens de Criação', () => {
+    renderSidebar();
+    expect(screen.queryByRole('link', { name: /assistente/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /estúdio/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /planejamento/i })).toBeInTheDocument();
+  });
+
+  it('oculta a seção Criação quando os itens disponíveis estão bloqueados', () => {
     blockedViews = ['studio', 'calendar', 'settings.integrations'];
     renderSidebar('/configuracoes');
-
-    expect(screen.queryByRole('link', { name: /estúdio/i })).toBeNull();
-    expect(screen.getByRole('link', { name: /assistente/i })).toHaveAttribute('href', '/chat');
-    expect(screen.getByText('Criação')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /planejamento/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /assistente/i })).toBeNull();
+    expect(screen.queryByText('Criação')).toBeNull();
     expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
     expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
   });
