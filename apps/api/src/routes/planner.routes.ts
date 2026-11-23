@@ -30,6 +30,8 @@ router.get('/prerequisites', tenantMiddleware, planner.handleGetPrerequisites);
 router.post('/plans/confirm', tenantMiddleware, planner.handleConfirm);
 router.post('/plans/revalidate', tenantMiddleware, planner.handleRevalidate);
 router.patch('/posts/:postId', tenantMiddleware, planner.handleEditPost);
+router.get('/posts/:postId/chat-snapshot', tenantMiddleware, planner.handleChatSnapshot);
+router.patch('/posts/:postId/chat-cancel', tenantMiddleware, planner.handleChatCancel);
 router.post('/posts/suggest-caption', tenantMiddleware, planner.handleSuggestCaption);
 
 // Calendário Editorial
@@ -41,6 +43,7 @@ router.post('/posts/upload', tenantMiddleware, mediaUpload.single('file'), plann
 router.patch('/posts/:postId/move', tenantMiddleware, planner.handleMovePost);
 router.post('/posts/publish-due', tenantMiddleware, planner.handlePublishDue);
 router.post('/posts/publish-now', tenantMiddleware, idempotencyMiddleware, planner.handlePublishNow);
+router.post('/chat-media/:approvalId/publish', tenantMiddleware, planner.handleChatMediaPublish);
 
 // Cron: publish-due sem auth (usa API key)
 router.post('/cron/publish-due', planner.handlePublishDue);

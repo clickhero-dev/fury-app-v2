@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import api from '../lib/api';
+import api from '@/lib/api';
 import type { BrandKit, BrandKitApiResponse, SaveBrandKitPayload } from '../types/brandKit';
 
 /**
@@ -20,21 +20,33 @@ import type { BrandKit, BrandKitApiResponse, SaveBrandKitPayload } from '../type
 export function useBrandKit() {
   const query = useQuery({
     queryKey: ['brand-kit'],
-    queryFn: async (): Promise<BrandKit | null> => {
-      try {
-        const res = await api.get<BrandKitApiResponse<BrandKit>>('/brand-kit');
-        return res.data.data;
-      } catch (err: any) {
-        // 404 significa que o brand kit ainda não foi criado — não é um erro
-        if (err?.response?.status === 404) return null;
-        throw err;
-      }
-    },
+    queryFn: fetchBrandKit,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
 
-  return { brandKit: query.data ?? null, isLoading: query.isLoading, isError: query.isError };
+  return {
+    brandKit: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    isFetched: query.isFetched,
+    refetch: query.refetch,
+  };
+}
+
+export async function fetchBrandKit(): Promise<BrandKit | null> {
+  try {
+    const res = await api.get<BrandKitApiResponse<BrandKit>>('/brand-kit');
+    return res.data.data;
+  } catch (err: unknown) {
+    // 404 significa que o brand kit ainda não foi criado — não é um erro
+    if (isBrandKitNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+export function isBrandKitNotFoundError(error: unknown): boolean {
+  return (error as { response?: { status?: number } } | null)?.response?.status === 404;
 }
 
 /**

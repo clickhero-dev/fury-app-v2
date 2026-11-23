@@ -34,7 +34,7 @@ function forceLogout() {
   clearSession();
 }
 
-/** Renova os tokens uma única vez por aba e persiste a rotação. */
+/** Renova o acesso uma única vez por aba, sem estender o prazo da sessão. */
 export async function refreshSession(): Promise<string> {
   if (refreshPromise) return refreshPromise;
 
@@ -45,18 +45,26 @@ export async function refreshSession(): Promise<string> {
   }
 
   refreshPromise = axios
-    .post<RefreshResponse>(`${API_BASE_URL}/auth/refresh`, { refreshToken })
+    .post<RefreshResponse>(`${API_BASE_URL}/auth/refresh`, { refreshToken }, { timeout: 15_000 })
     .then((response) => {
       const tokens = response.data.data.tokens;
       if (!tokens?.accessToken || !tokens?.refreshToken) {
         throw new Error('Invalid refresh response');
+      }
+      if (localStorage.getItem('refreshToken') !== refreshToken) {
+        throw new Error('Session changed during refresh');
       }
       persistTokens(tokens);
       channel?.postMessage({ type: 'tokens-refreshed', tokens });
       return tokens.accessToken;
     })
     .catch((error) => {
-      forceLogout();
+      const code = error?.response?.data?.error?.code;
+      if (
+        error?.response?.status === 401 &&
+        ['INVALID_REFRESH_TOKEN', 'REFRESH_TOKEN_EXPIRED', 'USER_NOT_FOUND'].includes(code) &&
+        localStorage.getItem('refreshToken') === refreshToken
+      ) forceLogout();
       throw error;
     })
     .finally(() => {
@@ -77,8 +85,8 @@ async function refreshWithCrossTabLock() {
       return;
     }
 
-    // Fallback para navegadores sem Web Locks. A lease no localStorage limita
-    // a rotação a uma aba e o BroadcastChannel/storage propaga os tokens.
+    // A lease reduz chamadas duplicadas; mesmo se houver disputa, o refresh
+    // token estável permite que ambas as requisições sejam concluídas.
     const currentLease = JSON.parse(localStorage.getItem(REFRESH_LEASE_KEY) ?? 'null') as
       | { owner: string; expiresAt: number }
       | null;
@@ -95,8 +103,7 @@ async function refreshWithCrossTabLock() {
       if (lease?.owner === tabId) localStorage.removeItem(REFRESH_LEASE_KEY);
     }
   } catch {
-    // refreshSession já removeu a sessão local; um timer não deve virar uma
-    // rejeição não tratada no navegador.
+    // Uma falha temporária será novamente tentada no próximo ciclo.
   }
 }
 
@@ -115,11 +122,18 @@ export function startSessionRefresh() {
   if (typeof BroadcastChannel !== 'undefined') {
     channel = new BroadcastChannel(REFRESH_LOCK_NAME);
     channel.onmessage = (event: MessageEvent) => {
-      if (event.data?.type === 'tokens-refreshed') persistTokens(event.data.tokens);
+      if (event.data?.type === 'tokens-refreshed' &&
+          event.data.tokens?.refreshToken === localStorage.getItem('refreshToken')) {
+        persistTokens(event.data.tokens);
+      }
     };
   }
 
   storageListener = (event) => {
+    if (event.key === 'refreshToken' && event.newValue === null && !localStorage.getItem('refreshToken')) {
+      forceLogout();
+      return;
+    }
     if (event.key === 'token' || event.key === 'refreshToken') synchronizeTokensFromStorage();
   };
   window.addEventListener('storage', storageListener);

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
+import { isMemberAccount } from '@/lib/platform-role';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import { buildWizardCampaignPayload } from '../lib/buildPayload';
 import { formatPhoneDisplay } from '../lib/phone-format';
@@ -13,6 +14,7 @@ const REGION_TYPE_LABELS = { country: 'País', region: 'Estados', city: 'Cidades
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
   visits: 'Visitas',
+  followers: 'Aumentar Seguidores do Instagram',
   engagement: 'Engajamento',
   messages: 'Atração de Clientes',
   whatsapp: 'Conversas no WhatsApp',
@@ -299,7 +301,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       {mutation.isError && (
         <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error space-y-3">
           <span className="whitespace-pre-line">{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
-          {isReconnectError && (
+          {isReconnectError && !isMemberAccount() && (
             <Button
               variant="primary"
               size="sm"

@@ -34,6 +34,7 @@ partnerRouter.get("/users", controllers.superadmin.listUsers);
 partnerRouter.post("/users", controllers.superadmin.createUser);
 partnerRouter.get("/users/check-email/:email", controllers.superadmin.checkEmail);
 partnerRouter.patch("/users/:id", controllers.superadmin.updateUser);
+partnerRouter.post("/users/:id/password", controllers.superadmin.resetUserPassword);
 partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
 
 // Clientes do parceiro (vagas + Novo Cliente)
@@ -46,6 +47,7 @@ partnerRouter.delete("/my-partner/ai-key", controllers.partners.clearAiKey);
 
 // Planos (cada um vê os seus: parceiro os dele, super os da ady) e assinatura dos clientes
 partnerRouter.get("/plans", controllers.superadmin.listPlans);
+partnerRouter.get("/plans/configurable-views", controllers.superadmin.configurablePlanViews);
 partnerRouter.post("/plans", controllers.superadmin.createPlan);
 partnerRouter.patch("/plans/:id", controllers.superadmin.updatePlan);
 partnerRouter.delete("/plans/:id", controllers.superadmin.deletePlan);
@@ -84,6 +86,8 @@ const ticketAttachments = (req: Request, res: Response, next: NextFunction) => {
 router.post('/tickets', ticketAttachments, controllers.tickets.create);
 router.get('/tickets', controllers.tickets.list);
 router.get('/tickets/assignees', controllers.tickets.listAssignees);
+router.get('/tickets/statuses', controllers.tickets.listStatuses);
+router.patch('/tickets/:ticketId/status', controllers.tickets.updateStatus);
 router.post('/tickets/:id/review', controllers.tickets.review);
 const faqImageUpload = multer({
   storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 },

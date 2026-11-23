@@ -31,6 +31,19 @@ function renderTab(onToggle = vi.fn()) {
 beforeEach(() => mockApiGet.mockReset());
 
 describe('InstagramPostsTab — justificativa do post recomendado', () => {
+  it('no fluxo de seguidores mostra uma única recomendação com aceitar ou escolher outro', async () => {
+    mockApiGet.mockResolvedValue({ data: { success: true, data: [post({ recommendationReason: 'Mais chance de trazer novos seguidores.' })] } });
+    const onToggle = vi.fn();
+    const onReject = vi.fn();
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InstagramPostsTab selected={[]} onToggle={onToggle} objective="followers" onRejectRecommendation={onReject} /></QueryClientProvider>);
+
+    expect(await screen.findByText('Recomendação do ady')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Usar esta recomendação' }));
+    expect(onToggle).toHaveBeenCalledWith({ id: 'post-1', mediaUrl: undefined, caption: 'Post recomendado' });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Escolher outro' }));
+    expect(onReject).toHaveBeenCalledOnce();
+  });
+
   it('exibe motivo no recomendado e preserva seleção por teclado', async () => {
     const onToggle = vi.fn();
     mockApiGet.mockResolvedValue({ data: { success: true, data: [post({ recommendationReason: reason })] } });

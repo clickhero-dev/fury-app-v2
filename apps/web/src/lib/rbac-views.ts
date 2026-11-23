@@ -51,6 +51,7 @@ const ROUTE_VIEWS: [string, RbacViewKey][] = [
   ['/admin/dashboard', 'admin.dashboard'],
   ['/admin/users', 'admin.users'],
   ['/admin/tenants', 'admin.tenants'],
+  ['/admin/campanhas', 'admin.tenants'],
   ['/admin/planos', 'admin.plans'],
   ['/admin/tickets', 'admin.tickets'],
   ['/admin/healthchecks', 'admin.healthchecks'],

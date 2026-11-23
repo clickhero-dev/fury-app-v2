@@ -10,6 +10,7 @@ import {
   campaignPublishedEmailTemplate,
   gmbProfileVerifiedEmailTemplate,
   publicTrialMagicLinkEmailTemplate,
+  publicTrialExistingAccountEmailTemplate,
 } from './email-templates.js';
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
@@ -91,12 +92,16 @@ export class EmailService {
     });
   }
 
-  sendPublicTrialMagicLink(to: string, name: string, url: string): Promise<void> {
+  sendPublicTrialMagicLink(to: string, name: string, url: string, temporaryPassword: string | undefined, baseUrl: string): Promise<void> {
     return this.sendEmail({
       to,
-      subject: 'Seu acesso ao Ady',
-      html: publicTrialMagicLinkEmailTemplate(name, url),
+      subject: `Seu acesso ao ady está pronto, ${name.trim().split(/\s+/)[0]}`,
+      html: publicTrialMagicLinkEmailTemplate(name, url, temporaryPassword, to, baseUrl),
     });
+  }
+
+  sendPublicTrialExistingAccount(to: string, baseUrl: string): Promise<void> {
+    return this.sendEmail({ to, subject: 'Seu e-mail já tem conta no ady', html: publicTrialExistingAccountEmailTemplate(baseUrl) });
   }
 
   sendPasswordResetConfirmation(to: string): Promise<void> {

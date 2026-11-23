@@ -22,6 +22,7 @@ const generateImageSchema = z.object({
   // biblioteca nova: ids resolvidos no servidor, filtrando pelo tenant
   template_photo_id: z.string().uuid().optional(),
   photo_ids: z.array(z.string().uuid()).max(2).optional(),
+  save_as_logo: z.boolean().optional().default(false),
 }).refine((b) => !(b.reference_image_urls?.length && b.photo_ids?.length), {
   message: 'Use reference_image_urls ou photo_ids, não os dois.',
   path: ['photo_ids'],
@@ -46,6 +47,20 @@ const variationSchema = z.object({ baseAssetId: z.string().uuid() });
 
 export class StudioAiController {
   constructor(private service: StudioAiService, private variations = new VisualVariationService(service)) {}
+
+  chatSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const assetId = z.string().uuid().parse(req.params.assetId);
+      res.json({ success: true, data: await this.service.getChatAssetSnapshot(req.tenant!.tenantId, assetId) });
+    } catch (err) { if (!this.validationError(res, err)) next(err); }
+  };
+
+  chatEdit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = z.object({ assetId: z.string().uuid(), version: z.string().regex(/^\d{1,10}$/), feedback: z.string().trim().min(3).max(1000) }).strict().parse(req.body);
+      res.json(await this.service.editChatImage(req.tenant!.tenantId, body));
+    } catch (err) { if (!this.validationError(res, err)) next(err); }
+  };
 
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {

@@ -9,7 +9,7 @@ import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 
 type PhotoRepo = Pick<
   BrandKitPhotoRepository,
-  'list' | 'create' | 'softDeleteById' | 'findBrandKit' | 'upsertTenantBrandKit'
+  'list' | 'listChat' | 'create' | 'softDeleteById' | 'findBrandKit' | 'upsertTenantBrandKit'
 > & { hideFromReferencePanel(id: string): Promise<{ id: string } | undefined> };
 type Storage = { uploadAsset: typeof uploadAsset; deleteAsset: typeof deleteAsset };
 
@@ -18,7 +18,7 @@ interface UploadFile {
   mimetype: string;
 }
 
-export const BRAND_KIT_PHOTO_KINDS = ['modelo', 'produto', 'equipe'] as const;
+export const BRAND_KIT_PHOTO_KINDS = ['modelo', 'produto', 'equipe', 'empresa'] as const;
 
 function toResponse(photo: BrandKitPhoto) {
   return { id: photo.id, kind: photo.kind, url: photo.url, created_at: photo.createdAt, hidden_from_reference_panel: photo.hiddenFromReferencePanel ?? false };
@@ -40,6 +40,12 @@ export class BrandKitPhotoService {
   async list(tenantId: string, kind?: BrandKitPhotoKind) {
     const rows = await this.repoFactory(tenantId).list(kind);
     return rows.map(toResponse);
+  }
+
+  async listChat(tenantId: string, kind: BrandKitPhotoKind | undefined, page: number, limit: number) {
+    const rows=await this.repoFactory(tenantId).listChat(kind,page,limit);
+    const hasMore=rows.length>limit;
+    return {items:rows.slice(0,limit).map(toResponse),page,hasMore,nextPage:hasMore?page+1:null};
   }
 
   async hideFromReferencePanel(tenantId: string, id: string): Promise<void> {

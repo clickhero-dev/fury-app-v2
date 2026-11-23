@@ -26,7 +26,7 @@ export function buildWizardCampaignPayload(state: WizardState): CreateWizardCamp
     audience_interests: audience.audienceInterests,
     daily_budget_brl: state.budget.dailyBudgetBrl,
     duration_days: state.budget.durationDays,
-    ...((state.objective === 'whatsapp' || state.objective === 'leads')
+    ...((state.objective === 'whatsapp' || state.objective === 'leads' || state.objective === 'followers')
       ? {
           whatsapp_page_id: state.whatsapp.pageId,
           whatsapp_page_name: state.whatsapp.pageName,

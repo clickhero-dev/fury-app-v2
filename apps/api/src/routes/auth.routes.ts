@@ -8,6 +8,7 @@ const router = Router();
 // Public routes
 router.post('/register', controllers.auth.register);
 router.post('/login', controllers.auth.login);
+router.post('/demo-login', controllers.auth.demoLogin);
 router.post('/refresh', controllers.auth.refresh);
 router.post('/verify-email', controllers.auth.verifyEmail);
 router.post('/forgot-password', controllers.auth.forgotPassword);
@@ -17,6 +18,9 @@ router.post('/reset-password', controllers.auth.resetPassword);
 router.post('/logout', authMiddleware, controllers.auth.logout);
 router.get('/me', authMiddleware, controllers.auth.getMe);
 router.patch('/me', authMiddleware, controllers.auth.updateMe);
+router.get('/me/chat-snapshot', authMiddleware, tenantMiddleware, controllers.chatProfile.snapshot);
+router.patch('/me/chat-update', authMiddleware, tenantMiddleware, controllers.chatProfile.update);
+router.post('/me/chat-guided-update', authMiddleware, tenantMiddleware, controllers.chatProfile.guidedUpdate);
 router.post('/business-context/improve', authMiddleware, tenantMiddleware, controllers.businessContext.improve);
 router.post('/change-password', authMiddleware, controllers.auth.changePassword);
 router.post('/set-password', authMiddleware, controllers.auth.setPassword);

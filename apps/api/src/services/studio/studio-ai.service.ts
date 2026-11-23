@@ -7,6 +7,7 @@ import { StudioRepository } from '../../repository/studio.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { saveTemporaryStudioImage, ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
+import { extractLogoColors } from '../brand-kit/logo-colors.js';
 import {
   consumeCreativeQuota,
   refundCreativeQuota,
@@ -17,6 +18,7 @@ import {
 
 import { IMAGE_MODELS, VIDEO_MODELS } from './studio-model-catalog.js';
 import { BrandKitPhotoRepository } from '../../repository/brand-kit-photo.repository.js';
+import { CampaignRepository } from '../../repository/campaign.repository.js';
 import {
   TEMPLATE_ANALYSIS_MODEL,
   TEMPLATE_IMAGE_MODEL,
@@ -138,6 +140,8 @@ interface QuotaLike {
 
 type StudioRepoF = (tenantId: string) => StudioRepository;
 type PhotoRepoF = (tenantId: string) => Pick<BrandKitPhotoRepository, 'findById' | 'findByIds'>;
+type BrandRepoF = (tenantId: string) => Pick<CampaignRepository, 'findBrandKit' | 'upsertTenantBrandKit'>;
+type ImageStoragePort = { upload(dataUrl: string): Promise<string> };
 
 export class StudioAiService {
   constructor(
@@ -151,6 +155,8 @@ export class StudioAiService {
       getModificationsPerCreativeLimit,
     },
     private photoRepoFactory: PhotoRepoF = (t) => new BrandKitPhotoRepository(t),
+    private brandRepoFactory: BrandRepoF = (t) => new CampaignRepository(t),
+    private imageStorage: ImageStoragePort = { upload: uploadImageToStorage },
   ) {}
 
   private repo(tenantId: string): StudioRepository {
@@ -310,6 +316,7 @@ export class StudioAiService {
       reference_image_urls?: string[];
       template_photo_id?: string;
       photo_ids?: string[];
+      save_as_logo?: boolean;
     },
   ): Promise<Record<string, any>> {
     let referenceImageUrls = payload.reference_image_urls?.length ? payload.reference_image_urls : undefined;
@@ -379,7 +386,7 @@ export class StudioAiService {
       const review = await this.applyHeadline(headline, generated.dataUrl, payload.aspect_ratio);
       const dataUrl = review.dataUrl;
       const costUsd = generated.costUsd === null && review.costUsd === null ? null : (generated.costUsd ?? 0) + (review.costUsd ?? 0);
-      const imageUrl = await uploadImageToStorage(dataUrl);
+      const imageUrl = await this.imageStorage.upload(dataUrl);
       const processingTimeMs = Math.round(performance.now() - startedAt);
       const modificationsRemaining = await this.quota.getModificationsPerCreativeLimit(tenantId);
       const asset = await this.repo(tenantId).createAsset({
@@ -401,6 +408,7 @@ export class StudioAiService {
           ...(review.checked ? { textReview: { headline: review.headline, corrected: review.corrected } } : {}),
         }),
       });
+      const logo = payload.save_as_logo ? await this.saveGeneratedLogo(tenantId, imageUrl, review.dataUrl) : null;
       return {
         type: 'image' as const,
         creativeAssetId: asset.id,
@@ -412,10 +420,29 @@ export class StudioAiService {
         modificationsRemaining,
         costUsd,
         processingTimeMs,
+        ...(logo ? { logo } : {}),
       };
     } catch (error) {
       await this.quota.refundCreativeQuota(tenantId);
       throw error;
+    }
+  }
+
+  private async saveGeneratedLogo(tenantId: string, imageUrl: string, dataUrl: string) {
+    try {
+      const match = /^data:image\/(?:png|jpeg);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(dataUrl);
+      if (!match) throw new Error('Imagem gerada inválida.');
+      const colors = await extractLogoColors(Buffer.from(match[1], 'base64'));
+      const repo = this.brandRepoFactory(tenantId);
+      const existing = await repo.findBrandKit();
+      await repo.upsertTenantBrandKit({
+        logoUrl: imageUrl,
+        ...(existing?.primaryColor ? {} : colors?.primaryColor ? { primaryColor: colors.primaryColor } : {}),
+        ...(existing?.secondaryColor ? {} : colors?.secondaryColor ? { secondaryColor: colors.secondaryColor } : {}),
+      });
+      return { saved: true, colors };
+    } catch {
+      return { saved: false };
     }
   }
 
@@ -549,7 +576,7 @@ export class StudioAiService {
     }
 
     const costUsd = costs.every((c) => c === null) ? null : costs.reduce<number>((sum, c) => sum + (c ?? 0), 0);
-    const imageUrl = await uploadImageToStorage(finalDataUrl);
+    const imageUrl = await this.imageStorage.upload(finalDataUrl);
     const processingTimeMs = Math.round(performance.now() - startedAt);
     const modificationsRemaining = await this.quota.getModificationsPerCreativeLimit(tenantId);
     const brand = await this.getBrandContext(tenantId);
@@ -696,7 +723,7 @@ export class StudioAiService {
 
     const startedAt = performance.now();
     const { dataUrl, costUsd } = await this.llm.generateImageWithMeta({ model: originalModel, prompt: newPrompt, logoUrl: brand.logoUrl });
-    const imageUrl = await uploadImageToStorage(dataUrl);
+    const imageUrl = await this.imageStorage.upload(dataUrl);
     const processingTimeMs = Math.round(performance.now() - startedAt);
     const newAsset = await this.repo(tenantId).createAsset({
       tenantId,
@@ -717,11 +744,25 @@ export class StudioAiService {
     return { type: 'image' as const, assetId: newAsset.id, imageUrl, creativeData: { headline: '', primary_text: '', cta: '' }, costUsd, processingTimeMs };
   }
 
+  async getChatAssetSnapshot(tenantId: string, assetId: string) {
+    const asset = await this.repo(tenantId).getChatAssetSnapshot(assetId);
+    if (!asset) throw new AppError(404, 'ASSET_NOT_FOUND', 'Criativo não encontrado');
+    return asset;
+  }
+
+  async editChatImage(tenantId: string, input: { assetId: string; version: string; feedback: string }) {
+    const asset = await this.repo(tenantId).findAssetByIdAndVersion(input.assetId, input.version);
+    if (!asset) throw new AppError(409, 'ASSET_CHANGED', 'O criativo mudou. Consulte novamente antes de confirmar.');
+    if (asset.type !== 'image') throw new AppError(400, 'EDIT_UNSUPPORTED', 'Edição de vídeo não está disponível.');
+    return this.regenerateAd(tenantId, input, asset);
+  }
+
   async regenerateAd(
     tenantId: string,
     input: { assetId: string; feedback: string; mask?: { buffer: Buffer; mime: string } },
+    approvedAsset?: Awaited<ReturnType<StudioRepository['findAssetByIdAndVersion']>>,
   ): Promise<Record<string, any>> {
-    const asset = await this.repo(tenantId).findAssetById(input.assetId);
+    const asset = approvedAsset ?? await this.repo(tenantId).findAssetById(input.assetId);
     if (!asset) throw new Error('ASSET_NOT_FOUND');
 
     const rootAssetId = asset.rootAssetId ?? asset.id;
@@ -751,7 +792,7 @@ export class StudioAiService {
           aspect_ratio: 'auto',
           referenceImageUrls: [asset.url],
         });
-        imageUrl = await uploadImageToStorage(edited.dataUrl);
+        imageUrl = await this.imageStorage.upload(edited.dataUrl);
         costUsd = edited.costUsd;
         source = 'openrouter-edit-image-flux';
       }

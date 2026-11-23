@@ -5,6 +5,8 @@ import {
   createMagicLinkToken,
   hashMagicLinkToken,
   verifyWebhookSignature,
+  MAGIC_LINK_TTL_MS,
+  PUBLIC_TRIAL_IMAGE_LIMIT,
 } from '../services/core/public-trial-signup.js';
 
 describe('public trial signup', () => {
@@ -27,6 +29,9 @@ describe('public trial signup', () => {
     expect(token.raw).toHaveLength(64);
     expect(hashMagicLinkToken(token.raw)).toBe(token.hash);
     expect(hashMagicLinkToken(token.raw)).not.toBe(token.raw);
+    expect(token.expiresAt.getTime() - Date.now()).toBeGreaterThan(MAGIC_LINK_TTL_MS - 1_000);
+    expect(MAGIC_LINK_TTL_MS).toBe(60 * 60 * 1000);
+    expect(PUBLIC_TRIAL_IMAGE_LIMIT).toBe(5);
   });
 
   it('valida assinatura HMAC do corpo bruto', () => {

@@ -8,6 +8,9 @@ import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
+import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
+import { ChatMediaPublishService } from '../services/chat/chat-media-publish.service.js';
+import { ChatMediaPublishRepository } from '../repository/chat-media-publish.repository.js';
 
 const listPlansSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -20,12 +23,40 @@ export class PlannerController {
     private captionSuggestionService?: PlannerCaptionSuggestionService,
   ) {}
 
+  handleChatMediaPublish = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const approvalId = z.string().uuid().parse(req.params.approvalId);
+      const {caption, instagramUserId} = z.object({caption:z.string().max(5000), instagramUserId:z.string().min(1).max(100)}).strict().parse(req.body);
+      const service = new ChatMediaPublishService(new ChatMediaPublishRepository(),
+        (tenantId, payload) => this.plannerService.publishNow(tenantId, payload));
+      const result = await service.publish(req.tenant!.tenantId, req.user!.userId, approvalId, caption, instagramUserId);
+      res.json({success:true,data:result});
+    } catch (error) { next(error); }
+  };
+
+  handleChatSnapshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const postId = z.string().uuid().parse(req.params.postId);
+      res.json({ success: true, data: await this.plannerService.getChatPostSnapshot(req.tenant!.tenantId, postId) });
+    } catch (err) { next(err); }
+  };
+
+  handleChatCancel = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const postId = z.string().uuid().parse(req.params.postId);
+      const { version } = z.object({ version: z.string().regex(/^\d{1,10}$/) }).strict().parse(req.body);
+      res.json({ success: true, data: await this.plannerService.cancelChatPost(req.tenant!.tenantId, postId, version) });
+    } catch (err) { next(err); }
+  };
+
   handleSuggestCaption = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = z.object({
         context: z.string().trim().min(1).max(5000).optional(),
         imageUrl: z.string().url().refine((url) => url.startsWith('https://'), 'imageUrl precisa usar HTTPS').optional(),
-      }).strict().refine((value) => value.context || value.imageUrl, 'Informe um tema ou uma imagem').parse(req.body);
+        videoUrl: z.string().url().refine((url) => url.startsWith('https://'), 'videoUrl precisa usar HTTPS').optional(),
+      }).strict().refine((value) => value.context || value.imageUrl || value.videoUrl, 'Informe um tema ou uma mídia')
+        .refine((value) => !(value.imageUrl && value.videoUrl), 'Informe somente uma mídia').parse(req.body);
       if (!this.captionSuggestionService) throw new AppError(503, 'CAPTION_SUGGESTION_UNAVAILABLE', 'Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.');
       const result = await this.captionSuggestionService.suggest(req.tenant!.tenantId, body);
       res.json({ success: true, data: result, timestamp: new Date().toISOString() });
@@ -200,6 +231,9 @@ export class PlannerController {
       );
 
       const body = bodySchema.parse(req.body);
+      if (getDelegatedUser(req) && (!body.scheduledAt || Date.parse(body.scheduledAt) <= Date.now() || body.platform !== 'instagram')) {
+        throw new AppError(400, 'INVALID_CHAT_SCHEDULE', 'Informe um horário futuro para uma postagem no Instagram.');
+      }
       const post = await this.plannerService.createManualPost(tenantId, body as any);
       res.json({ success: true, data: post });
     } catch (err) { next(err); }

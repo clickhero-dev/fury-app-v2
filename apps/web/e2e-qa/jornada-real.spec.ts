@@ -98,6 +98,7 @@ function apiClient(page: Page, getToken: () => string) {
 }
 
 test('jornada real: login, criar campanha, pausar campanha e gerar imagem', async ({ page }) => {
+  test.skip(process.env.QA_ALLOW_MUTATIONS !== 'true', 'Ações reais exigem opt-in explícito.');
   if (!email || !password) {
     throw new Error('Defina QA_EMAIL e QA_PASSWORD (GitHub Secrets no CI, variáveis de ambiente local).');
   }
@@ -134,19 +135,19 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.goto('/criar-campanha');
       const next = page.getByRole('button', { name: 'Continuar' });
 
-      // objetivo: Gerar Conversas + os dois cards de destino. A conta QA tem Meta conectado.
-      await page.getByRole('button', { name: /Gerar Conversas/ }).click();
+      // objetivo: Direct do Instagram (antigo Gerar Conversas) + os dois cards de destino. A conta QA tem Meta conectado.
+      await page.getByRole('button', { name: /Atrair Clientes no Direct do Instagram/ }).click();
       const instagram = page.getByRole('checkbox', { name: /instagram/i });
       const facebook = page.getByRole('checkbox', { name: /facebook/i });
       await expect(instagram).toBeVisible({ timeout: 60_000 });
       await expect(facebook).toBeVisible({ timeout: 60_000 });
-      await page.getByTestId('message-destination-instagram_direct').click();
-      await page.getByTestId('message-destination-messenger').click();
+      await instagram.click();
+      await facebook.click();
       await expect(instagram).toBeChecked();
       await expect(facebook).toBeChecked();
       // O QA usa a API HMG implantada; publica com um destino simples, enquanto
       // a combinação dos canais é coberta pelos testes de payload/backend do PR.
-      await page.getByTestId('message-destination-instagram_direct').click();
+      await instagram.click();
       await expect(instagram).not.toBeChecked();
       await expect(facebook).toBeChecked();
       await expect(next).toBeEnabled({ timeout: 60_000 });

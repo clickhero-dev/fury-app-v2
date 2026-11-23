@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { db, requestLogs } from '@fury/db';
 import { sanitizeBody, sanitizeHeaders } from '../lib/sanitize-log-data.js';
+import { getDelegatedUser } from './chat-delegation.middleware.js';
 
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BUFFER_SIZE = 100;
@@ -28,7 +29,7 @@ function resolveRequestId(req: Request): string {
 // sanitizeBody (que redige senha/otp/token).
 // case-insensitive: o roteamento do Express casa `/API/Auth/Facebook/...`
 // login social e chave de IA: nunca gravar corpo nem query
-const SENSITIVE_PATH_RE = /^\/api\/(auth\/(facebook|google|social)|admin\/(my-partner|partners\/[^/]+)\/ai-key)(\/|$)/i;
+const SENSITIVE_PATH_RE = /^\/api\/(chat|auth\/(facebook|google|social)|admin\/(my-partner|partners\/[^/]+)\/ai-key)(\/|$)/i;
 function isSensitivePath(req: Request): boolean {
   return SENSITIVE_PATH_RE.test(req.path || req.originalUrl || '');
 }
@@ -118,6 +119,17 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   res.setHeader('x-request-id', requestId);
 
   function captureLog() {
+    const delegated = getDelegatedUser(req);
+    // An untrusted approval header can only cause extra redaction, never grant identity.
+    // It also protects prompts when a delegated request is rejected before auth.
+    const redactDelegatedData = Boolean(delegated || req.get('x-chat-approval-id'));
+    const headers = sanitizeHeaders(req.headers as Record<string, unknown>);
+    // These fields are server-derived and cannot be supplied by the client.
+    delete headers._ady_actor;
+    delete headers._ady_approval_id;
+    headers._ady_actor = delegated ? 'chatbot' : req.user ? 'user' : 'anonymous';
+    const approvalId = req.get('x-chat-approval-id');
+    if (delegated && approvalId && UUID_RE.test(approvalId)) headers._ady_approval_id = approvalId;
     buffer.push({
       requestId,
       tenantId: req.tenant?.tenantId ?? req.user?.tenantId ?? null,
@@ -125,15 +137,15 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
       method: req.method,
       // `req.originalUrl` inclui a query — nos paths sensíveis (OAuth code/state)
       // grava só `req.path`, sem a query.
-      path: (isSensitivePath(req) ? req.path : redactQuery(req.originalUrl)).slice(0, 2048),
-      queryString: extractQueryString(req),
+      path: (redactDelegatedData ? req.originalUrl.split('?')[0] : isSensitivePath(req) ? req.path : redactQuery(req.originalUrl)).slice(0, 2048),
+      queryString: redactDelegatedData ? null : extractQueryString(req),
       statusCode: res.statusCode,
       responseTimeMs: Date.now() - start,
       ipAddress: req.ip ?? null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
       referer: typeof req.headers['referer'] === 'string' ? req.headers['referer'].slice(0, 2048) : null,
-      requestHeaders: sanitizeHeaders(req.headers as Record<string, unknown>),
-      requestBody: safeBody,
+      requestHeaders: headers,
+      requestBody: redactDelegatedData ? null : safeBody,
     });
 
     if (buffer.length >= MAX_BUFFER_SIZE) {

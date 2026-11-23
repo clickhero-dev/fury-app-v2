@@ -1,0 +1,19 @@
+.ady-chat-clarification {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.ady-chat-clarification p { flex-basis: 100%; margin: 0; }
+.ady-chat-clarification button {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.ady-chat-clarification button[aria-pressed='true'] { font-weight: 700; border-width: 2px; }
+.ady-chat-clarification button:disabled { cursor: default; opacity: 0.7; }

@@ -34,6 +34,8 @@ vi.mock('@/components/campaign-wizard/CampaignWizard', () => ({
   CampaignWizard: () => null,
 }));
 vi.mock('@/hooks/usePauseCampaign', () => ({ usePauseCampaign: () => ({ isPending: false, mutate: vi.fn() }) }));
+const blocked = vi.hoisted(() => ({ keys: [] as string[] }));
+vi.mock('@/hooks/useBlockedViews', () => ({ useBlockedViews: () => ({ isBlocked: (k: string) => blocked.keys.includes(k) }) }));
 vi.mock('@/hooks/useDeleteCampaign', () => ({ useDeleteCampaign: () => ({ isPending: false, mutate: vi.fn() }) }));
 
 function makeWrapper() {
@@ -158,5 +160,23 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
     expect(await screen.findByText('Camp Ativa')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Estamos consultando seus dados na Meta');
     expect(screen.getByRole('status')).toHaveTextContent('Última atualização: 28/09 às 14:30');
+  });
+});
+
+describe('PainelCampanhas — plano', () => {
+  afterEach(() => { blocked.keys = []; });
+
+  it('plano sem criar campanha esconde "Nova campanha"', async () => {
+    mockCampaigns([]);
+    blocked.keys = ['campaigns.create'];
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    await waitFor(() => expect(screen.getByText('Campanhas')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /nova campanha/i })).not.toBeInTheDocument();
+  });
+
+  it('plano com criar campanha mostra "Nova campanha"', async () => {
+    mockCampaigns([]);
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    expect(await screen.findByRole('button', { name: /nova campanha/i })).toBeInTheDocument();
   });
 });

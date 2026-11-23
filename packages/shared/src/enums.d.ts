@@ -1,7 +1,8 @@
 export declare enum UserRole {
     OWNER = "owner",
     ADMIN = "admin",
-    MEMBER = "member"
+    MEMBER = "member",
+    DEMO = "demo"
 }
 export declare enum CreativeType {
     IMAGE = "image",

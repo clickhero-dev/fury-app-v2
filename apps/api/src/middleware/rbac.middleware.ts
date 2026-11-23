@@ -1,7 +1,7 @@
 import { type Request, type Response, type NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
 import { peekUsersFromRequest } from './auth.middleware.js';
-import { RBAC_SERVICES } from '../lib/rbac-services.js';
+import { RBAC_SERVICES, RBAC_SERVICE_OVERRIDES, RBAC_SERVICE_PATTERNS } from '../lib/rbac-services.js';
 import { rbacService, type RbacService } from '../services/core/rbac.service.js';
 
 // Minúsculo, sem barras repetidas/finais; . e .. ficam literais (o Express não os resolve)
@@ -15,17 +15,24 @@ function matchesPrefix(path: string, prefix: string): boolean {
 }
 
 // Keys de todos os prefixos que casam (hierárquico), no caminho cru e no decodificado
-export function resolveServiceKeys(rawPath: string): string[] | null {
+export function resolveServiceKeys(rawPath: string, method = 'GET'): string[] | null {
   const candidates = [normalizePath(rawPath)];
   try {
     candidates.push(normalizePath(decodeURIComponent(rawPath)));
   } catch {
     return null;
   }
+  // exceção só no caminho bruto idêntico; variações seguem a regra normal (fail-closed)
+  const readOnly = method === 'GET' || method === 'HEAD';
+  const override = readOnly && RBAC_SERVICE_OVERRIDES.find((o) => rawPath === o.path);
+  if (override) return [override.key];
   const keys = new Set<string>();
   for (const path of candidates) {
     for (const entry of RBAC_SERVICES) {
       if (matchesPrefix(path, entry.prefix)) keys.add(entry.key);
+    }
+    for (const entry of RBAC_SERVICE_PATTERNS) {
+      if (entry.pattern.test(path)) keys.add(entry.key);
     }
   }
   return [...keys];
@@ -33,7 +40,7 @@ export function resolveServiceKeys(rawPath: string): string[] | null {
 
 export function createRbacMiddleware(service: Pick<RbacService, 'checkServices'> = rbacService) {
   return async function rbacMiddleware(req: Request, _res: Response, next: NextFunction) {
-    const keys = resolveServiceKeys(req.path);
+    const keys = resolveServiceKeys(req.path, req.method);
     if (keys === null) return next(new AppError(400, 'INVALID_PATH', 'Caminho inválido'));
 
     // sem keys ainda confere o usuário: excluído (soft-delete) perde o acesso

@@ -18,7 +18,7 @@ if (process.env.TEST_DATABASE_URL && !process.env.TEST_DATABASE_URL.includes('**
     const { db, plans } = await import('@fury/db');
     await db.insert(plans).values({
       name: 'Trial de teste',
-      technicalKey: 'trial_new_signup',
+      technicalKey: 'public_trial_signup',
       priceCents: 0,
       interval: 'monthly',
       features: {},

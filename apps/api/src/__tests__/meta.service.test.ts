@@ -212,6 +212,68 @@ describe('MetaService (deep DI)', () => {
     expect(repo.patchMetaConnection).not.toHaveBeenCalled();
   });
 
+  it('Cenário: code 190 durante a validação não vira 502 e não persiste seleção parcial', async () => {
+    // Funcionalidade: recuperação de conexão Meta na seleção de ativos
+    // Dado que a Meta rejeita o token com code 190
+    // Quando o tenant salva a seleção
+    // Então a API retorna META_TOKEN_EXPIRED sem persistir
+    const repo = makeRepo({ findLatestMetaConnection: vi.fn(async () => connection) });
+    const service = makeSvc(repo) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+    service.deps.metaApi.getUserBusinesses.mockRejectedValue(
+      Object.assign(new Error('You cannot access the app till you log in'), { metaCode: 190, httpStatus: 400 })
+    );
+
+    await expect(service.saveTenantAssetSelection('t1', {
+      businessIds: ['b1'], pageIds: ['p1'], adAccountIds: ['act_1'], instagramUserId: 'ig1', whatsappNumberIds: [],
+    })).rejects.toMatchObject({ statusCode: 401, code: 'META_TOKEN_EXPIRED', message: 'Token Meta inválido ou expirado.' });
+    expect(repo.patchMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: permissão Meta tipada é preservada durante a validação', async () => {
+    // Funcionalidade: classificação segura dos erros Meta
+    // Dado uma falha explícita de permissão
+    // Quando a validação do save falha
+    // Então a API mantém 403/META_PERMISSION_DENIED
+    const repo = makeRepo({ findLatestMetaConnection: vi.fn(async () => connection) });
+    const service = makeSvc(repo) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+    service.deps.metaApi.getBusinessOwnedPages.mockRejectedValue(
+      Object.assign(new Error('permissão'), { code: 'META_PERMISSION_DENIED', statusCode: 403 })
+    );
+
+    await expect(service.saveTenantAssetSelection('t1', {
+      businessIds: ['b1'], pageIds: ['p1'], adAccountIds: ['act_1'], instagramUserId: 'ig1', whatsappNumberIds: [],
+    })).rejects.toMatchObject({ statusCode: 403, code: 'META_PERMISSION_DENIED' });
+    expect(repo.patchMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: code 190 ao listar BMs propaga autenticação client-safe', async () => {
+    const service = makeSvc(makeRepo(), {
+      getUserBusinesses: vi.fn(async () => {
+        throw Object.assign(new Error('login required'), { metaCode: 190 });
+      }),
+    }) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+
+    await expect(service.getTenantBusinesses('t1')).rejects.toMatchObject({
+      statusCode: 401, code: 'META_TOKEN_EXPIRED', message: 'Token Meta inválido ou expirado.',
+    });
+  });
+
+  it('Cenário: code 190 ao listar páginas não vira erro 500', async () => {
+    const service = makeSvc(makeRepo(), {
+      getUserFacebookPages: vi.fn(async () => {
+        throw Object.assign(new Error('login required'), { metaCode: 190 });
+      }),
+    }) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+
+    await expect(service.getTenantFacebookPages('t1')).rejects.toMatchObject({
+      statusCode: 401, code: 'META_TOKEN_EXPIRED',
+    });
+  });
+
   it('selectAdAccount rejeita conta que não pertence à conexão', async () => {
     const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => connection) });
     await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_999')).rejects.toMatchObject({

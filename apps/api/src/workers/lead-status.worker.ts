@@ -4,6 +4,7 @@ import { db, metaLeads } from '../lib/db.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
 import { captureServerEvent } from '../lib/analytics.js';
 import { replaceLegacyRepeatablesWithScheduler } from '../lib/job-scheduler.js';
+import { planSkipsTenant } from '../lib/plan-skip.js';
 
 export const LEAD_STATUS_QUEUE_NAME = 'lead-status';
 
@@ -29,6 +30,8 @@ export async function processLeadStatusRun(cutoff?: Date): Promise<void> {
 
   let updated = 0;
   for (const tenantId of tenantIds) {
+    // plano sem leads: não mexe no status
+    if (await planSkipsTenant(tenantId, ['leads'], 'lead-status')) continue;
     const repo = new MetaSyncRepository(tenantId);
     updated += await repo.markStaleNewLeadsAsNotContacted(deadline);
   }

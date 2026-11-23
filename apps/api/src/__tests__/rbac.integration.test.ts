@@ -149,6 +149,13 @@ describe('RBAC de serviços — integração', () => {
     expect((await get('/api/goals')).status).not.toBe(403);
   });
 
+  it('tela desativada (Orçamento smart): serviço bloqueado para todos, até super_admin', async () => {
+    expect((await get('/api/budget/suggestions')).status).toBe(403);
+    await setUser('super_admin');
+    expect((await get('/api/budget/suggestions')).status).toBe(403);
+    expect((await get('/api/goals')).status).not.toBe(403);
+  });
+
   it('remover o bloqueio + bumpVersion libera na hora', async () => {
     await block('user', 'goals');
     expect((await get('/api/goals')).status).toBe(403);
@@ -220,9 +227,9 @@ describe('RBAC de serviços — integração', () => {
   describe('RbacRepository (SQL real)', () => {
     it('findUserContext: partner do tenant e do usuário', async () => {
       await setUser('user_partner', { tenantPartner: partnerA });
-      expect(await repo.findUserContext(userId)).toEqual({ platformRole: 'user_partner', partnerId: partnerA });
+      expect(await repo.findUserContext(userId)).toMatchObject({ platformRole: 'user_partner', partnerId: partnerA });
       await setUser('admin_partner', { userPartner: partnerB });
-      expect(await repo.findUserContext(userId)).toEqual({ platformRole: 'admin_partner', partnerId: partnerB });
+      expect(await repo.findUserContext(userId)).toMatchObject({ platformRole: 'admin_partner', partnerId: partnerB, tenantId: expect.any(String), role: expect.any(String) });
       expect(await repo.findUserContext('00000000-0000-0000-0000-000000000000')).toBeNull();
     });
 

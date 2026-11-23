@@ -27,6 +27,8 @@ router.post('/visual-variation-batches', authMiddleware, tenantMiddleware, contr
 router.get('/visual-variation-batches/:batchId', authMiddleware, tenantMiddleware, controllers.studioAi.getVisualVariationBatch);
 router.post('/visual-variation-batches/:batchId/cancel', authMiddleware, tenantMiddleware, controllers.studioAi.cancelVisualVariationBatch);
 router.post('/visual-variation-batches/:batchId/items/:index/retry', authMiddleware, tenantMiddleware, controllers.studioAi.retryVisualVariationItem);
+router.get('/assets/:assetId/chat-snapshot', authMiddleware, tenantMiddleware, controllers.studioAi.chatSnapshot);
+router.post('/chat-edit', authMiddleware, tenantMiddleware, controllers.studioAi.chatEdit);
 router.post('/generate-video', authMiddleware, tenantMiddleware, controllers.studioAi.generateVideo);
 router.post('/regenerate', authMiddleware, tenantMiddleware, controllers.studioAi.regenerate);
 router.post(

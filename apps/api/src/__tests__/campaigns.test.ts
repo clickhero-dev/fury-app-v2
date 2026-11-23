@@ -528,6 +528,24 @@ describe('DELETE /api/campaigns/:id', () => {
     expect(archived?.status).toBe('archived');
   });
 
+  it('deve arquivar localmente quando a campanha já não existe na Meta', async () => {
+    vi.mocked(metaApiCall).mockRejectedValueOnce(
+      metaReject(100, '[Meta API] 100: Unsupported get request. Object with ID meta_delete_1 does not exist')
+    );
+
+    const response = await request(app)
+      .delete(`/api/campaigns/${testCampaign.id}`)
+      .set(getAuthHeader(testUser.token));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const archived = await db.query.campaigns.findFirst({
+      where: eq(campaigns.id, testCampaign.id),
+    });
+    expect(archived?.status).toBe('archived');
+  });
+
   it('deve registrar log de exclusão', async () => {
     await request(app)
       .delete(`/api/campaigns/${testCampaign.id}`)

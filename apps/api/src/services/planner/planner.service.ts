@@ -125,6 +125,18 @@ export class PlannerService {
     return this.repoFactory(t);
   }
 
+  async getChatPostSnapshot(tenantId: string, postId: string) {
+    const post = await this.repo(tenantId).getChatPostSnapshot(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    return post;
+  }
+
+  async cancelChatPost(tenantId: string, postId: string, version: string) {
+    const post = await this.repo(tenantId).cancelScheduledPostIfVersion(postId, version);
+    if (!post) throw new AppError(409, 'POST_CHANGED', 'O post mudou ou não está mais agendado. Consulte novamente antes de confirmar.');
+    return post;
+  }
+
   /** Remove os dados de planejamento (posts e planos) do tenant — usado no reset de job stale. */
   private async clearTenantPlannerData(tenantId: string): Promise<void> {
     await this.repo(tenantId).clearPlannerData();
@@ -780,7 +792,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
    */
   async publishNow(
     tenantId: string,
-    payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string },
+    payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string; expectedInstagramUserId?: string },
   ) {
     if (payload.postType === 'carousel' && (payload.imageUrls?.length ?? 0) < 2) {
       throw new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de pelo menos 2 imagens.');
@@ -813,7 +825,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       status: 'publishing',
       nextRetryAt: leaseUntil,
     } as any);
-    return this.attemptPublish(repo, post, tenantId);
+    return this.attemptPublish(repo, post, tenantId, payload.expectedInstagramUserId);
   }
 
   /**
@@ -839,11 +851,12 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     repo: PlannerRepository,
     post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown; publishAttempts?: number | null },
     tenantId: string,
+    expectedInstagramUserId?: string,
   ) {
     const account = await this.resolveInstagramAccount(tenantId);
     const attempts = (post.publishAttempts ?? 0) + 1;
 
-    if (!account) {
+    if (!account || (expectedInstagramUserId && account.igUserId !== expectedInstagramUserId)) {
       const msg = 'no_instagram_account: Instagram não vinculado/revogado — publicação desativada. Vincule o perfil em Configurações > Integrações.';
       await repo.markPostFailed(post.id, attempts, msg, new Date());
       return { id: post.id, status: 'failed' as const, lastPublishError: msg };

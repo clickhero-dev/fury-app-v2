@@ -1,3 +1,5 @@
+import { PlannerVideoTranscription } from './services/planner/planner-video-transcription.js';
+import { readPlannerVideoAsset } from './services/storage/storage.service.js';
 import { DatabaseMetricsProvider } from './lib/providers/db-metrics.provider.js';
 import { MockMetricsProvider } from './lib/providers/mock-metrics.provider.js';
 import type { IMetricsProvider } from './lib/providers/metrics.provider.js';
@@ -5,6 +7,8 @@ import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
 import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { ChatProfileService } from './services/core/chat-profile.service.js';
+import { ChatProfileController } from './controllers/chat-profile.controller.js';
 import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
 import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
@@ -18,6 +22,8 @@ import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
 import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
+import { StudioRatingService } from './services/studio/studio-rating.service.js';
+import { StudioRatingController } from './controllers/studio-rating.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
 import { PolicyService } from './services/policy/policy.service.js';
@@ -57,6 +63,9 @@ import { CampaignRepository } from './repository/campaign.repository.js';
 import { CampaignsController } from './controllers/campaigns.controller.js';
 import { metaSyncService } from './services/meta/meta-sync.service.js';
 import { MetaSyncV2Controller } from './controllers/meta-sync.controller.js';
+import { DemoDashboardRepository } from './repository/demo-dashboard.repository.js';
+import { DemoDashboardService } from './services/dashboard/demo-dashboard.service.js';
+import { DemoDashboardController } from './controllers/demo-dashboard.controller.js';
 import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
@@ -89,6 +98,17 @@ import { StudioVariationsController } from './controllers/studio-variations.cont
 import { WorkflowJobRepository } from './repository/workflow-job.repository.js';
 import { PublicTrialService } from './services/core/public-trial.service.js';
 import { PublicTrialController } from './controllers/public-trial.controller.js';
+import { ChatMediaController } from './controllers/chat-media.controller.js';
+import { ChatMediaValidator } from './services/chat/chat-media-validator.js';
+import { ChatTranscriptionService } from './services/chat/chat-transcription.service.js';
+import { ChatAttachmentService } from './services/chat/chat-attachment.service.js';
+import { ChatAttachmentPromotionService } from './services/chat/chat-attachment-promotion.service.js';
+import { ChatAttachmentReader } from './services/chat/chat-attachment-reader.js';
+import { OpenRouterChatMediaClient } from './services/chat/openrouter-chat-media.client.js';
+import { ChatAttachmentRepository } from './repository/chat-attachment.repository.js';
+import { createChatStudioStorage } from './services/storage/chat-studio-storage.js';
+import { createChatPlanRuntime } from './services/chat/chat-plan-runtime.js';
+import { getChatPlanQueue } from './workers/chat-plan.worker.js';
 
 /**
  * Composition root (DI) da API.
@@ -146,12 +166,14 @@ export const studioVariationsService = new StudioVariationsService(
 );
 export const studioVariationsController = new StudioVariationsController(studioVariationsService);
 export const studioPublishingService = new StudioPublishingService();
+export const studioRatingService = new StudioRatingService();
 export const billingService = new BillingService();
 export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
 export const authService = new AuthService();
+export const demoDashboardService = new DemoDashboardService((tenantId) => new DemoDashboardRepository(tenantId));
 export const businessContextService = new BusinessContextService();
 export const businessContextController = new BusinessContextController(businessContextService);
 export const publicTrialService = new PublicTrialService();
@@ -170,6 +192,7 @@ export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
+  new PlannerVideoTranscription(readPlannerVideoAsset, new ChatMediaValidator(), new OpenRouterChatMediaClient({ timeoutMs: 20_000 })),
 );
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -184,7 +207,23 @@ export const wppVerificationService = new WppVerificationService(
   (tenantId: string) => new WppVerificationRepository(tenantId),
 );
 
+const chatMediaValidator = new ChatMediaValidator();
+const chatMediaProvider = new OpenRouterChatMediaClient();
+export const chatTranscriptionService = new ChatTranscriptionService(chatMediaValidator, chatMediaProvider);
+export const chatAttachmentService = new ChatAttachmentService(
+  (tenantId, userId) => new ChatAttachmentRepository(tenantId, userId),
+  createChatStudioStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
+);
+export const chatAttachmentPromotionService = new ChatAttachmentPromotionService(chatAttachmentService, brandKitService, brandKitPhotoService);
+export const chatPlanRuntime = createChatPlanRuntime({
+  baseUrl: process.env.INTERNAL_NODE_API_ORIGIN ?? `http://127.0.0.1:${process.env.PORT || '3000'}`,
+  secret: process.env.CHAT_DELEGATION_SECRET ?? '',
+  queue: { enqueue: async (wake, delayMs) => (await getChatPlanQueue()).enqueue(wake, delayMs) },
+});
+
 export const controllers = {
+  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService, chatAttachmentPromotionService),
+  chatPlan: chatPlanRuntime.controller,
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
   announcement: new AnnouncementController(announcementRepository),
@@ -199,12 +238,15 @@ export const controllers = {
   studio: new CreativeStudioController(studioService),
   studioVariations: studioVariationsController,
   studioPublishing: new StudioPublishingController(studioPublishingService),
+  studioRating: new StudioRatingController(studioRatingService),
   billing: new BillingController(billingService),
   policy: new PolicyController(policyService),
   observability: new ObservabilityController(observabilityService),
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  demoDashboard: new DemoDashboardController(demoDashboardService),
+  chatProfile: new ChatProfileController(new ChatProfileService()),
   businessContext: businessContextController,
   publicTrial: new PublicTrialController(publicTrialService),
   automation: new AutomationController(automationService),
@@ -228,6 +270,7 @@ export const controllers = {
     metaSyncService,
     (tenantId: string) => new MetaSyncRepository(tenantId),
     enqueueMetaSyncTenantRun,
+    demoDashboardService,
   ),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),

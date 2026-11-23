@@ -75,6 +75,7 @@ export interface UserDTO {
     tenantId: string;
     email: string;
     role: UserRole;
+    type: 'user' | 'demo';
     createdAt: Date;
 }
 export interface CreateUserRequest {

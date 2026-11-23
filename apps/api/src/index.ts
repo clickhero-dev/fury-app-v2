@@ -34,7 +34,9 @@ import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-st
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { startStudioVideoWorker, stopStudioVideoWorker } from './workers/studio-video.worker.js';
-import { studioVideoService } from './di.js';
+import { startChatPlanWorker, stopChatPlanWorker } from './workers/chat-plan.worker.js';
+import { startChatTurnRecoveryWorker, stopChatTurnRecoveryWorker } from './workers/chat-turn-recovery.worker.js';
+import { chatPlanRuntime, studioVideoService } from './di.js';
 import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
@@ -330,6 +332,10 @@ app.use((req, res) => {
       }).catch((error) => {
         console.error('Failed to start planner worker:', error);
       });
+      startChatTurnRecoveryWorker();
+      void startChatPlanWorker(chatPlanRuntime.executor).catch(() => {
+        console.error('[chat-plan] worker não iniciou; a fila permanece persistida para recuperação');
+      });
     });
 
     // Tratamento de encerramento (único handler)
@@ -352,6 +358,8 @@ app.use((req, res) => {
         await stopBudgetOptimizerWorker();
         await stopFuryEngine();
         await stopPlannerWorker();
+        await stopChatPlanWorker();
+        await stopChatTurnRecoveryWorker();
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();

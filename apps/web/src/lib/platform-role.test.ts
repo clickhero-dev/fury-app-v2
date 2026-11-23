@@ -46,3 +46,35 @@ describe('conta vitalícia (parceiro)', () => {
     expect(isBillingPath('/dashboard')).toBe(false);
   });
 });
+
+describe('membro e integrações', () => {
+  it('reconhece só o cargo member', async () => {
+    const { isMemberAccount } = await import('./platform-role');
+    localStorage.setItem('user', JSON.stringify({ role: 'member' }));
+    expect(isMemberAccount()).toBe(true);
+    localStorage.setItem('user', JSON.stringify({ role: 'owner' }));
+    expect(isMemberAccount()).toBe(false);
+    localStorage.removeItem('user');
+    expect(isMemberAccount()).toBe(false);
+  });
+  it('identifica a rota de integrações', async () => {
+    const { isIntegrationsPath } = await import('./platform-role');
+    expect(isIntegrationsPath('/configuracoes/integracoes')).toBe(true);
+    expect(isIntegrationsPath('/configuracoes')).toBe(false);
+  });
+});
+
+describe('nomes e cores dos cargos', () => {
+  it('nomes para a tela', async () => {
+    const { roleLabel } = await import('./platform-role');
+    expect(roleLabel({ role: 'owner', platformRole: 'super_admin' })).toBe('Super Administrador');
+    expect(roleLabel({ role: 'admin', platformRole: 'admin_partner' })).toBe('Parceiro');
+    expect(roleLabel({ role: 'owner', platformRole: 'user_partner' })).toBe('Usuário Titular');
+    expect(roleLabel({ role: 'member', platformRole: 'user' })).toBe('Usuário');
+  });
+  it('laranja para parceiro; azul para ady', async () => {
+    const { roleBadgeClass } = await import('./platform-role');
+    for (const platformRole of ['admin_partner', 'user_partner']) expect(roleBadgeClass({ role: 'owner', platformRole })).toContain('bg-spark');
+    for (const platformRole of ['super_admin', 'user']) expect(roleBadgeClass({ role: 'owner', platformRole })).toContain('bg-brand');
+  });
+});

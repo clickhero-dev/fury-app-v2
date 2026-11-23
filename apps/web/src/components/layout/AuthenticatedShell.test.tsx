@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Reducer } from 'redux';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -76,6 +76,7 @@ function renderShell(policy: AuthState['policy'], role = 'owner') {
           <Routes>
             {/* /politica fora do shell, como no router real */}
             <Route path="/politica" element={<div data-testid="politica-page" />} />
+            <Route path="/onboarding/*" element={<div data-testid="onboarding-page" />} />
             <Route path="*" element={<AuthenticatedShell />} />
           </Routes>
         </MemoryRouter>
@@ -104,12 +105,27 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     return apiGet.mock.calls.filter((c) => c[0] === '/policy/current');
   }
 
-  it('usuário pendente (accepted=false) é redirecionado para /politica', async () => {
+  it.each([
+    ['sem conexão Meta', []],
+    ['sem conta de anúncios selecionada', [{ id: 'c1', selectedAdAccountId: null }]],
+  ])('permite acessar o aplicativo %s', async (_scenario, connections) => {
+    apiGet.mockResolvedValue({ data: { data: connections } });
+    renderShell({ currentVersion: '1.0', accepted: true });
+
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/meta/connections'));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(screen.getByTestId('sidebar-root')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-page')).toBeNull();
+  });
+
+  it('permite acesso com política pendente e senha do trial pendente', async () => {
+    localStorage.setItem('fury-trial-password-pending', 'true');
     renderShell({ currentVersion: '1.0', accepted: false });
 
-    // Redirect síncrono no primeiro render: /politica monta, o shell desmonta.
-    expect(await screen.findByTestId('politica-page')).not.toBeNull();
-    expect(screen.queryByTestId('sidebar-root')).toBeNull();
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(screen.queryByTestId('politica-page')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Crie sua senha' })).toBeNull();
+    expect(localStorage.getItem('fury-trial-password-pending')).toBe('true');
     expect(policyCalls()).toHaveLength(0); // estado conhecido → zero fetch
   });
 
@@ -128,7 +144,7 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     expect(apiGet.mock.calls.some((call) => call[0] === '/meta/connections')).toBe(false);
   });
 
-  it('sessão antiga (policy=null) busca /policy/current UMA vez e bloqueia quando pendente', async () => {
+  it('sessão antiga consulta a política e permite acesso quando pendente', async () => {
     apiGet.mockImplementation((url: string) => {
       if (url === '/policy/current') {
         return Promise.resolve({
@@ -140,8 +156,9 @@ describe('AuthenticatedShell — gate de política de uso', () => {
 
     renderShell(null);
 
-    // Resolve como pendente → redirect para /politica.
-    expect(await screen.findByTestId('politica-page')).not.toBeNull();
+    await waitFor(() => expect(policyCalls()).toHaveLength(1));
+    expect(screen.queryByTestId('politica-page')).toBeNull();
+    expect(screen.getByTestId('sidebar-root')).not.toBeNull();
     expect(policyCalls()).toHaveLength(1);
   });
 

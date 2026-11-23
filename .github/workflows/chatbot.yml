@@ -1,0 +1,59 @@
+name: Chatbot
+
+on:
+  push:
+    branches: [dev, main, hmg, feat/422-chatbot-ready]
+  pull_request:
+    branches: [dev, main, hmg]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chatbot:
+    name: Chatbot / real DB, E2E and image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            apps/chat/requirements.txt
+            apps/chat/requirements-dev.txt
+      - name: Validate dedicated CI contract
+        run: python scripts/ci/chatbot-contract.test.py
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+      - name: Install web deps
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+      - name: Install Python dependencies
+        run: python -m pip install -r apps/chat/requirements-dev.txt
+      - name: Install native media parsers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg poppler-utils util-linux
+      - name: Install Chromium
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Gate chatbot with disposable services (no providers)
+        env:
+          CHATBOT_ARTIFACT_DIR: ${{ runner.temp }}/chatbot-artifacts
+        run: python scripts/ci/chatbot-gate.py
+      - name: Upload chatbot logs, JUnit, traces and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatbot-evidence-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/chatbot-artifacts
+          if-no-files-found: warn
+          retention-days: 14

@@ -10,5 +10,6 @@ router.post('/jobs', controllers.studioVideo.createJob);
 router.get('/jobs', controllers.studioVideo.listActiveJobs);
 router.get('/jobs/:jobId', controllers.studioVideo.getJob);
 router.post('/assets/:assetId/adjust', controllers.studioVideo.adjust);
+router.post('/assets/:assetId/chat-adjust', controllers.studioVideo.chatAdjust);
 
 export default router;

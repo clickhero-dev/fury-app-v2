@@ -36,7 +36,10 @@ function readMetadata(job: Job, fallback: BatchMetadata): BatchMetadata {
   return {
     ...fallback,
     ...value,
-    slots: Array.isArray(value.slots) ? value.slots as Slot[] : fallback.slots,
+    // O job novo é criado com slots: [] para reservar a chave idempotente.
+    // Essa lista vazia não representa um lote concluído: precisa receber os
+    // três slots antes do claim e da primeira chamada ao provedor.
+    slots: Array.isArray(value.slots) && value.slots.length > 0 ? value.slots as Slot[] : fallback.slots,
   };
 }
 

@@ -18,6 +18,7 @@ import {
   smallint,
   date,
   primaryKey,
+  check,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -121,6 +122,8 @@ export const tenants = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
     businessContext: text('business_context'),
+    /** Tenant comercial isolado, servido exclusivamente por datasets determinísticos. */
+    isDemo: boolean('is_demo').notNull().default(false),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // soft-delete: excluído some do admin e perde o acesso
@@ -144,9 +147,12 @@ export const users = pgTable(
     name: varchar('name', { length: 255 }),
     email: varchar('email', { length: 255 }).notNull().unique(),
     passwordHash: text('password_hash'),
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
+    /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+    type: varchar('user_type', { length: 20 }).notNull().default('user'),
     platformRole: varchar('platform_role', { length: 50 })
       .notNull()
       .default('user')
@@ -195,6 +201,7 @@ export const publicTrialMagicLinks = pgTable(
     tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -282,6 +289,24 @@ export const creativeAssets = pgTable(
     rootAssetIdIdx: index('creative_assets_root_asset_id_idx').on(table.rootAssetId),
     activeAssetIdIdx: index('creative_assets_active_asset_id_idx').on(table.activeAssetId),
   })
+);
+
+export const creativeAssetRatings = pgTable(
+  'creative_asset_ratings',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    creativeAssetId: uuid('creative_asset_id').notNull().references(() => creativeAssets.id, { onDelete: 'cascade' }),
+    rating: integer('rating').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    ratingRange: check('creative_asset_ratings_rating_check', sql`${table.rating} BETWEEN 1 AND 5`),
+    tenantUserAssetUnique: unique('creative_asset_ratings_tenant_user_asset_unique').on(table.tenantId, table.userId, table.creativeAssetId),
+    tenantAssetIdx: index('creative_asset_ratings_tenant_asset_idx').on(table.tenantId, table.creativeAssetId),
+  }),
 );
 
 // Client goals table
@@ -618,7 +643,7 @@ export const brandKits = pgTable(
 );
 
 // Biblioteca de imagens do Estúdio, cada uma com tipo
-export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe', 'empresa']);
 
 export const brandKitPhotos = pgTable(
   'brand_kit_photos',
@@ -779,6 +804,7 @@ export const workflowJobs = pgTable(
     workflow: varchar('workflow', { length: 100 }).notNull(),
     status: workflowStatusEnum('status').notNull().default('pending'),
     lockKey: varchar('lock_key', { length: 255 }).notNull(),
+    videoLeaseToken: uuid('video_lease_token'),
     currentStage: varchar('current_stage', { length: 100 }),
     stages: jsonb('stages').notNull().default(sql`'[]'::jsonb`),
     artifacts: jsonb('artifacts').notNull().default(sql`'{}'::jsonb`),
@@ -1403,6 +1429,20 @@ export const adyRbacViewsBlocked = pgTable(
   }),
 );
 
+// Funcionalidades que o plano tira do cliente (blocklist; vazio = tudo liberado)
+export const adyRbacPlanViewsBlocked = pgTable(
+  'ady_rbac_plan_views_blocked',
+  {
+    planId: uuid('plan_id').notNull().references(() => plans.id, { onDelete: 'cascade' }),
+    viewKey: varchar('view_key', { length: 100 }).notNull().references(() => adyRbacViews.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.planId, table.viewKey] }),
+  }),
+);
+
 // Histórico de alterações de RBAC e parceiros
 export const adyRbacAuditLog = pgTable(
   'ady_rbac_audit_log',
@@ -1429,6 +1469,7 @@ export const allTables = {
   metaConnections,
   campaigns,
   creativeAssets,
+  creativeAssetRatings,
   clientGoals,
   furyInsights,
   automationRules,
@@ -1471,5 +1512,6 @@ export const allTables = {
   adyRbacViews,
   adyRbacServicesBlocked,
   adyRbacViewsBlocked,
+  adyRbacPlanViewsBlocked,
   adyRbacAuditLog,
 };

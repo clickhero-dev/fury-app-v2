@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setPolicyAccepted, selectPolicy } from '../../store/slices/authSlice';
@@ -30,11 +30,11 @@ interface PolicyAcceptResponse {
 /**
  * Página de aceite da Política de Uso.
  * Exibe o conteúdo da versão vigente; o checkbox "Li e concordo" habilita o botão.
- * Após o aceite: novo usuário (sem onboarding concluído) vai ao onboarding;
- * usuário antigo volta ao dashboard (history back segura o destino original).
+ * Após o aceite, o usuário segue para o dashboard.
  */
 export function PoliticaDeUsoPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const authed = useAppSelector(selectIsAuthenticated);
@@ -64,13 +64,7 @@ export function PoliticaDeUsoPage() {
       captureEvent('politica_aceita', { version: result.currentVersion });
       dispatch(setPolicyAccepted({ currentVersion: result.currentVersion, accepted: true }));
       void queryClient.invalidateQueries({ queryKey: ['policy-current'] });
-      // Novo usuário → onboarding; antigo → destino original/dashboard.
-      const hasMeta = localStorage.getItem('ady-meta-connected') === 'true';
-      if (!hasMeta) {
-        navigate('/onboarding/conectar-meta', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      navigate(location.state?.initialDestination === '/chat' ? '/chat' : '/dashboard', { replace: true });
     },
     onError: () => {
       setError('Não foi possível registrar o aceite. Tente novamente.');

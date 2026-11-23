@@ -26,134 +26,49 @@ export interface Milestone {
   current?: boolean;
 }
 
-export const roadmap: Milestone[] = [
-  {
-    period: 'Abr 2026',
-    title: 'O começo',
-    status: 'done',
-    summary:
-      'O primeiro passo: criar sua conta com segurança e conectar suas redes sociais para começar a acompanhar seus números.',
-    gains: [
-      'Conta própria, segura e simples de criar',
-      'Conexão com suas redes sociais em poucos passos',
-      'Primeiro painel para ver o desempenho do seu negócio',
-    ],
-    quote: 'Eu crio minha conta, conecto minhas redes e pronto — já estou dentro.',
-  },
-  {
-    period: 'Mai 2026',
-    title: 'A IA chega para criar',
-    status: 'done',
-    summary:
-      'Ensinamos o Ady a criar conteúdo inteligente, para você economizar tempo e não depender de ninguém.',
-    gains: [
-      'Textos prontos para postagens e anúncios, gerados por IA',
-      'Imagens criadas do zero, sem precisar de designer',
-      'Regras de desempenho que agem quando algo não vai bem',
-      'Planos e assinaturas para escolher o que cabe no seu bolso',
-    ],
-    quote: 'Em vez de horas pensando no que postar, peço para o Ady e ele cria.',
-  },
-  {
-    period: 'Jun 2026',
-    title: 'Campanhas de verdade',
-    status: 'done',
-    summary:
-      'O Ady deixou de ser só criação e virou uma ferramenta de gestão completa para o seu negócio.',
-    gains: [
-      'Criar campanhas em poucos cliques, até pelo WhatsApp',
-      'Ver com clareza o que está funcionando, com gráficos simples',
-      'Sua identidade visual (logo, cores e tom de voz) aplicada em tudo',
-      'Um painel bonito com tudo em um só lugar',
-    ],
-    quote: 'Agora vejo claramente o que dá resultado — e o visual é do meu jeito.',
-  },
-  {
-    period: 'Jul 2026',
-    title: 'O Ady que trabalha sozinho',
-    status: 'done',
-    summary:
-      'O Ady aprendeu a planejar e executar por conta própria, cuidando do conteúdo do início ao fim.',
-    gains: [
-      'Planejador que monta o calendário inteiro do seu conteúdo',
-      'Gestão completa para quem vende para várias marcas ou clientes',
-      'Painel de controle total para donos de negócio',
-      'Um aviso claro caso seu plano esteja ativo ou vencido',
-    ],
-    quote: 'Eu defino o que quero e o Ady monta meu mês de conteúdo.',
-  },
-  {
-    period: 'Ago 2026',
-    title: 'Publicar sozinho + cara nova',
-    status: 'active',
-    current: true,
-    summary:
-      'O Ady aprendeu a publicar no lugar certo e ganhou uma identidade nova: o Ady moderno, escuro e elegante.',
-    gains: [
-      'Agendar e publicar automaticamente no Instagram',
-      'Nova cara do produto, agora com o nome Ady de vez',
-      'Visual moderno e consistente em toda a plataforma',
-    ],
-    quote: 'Eu só aprovo — o Ady agenda e publica por mim.',
-  },
-  {
-    period: 'Set 2026',
-    title: 'O Ady chega ao Google',
-    status: 'planned',
-    summary:
-      'O Ady vai além do Instagram e te coloca também no Google, para muito mais gente encontrar você.',
-    gains: [
-      'Criar anúncios no Google direto pelo Ady',
-      'Aparecer na pesquisa quando alguém procurar o seu negócio',
-      'Mais pontos de contato: Instagram e agora Google',
-    ],
-    quote: 'Não é só mais um canal — é o cliente me achar na hora em que procura.',
-  },
-  {
-    period: 'Out 2026',
-    title: 'O Ady no WhatsApp',
-    status: 'planned',
-    summary:
-      'O Ady vira um parceiro que você conversa: pede qualquer coisa pelo WhatsApp e ele resolve.',
-    gains: [
-      'Pedir textos, criativos e agendar campanhas por conversa',
-      'Acesso a todas as funções do Ady pelo chat, sem navegar nas telas',
-      'Um atendimento que funciona como a gente: você pede, ele entende e faz',
-    ],
-    quote: 'Em vez de mexer em cada botão, mando mensagem no WhatsApp e o Ady resolve.',
-  },
-  {
-    period: 'Nov 2026',
-    title: 'O Ady passa a te conhecer',
-    status: 'planned',
-    summary:
-      'O Ady estuda o seu negócio para dar sugestões cada vez melhores e mais certeiras.',
-    gains: [
-      'Análise de tudo que você já postou para entender seu momento',
-      'Estudo do seu negócio com base nos dados que já tem',
-      'Sugestões de IA mais no seu contexto — e cada vez mais certas',
-    ],
-    quote: 'Quanto mais o Ady me conhece, mais ele acerta naquilo que sugere.',
-  },
-];
+/**
+ * Não há ainda uma fonte de verdade de produto aprovada para publicar marcos.
+ * O estado vazio é intencional: evita transformar hipóteses em promessas públicas.
+ */
+export const roadmap: Milestone[] = [];
 
-export const summaryCards = [
-  {
-    label: 'Já entregue',
-    value: 5,
-    status: 'done' as const,
-    description: 'capítulos concluídos na trajetória do Ady',
-  },
-  {
-    label: 'Em andamento',
-    value: 1,
-    status: 'active' as const,
-    description: 'capítulo atual: publicar sozinho + cara nova',
-  },
-  {
-    label: 'A caminho',
-    value: 3,
-    status: 'planned' as const,
-    description: 'Google, WhatsApp e conhecer você melhor',
-  },
-];
+export interface RoadmapSummary {
+  done: number;
+  active: number;
+  planned: number;
+}
+
+export function getRoadmapSummary(items: Milestone[]): RoadmapSummary {
+  return items.reduce<RoadmapSummary>(
+    (summary, item) => ({ ...summary, [item.status]: summary[item.status] + 1 }),
+    { done: 0, active: 0, planned: 0 },
+  );
+}
+
+export function validateRoadmap(items: Milestone[]): string[] {
+  const errors: string[] = [];
+  const summary = getRoadmapSummary(items);
+  const currentCount = items.filter((item) => item.current).length;
+  const duplicateKeys = new Set<string>();
+  const hasDuplicate = items.some((item) => {
+    const key = `${item.period}:${item.title}`;
+    if (duplicateKeys.has(key)) return true;
+    duplicateKeys.add(key);
+    return false;
+  });
+
+  if (summary.active > 1) errors.push('O roadmap pode ter no máximo um marco em andamento.');
+  if (currentCount !== summary.active) errors.push('O marco atual deve ser o único marco em andamento.');
+  if (hasDuplicate) errors.push('Os marcos do roadmap não podem ser duplicados.');
+
+  return errors;
+}
+
+export const summaryCards = (items: Milestone[] = roadmap) => {
+  const summary = getRoadmapSummary(items);
+  return [
+    { label: 'Já entregue', value: summary.done, status: 'done' as const, description: `${summary.done} capítulo${summary.done === 1 ? '' : 's'} concluído${summary.done === 1 ? '' : 's'} na trajetória do Ady` },
+    { label: 'Em andamento', value: summary.active, status: 'active' as const, description: `${summary.active} capítulo${summary.active === 1 ? '' : 's'} atual${summary.active === 1 ? '' : 'is'}` },
+    { label: 'A caminho', value: summary.planned, status: 'planned' as const, description: `${summary.planned} capítulo${summary.planned === 1 ? '' : 's'} a caminho` },
+  ];
+};

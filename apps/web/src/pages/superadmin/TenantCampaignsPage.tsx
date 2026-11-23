@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { TrendingUp, Image } from "lucide-react";
 import api from "@/lib/api";
+import { ListPagination, usePagination } from "./ListPagination";
 
 interface Campaign {
   id: string;
@@ -27,6 +28,7 @@ export function TenantCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [creatives, setCreatives] = useState<CreativeAsset[]>([]);
   const [loading, setLoading] = useState(true);
+  const paged = usePagination(campaigns);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -74,7 +76,7 @@ export function TenantCampaignsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-admin-border">
-                {campaigns.map((c) => {
+                {paged.pageItems.map((c) => {
                   const m = (c.metrics ?? {}) as Record<string, unknown>;
                   const metricsStr = Object.keys(m).length
                     ? Object.entries(m)
@@ -114,6 +116,7 @@ export function TenantCampaignsPage() {
                 })}
               </tbody>
             </table>
+            <ListPagination page={paged.page} totalPages={paged.totalPages} total={campaigns.length} onChange={paged.setPage} />
           </div>
         )}
       </div>

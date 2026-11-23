@@ -26,6 +26,21 @@
  * Quando o sistema conclui a abertura
  * Então informa uma falha segura e preserva a URL da tarefa criada
  *
+ * Cenário: ler status configurados
+ * Dado que a lista Chamados possui status abertos e fechados
+ * Quando os status são consultados
+ * Então todos são normalizados sem hardcode
+ *
+ * Cenário: alterar status com verificação de concorrência
+ * Dado que a tarefa ainda está na lista e no status esperado
+ * Quando o status é alterado
+ * Então relê a tarefa antes do PUT e envia somente o novo status
+ *
+ * Cenário: impedir alteração após conflito
+ * Dado que a tarefa mudou de status externamente
+ * Quando o status é alterado
+ * Então retorna conflito sem enviar PUT
+
  * Cenário: aprovar ticket em homologação
  * Dado que a tarefa está em HOMOLOGAÇÃO
  * Quando o superadmin aprova
@@ -40,6 +55,7 @@
  * Dado que o ticket já mudou de status
  * Quando o superadmin tenta revisá-lo
  * Então o ClickUp não recebe atualização
+
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClickUpTicketsClient, ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
@@ -65,6 +81,15 @@ describe('ClickUpTicketsClient', () => {
   afterEach(() => {
     process.env = { ...savedEnv };
     vi.unstubAllGlobals();
+  });
+
+  it('aceita CLICKUP_API_KEY como credencial legada para listar status', async () => {
+    delete process.env.CLICKUP_API_TOKEN;
+    process.env.CLICKUP_API_KEY = 'clickup-legacy-key';
+    const fetchMock = mockFetchOnce(200, { statuses: [{ status: 'triagem', type: 'custom' }] });
+
+    await expect(new ClickUpTicketsClient().listStatuses()).resolves.toEqual([{ value: 'triagem', label: 'triagem', type: 'custom' }]);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: 'clickup-legacy-key' });
   });
 
   it('cria a tarefa na lista Chamados com e-mail, nível e prioridade', async () => {
@@ -231,6 +256,45 @@ describe('ClickUpTicketsClient', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/member');
   });
 
+  it('lista os status reais da lista, incluindo status fechado', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      statuses: [
+        { status: 'triagem', type: 'open', color: '#00aaff' },
+        { status: 'concluído', type: 'closed', color: '#6bc950' },
+      ],
+    });
+
+    await expect(new ClickUpTicketsClient().listStatuses()).resolves.toEqual([
+      { value: 'triagem', label: 'triagem', type: 'open', color: '#00aaff' },
+      { value: 'concluído', label: 'concluído', type: 'closed', color: '#6bc950' },
+    ]);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435');
+  });
+
+  it('relê a tarefa e envia somente o novo status', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'triagem', type: 'open' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'review_spec', type: 'open' } }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().updateTicketStatus('task-1', 'triagem', 'review_spec')).resolves.toEqual({
+      id: 'task-1', listId: '901717485435', status: 'review_spec', statusType: 'open',
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/task/task-1');
+    expect(String(fetchMock.mock.calls[1][0])).toBe('https://api.clickup.com/api/v2/task/task-1');
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)).toEqual({ status: 'review_spec' });
+  });
+
+  it('retorna conflito e não envia PUT quando o status mudou', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'task-1', list: { id: '901717485435' }, status: { status: 'implement', type: 'open' },
+    });
+    const error = await new ClickUpTicketsClient().updateTicketStatus('task-1', 'triagem', 'review_spec').catch((reason) => reason);
+
+    expect(error).toMatchObject({ code: 'CLICKUP_STATUS_CONFLICT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('aprova ticket em homologação e atualiza o status sem alterar descrição', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ description: 'Descrição original', status: { status: 'HOMOLOGAÇÃO' } }) } as Response)
@@ -295,4 +359,5 @@ describe('ClickUpTicketsClient', () => {
       status: 'Implement',
     });
   });
+
 });

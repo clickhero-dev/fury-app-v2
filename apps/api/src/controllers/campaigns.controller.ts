@@ -5,6 +5,7 @@ import { uploadAsset } from '../services/storage/storage.service.js';
 import { CampaignsService, campaignsService } from '../services/campaigns/campaigns.service.js';
 import { CampaignRepository } from '../repository/campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 import {
   getCampaignsCache,
   setCampaignsCache,
@@ -74,7 +75,7 @@ const wizardCreativeItemSchema = z.object({
 
 const createWizardSchema = z
   .object({
-    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
+    objective: z.enum(['visits', 'followers', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
 
     creatives: z.array(wizardCreativeItemSchema).min(1).optional(),
     // campos únicos legados — mantidos para clientes antigos
@@ -180,6 +181,13 @@ const createWizardSchema = z
       message: 'Informe o número de WhatsApp que receberá os clientes após o formulário.',
       path: ['whatsapp_phone_number'],
     }
+  )
+  .refine(
+    (data) => data.objective !== 'followers' || (Boolean(data.instagram_user_id) && Boolean(data.instagram_username)),
+    {
+      message: 'Conecte uma conta do Instagram para criar uma campanha de aumento de seguidores.',
+      path: ['instagram_user_id'],
+    }
   );
 
 type WizardCreativeItem = z.infer<typeof wizardCreativeItemSchema>;
@@ -238,10 +246,12 @@ function videoScriptFromNotes(notes: string | null | undefined): string | null {
 const HEADLINE_MAX_LENGTH = 40;
 const PRIMARY_TEXT_MAX_LENGTH = 125;
 
-// Nemotron (free) primeiro; se falhar, cai pro Gemini 2.5 Flash Lite (pago).
+// O Gemini Flash é o modelo de visão principal; o Nemotron VL fica como
+// fallback de provedor. Nenhum texto genérico deve ser devolvido quando ambos
+// falham, porque isso mascara que a imagem não foi analisada.
 const SUGGESTION_MODELS: { id: string; maxAttempts: number }[] = [
-  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 3 },
-  { id: 'google/gemini-2.5-flash-lite', maxAttempts: 2 },
+  { id: 'google/gemini-2.5-flash', maxAttempts: 2 },
+  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 2 },
 ];
 
 interface AdCopySuggestion {
@@ -395,6 +405,7 @@ export class CampaignsController {
       const campaign = await this.campaignsService.createCampaign({
         tenantId,
         ...data,
+        enforceBrl: Boolean(getDelegatedUser(req)),
       });
 
       await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
@@ -597,6 +608,101 @@ export class CampaignsController {
     } catch (err) {
       next(err);
     }
+  };
+
+  getChatCampaignAds = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      res.json(await this.campaignsService.getChatCampaignAds({ tenantId: req.tenant!.tenantId, campaignId }));
+    } catch (err) { next(err); }
+  };
+
+  getChatAdAssets = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      res.json(await this.campaignsService.getChatAdAssets({ tenantId: req.tenant!.tenantId, campaignId }));
+    } catch (err) { next(err); }
+  };
+
+  getChatAvailableAdAssets = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      res.json(await this.campaignsService.getChatAvailableAdAssets({ tenantId: req.tenant!.tenantId, campaignId }));
+    } catch (err) { next(err); }
+  };
+
+  chatAdAccount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adAccountId=z.string().regex(/^act_\d{1,32}$/).parse(req.params.id);
+      res.json({success:true,data:await this.campaignsService.getChatAdAccount({tenantId:req.tenant!.tenantId,adAccountId})});
+    } catch (err) { next(err); }
+  };
+
+  chatSnapshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      res.json({ success: true, data: await this.campaignsService.getChatCampaignSnapshot({ tenantId: req.tenant!.tenantId, campaignId }) });
+    } catch (err) { next(err); }
+  };
+
+  chatUpdate = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      const version = z.string().regex(/^[a-f0-9]{64}$/);
+      const action = z.discriminatedUnion('action', [
+        z.object({ action: z.literal('pause'), version }).strict(),
+        z.object({ action: z.literal('rename'), version, name: z.string().trim().min(3).max(255) }).strict(),
+        z.object({ action: z.literal('budget'), version, dailyBudget: z.number().int().min(500) }).strict(),
+      ]).parse(req.body);
+      const data = await this.campaignsService.updateChatCampaign({ tenantId: req.tenant!.tenantId, campaignId, ...action });
+      await invalidateCampaignsCache(req.tenant!.tenantId);
+      await invalidateHttpCache(req.tenant!.tenantId, CACHE_PATHS_METRICS_GOALS);
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  };
+
+  chatAdSnapshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      const adId = z.string().regex(/^\d{1,32}$/).parse(req.params.adId);
+      const { creativeId } = z.object({ creativeId: z.string().regex(/^\d{1,32}$/).optional() }).strict().parse(req.query);
+      res.json({ success: true, data: await this.campaignsService.getChatAdSnapshot({ tenantId: req.tenant!.tenantId, campaignId, adId, creativeId }) });
+    } catch (err) { next(err); }
+  };
+
+  chatAdUpdate = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      const adId = z.string().regex(/^\d{1,32}$/).parse(req.params.adId);
+      const version = z.string().regex(/^[a-f0-9]{64}$/);
+      const action = z.discriminatedUnion('action', [
+        z.object({ action: z.literal('pause'), version }).strict(),
+        z.object({ action: z.literal('rename'), version, name: z.string().trim().min(3).max(255) }).strict(),
+        z.object({ action: z.literal('duplicate'), version, name: z.string().trim().min(3).max(255) }).strict(),
+        z.object({ action: z.literal('creative'), version, creativeId: z.string().regex(/^\d{1,32}$/) }).strict(),
+      ]).parse(req.body);
+      const data = await this.campaignsService.updateChatAd({ tenantId: req.tenant!.tenantId, campaignId, adId, ...action });
+      await invalidateCampaignsCache(req.tenant!.tenantId);
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  };
+
+  chatAdCreationSnapshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      const { adsetId, creativeId } = z.object({ adsetId: z.string().regex(/^\d{1,32}$/), creativeId: z.string().regex(/^\d{1,32}$/) }).strict().parse(req.query);
+      res.json({ success: true, data: await this.campaignsService.getChatAdCreationSnapshot({ tenantId: req.tenant!.tenantId, campaignId, adsetId, creativeId }) });
+    } catch (err) { next(err); }
+  };
+
+  chatAdCreate = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const campaignId = z.string().uuid().parse(req.params.id);
+      const body = z.object({ version: z.string().regex(/^[a-f0-9]{64}$/), name: z.string().trim().min(3).max(255), adsetId: z.string().regex(/^\d{1,32}$/), creativeId: z.string().regex(/^\d{1,32}$/) }).strict().parse(req.body);
+      const data = await this.campaignsService.createChatAd({ tenantId: req.tenant!.tenantId, campaignId, ...body });
+      await invalidateCampaignsCache(req.tenant!.tenantId);
+      res.status(201).json({ success: true, data });
+    } catch (err) { next(err); }
   };
 
   updateCampaignStatus = async (req: Request, res: Response, next: NextFunction) => {
@@ -1119,10 +1225,15 @@ Regras (OBRIGATÓRIO respeitar, a resposta será rejeitada se não respeitar):
         imageUrl,
       );
 
-      const headline = suggestion?.headline ?? 'Promoção imperdível';
-      const primaryText = suggestion?.primaryText ?? 'Aproveite esta oferta especial por tempo limitado.';
+      if (!suggestion) {
+        throw new AppError(
+          503,
+          'AD_COPY_SUGGESTION_UNAVAILABLE',
+          'Não foi possível analisar o criativo agora. Tente novamente em instantes.',
+        );
+      }
 
-      res.json({ success: true, data: { headline, primaryText }, timestamp: new Date().toISOString() });
+      res.json({ success: true, data: suggestion, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }

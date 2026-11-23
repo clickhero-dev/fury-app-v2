@@ -45,6 +45,7 @@ async function createDemoUser() {
         email,
         passwordHash,
         role: 'demo',
+        type: 'demo',
         name: 'Fashion Demo',
       })
       .returning();

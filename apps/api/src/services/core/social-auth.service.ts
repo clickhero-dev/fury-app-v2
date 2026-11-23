@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db as dbInstance, tenants, users, subscriptions, type Database } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
-import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
+import { generateAccessToken, generateRefreshToken, SESSION_TTL_SECONDS } from '../../lib/jwt.js';
 import { getGoogleOAuthConfig } from '../../lib/google-oauth.js';
 import {
   getFacebookOAuthConfig,
@@ -22,7 +22,6 @@ const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https
 // acesso liberado nesse app (é a mesma do fluxo "Conectar conta").
 // Num app tipo Consumer bastaria `public_profile,email` — daí o override por env.
 const DEFAULT_FACEBOOK_LOGIN_SCOPE = 'public_profile,email,pages_show_list';
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
@@ -31,7 +30,7 @@ async function provisionSocialTrial(tx: any, tenantId: string): Promise<void> {
   // relational query API; real transactions always expose `query`.
   if (!tx.query?.plans || !tx.query?.subscriptions) return;
   await provisionTrialSubscription({
-    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { and, eq, isNull }: any) => and(eq(plans.technicalKey, TRIAL_PLAN_KEY), isNull(plans.partnerId)) })) ?? null,
     querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, id) })) ?? null,
     insertSubscription: async (values) => {
       const [subscription] = await tx.insert(subscriptions).values(values).returning({ id: subscriptions.id });
@@ -46,6 +45,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    type: user.type === 'demo' || user.role === 'demo' ? 'demo' : 'user',
     platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
@@ -70,7 +70,7 @@ async function storeRefreshTokenHash(userId: string, refreshToken: string): Prom
   const { getRedis } = await import('../../lib/redis.js');
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  await redis.setex(`refresh:${userId}`, REFRESH_TOKEN_TTL, hash);
+  await redis.setex(`refresh:${userId}`, SESSION_TTL_SECONDS, hash);
 }
 
 async function revokeRefreshToken(userId: string): Promise<void> {

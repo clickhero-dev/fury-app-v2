@@ -20,8 +20,17 @@ export class PublicTrialController {
         }
       }
       const payload = normalizePublicTrialSignup(req.body);
-      await this.service.signup(payload);
-      res.status(202).json({ message: 'Se for possível, enviaremos um link de acesso.' });
+      const result = await this.service.signup(payload);
+      if (!result.created) {
+        // Contrato explícito do integrador. Não inclua nome, tenant ou qualquer
+        // outro dado que permita enumerar/inspecionar a conta existente.
+        return res.status(409).json({ erro: 'EMAIL_JA_CADASTRADO' });
+      }
+      res.status(201).json({
+        created: true,
+        redirect_url: result.redirectUrl,
+        message: 'Cadastro criado com sucesso.',
+      });
     } catch (error) { next(error); }
   };
 

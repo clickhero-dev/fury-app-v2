@@ -74,6 +74,27 @@ const RETURN_URLS: Record<OAuthContext, string> = {
   settings: '/configuracoes/integracoes?connected=true',
 };
 
+const META_TOKEN_ERROR_MESSAGE = 'Token Meta inválido ou expirado.';
+
+/**
+ * Normaliza somente erros já identificados pela integração Meta.
+ * A seleção usa tanto clientes que lançam AppError quanto metaApiCall, que
+ * anexa metaCode a um Error simples; não podemos deixar o segundo virar 500.
+ */
+function normalizeAssetSelectionMetaError(error: unknown): AppError | null {
+  if (error instanceof AppError) return error;
+
+  const candidate = error as { metaCode?: number | string; code?: string; statusCode?: number } | null;
+  if (candidate?.metaCode === 190 || candidate?.metaCode === '190') {
+    return new AppError(401, 'META_TOKEN_EXPIRED', META_TOKEN_ERROR_MESSAGE);
+  }
+  if (candidate?.code === 'META_PERMISSION_DENIED' && candidate.statusCode === 403) {
+    return new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta ou peça acesso ao administrador.');
+  }
+
+  return null;
+}
+
 export interface StoredMetaConnection {
   id: string;
   tenantId: string;
@@ -508,6 +529,8 @@ export class MetaService {
         this.resolveAdAccountsByBusiness(tenantId, selection.businessIds),
       ]);
     } catch (error) {
+      const normalizedError = normalizeAssetSelectionMetaError(error);
+      if (normalizedError) throw normalizedError;
       captureServerEvent('meta_selection_validation_failed', { tenantId, reason: 'provider_unavailable' });
       console.error('[meta] save-selection: validação de ativos indisponível', error instanceof Error ? error.name : 'unknown');
       throw new AppError(502, 'META_VALIDATION_UNAVAILABLE', 'Não foi possível validar os ativos na Meta. Tente novamente.');
@@ -567,7 +590,11 @@ export class MetaService {
 
   async getTenantBusinesses(tenantId: string): Promise<MetaBusiness[]> {
     const accessToken = await this.getTenantAccessToken(tenantId);
-    return this.deps.metaApi.getUserBusinesses(accessToken);
+    try {
+      return await this.deps.metaApi.getUserBusinesses(accessToken);
+    } catch (error) {
+      throw normalizeAssetSelectionMetaError(error) ?? error;
+    }
   }
 
   getTenantPagesByBusiness(tenantId: string, businessIds: string[]): Promise<MetaOwnedPage[]> {
@@ -577,9 +604,14 @@ export class MetaService {
   private async resolvePagesByBusiness(tenantId: string, businessIds: string[]): Promise<MetaOwnedPage[]> {
     const accessToken = await this.getTenantAccessToken(tenantId);
 
-    const pagesByBusiness = await Promise.all(
-      businessIds.map((businessId) => this.deps.metaApi.getBusinessOwnedPages(businessId, accessToken))
-    );
+    let pagesByBusiness: MetaOwnedPage[][];
+    try {
+      pagesByBusiness = await Promise.all(
+        businessIds.map((businessId) => this.deps.metaApi.getBusinessOwnedPages(businessId, accessToken))
+      );
+    } catch (error) {
+      throw normalizeAssetSelectionMetaError(error) ?? error;
+    }
 
     const seen = new Set<string>();
     const pages: MetaOwnedPage[] = [];
@@ -608,17 +640,22 @@ export class MetaService {
   ): Promise<TenantBusinessAdAccount[]> {
     const accessToken = await this.getTenantAccessToken(tenantId);
 
-    const accountsByBusiness = await Promise.all(
-      businessIds.map(async (businessId) => {
-        const accounts = await this.deps.metaApi.getBusinessAdAccounts(businessId, accessToken);
-        return accounts.map((account) => ({
-          adAccountId: account.id,
-          name: account.name,
-          status: account.account_status,
-          businessId,
-        }));
-      })
-    );
+    let accountsByBusiness: TenantBusinessAdAccount[][];
+    try {
+      accountsByBusiness = await Promise.all(
+        businessIds.map(async (businessId) => {
+          const accounts = await this.deps.metaApi.getBusinessAdAccounts(businessId, accessToken);
+          return accounts.map((account) => ({
+            adAccountId: account.id,
+            name: account.name,
+            status: account.account_status,
+            businessId,
+          }));
+        })
+      );
+    } catch (error) {
+      throw normalizeAssetSelectionMetaError(error) ?? error;
+    }
 
     const seen = new Set<string>();
     const accounts: TenantBusinessAdAccount[] = [];
@@ -673,7 +710,12 @@ export class MetaService {
    */
   async getTenantFacebookPages(tenantId: string): Promise<MetaFacebookPage[]> {
     const accessToken = await this.getTenantAccessToken(tenantId);
-    const pages = await this.deps.metaApi.getUserFacebookPages(accessToken, { includeWhatsApp: true });
+    let pages: MetaFacebookPage[];
+    try {
+      pages = await this.deps.metaApi.getUserFacebookPages(accessToken, { includeWhatsApp: true });
+    } catch (error) {
+      throw normalizeAssetSelectionMetaError(error) ?? error;
+    }
 
     const selection = await this.getTenantAssetSelection(tenantId);
     if (selection && selection.pageIds.length > 0) {
@@ -721,10 +763,16 @@ export class MetaService {
     const selectedWhatsappNumberIds = (connection.selectedWhatsappNumberIds as string[] | null) ?? [];
     const selectedBusinessIds = (connection.selectedBusinessIds as string[] | null) ?? [];
 
-    const [allPages, allBusinesses] = await Promise.all([
-      this.deps.metaApi.getUserFacebookPages(accessToken, { includeWhatsApp: true }),
-      selectedBusinessIds.length > 0 ? this.deps.metaApi.getUserBusinesses(accessToken) : Promise.resolve([]),
-    ]);
+    let allPages: MetaFacebookPage[];
+    let allBusinesses: MetaBusiness[];
+    try {
+      [allPages, allBusinesses] = await Promise.all([
+        this.deps.metaApi.getUserFacebookPages(accessToken, { includeWhatsApp: true }),
+        selectedBusinessIds.length > 0 ? this.deps.metaApi.getUserBusinesses(accessToken) : Promise.resolve([]),
+      ]);
+    } catch (error) {
+      throw normalizeAssetSelectionMetaError(error) ?? error;
+    }
 
     const pages: ResolvedAssetSelectionPage[] = allPages
       .filter((page) => selectedPageIds.length === 0 || selectedPageIds.includes(page.pageId))

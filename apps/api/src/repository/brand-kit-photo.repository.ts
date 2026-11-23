@@ -26,6 +26,13 @@ export class BrandKitPhotoRepository extends TenantScopedRepository {
     });
   }
 
+  async listChat(kind: BrandKitPhotoKind | undefined, page: number, limit: number): Promise<BrandKitPhoto[]> {
+    return this.db.query.brandKitPhotos.findMany({
+      where: kind ? and(this.active(),eq(brandKitPhotos.kind,kind)) : this.active(),
+      orderBy:[desc(brandKitPhotos.createdAt),desc(brandKitPhotos.id)],limit:limit+1,offset:(page-1)*limit,
+    });
+  }
+
   async findById(id: string): Promise<BrandKitPhoto | undefined> {
     return this.db.query.brandKitPhotos.findFirst({
       where: and(eq(brandKitPhotos.id, id), this.active()),

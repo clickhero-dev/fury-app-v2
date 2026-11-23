@@ -13,8 +13,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PARTNER_ROLES = ["user_partner"];
 const DEFAULT_ROLES = ["user", "user_partner"];
 
-// telas do cliente (o admin fica de fora)
-const EDITABLE_VIEWS = RBAC_VIEWS.filter((v) => !v.key.startsWith("admin."));
+// telas do cliente (o admin e as desativadas ficam de fora)
+const EDITABLE_VIEWS = RBAC_VIEWS.filter((v) => !v.key.startsWith("admin.") && !v.disabled);
 
 const setPermissionSchema = z.object({
   viewKey: z.string().max(100),

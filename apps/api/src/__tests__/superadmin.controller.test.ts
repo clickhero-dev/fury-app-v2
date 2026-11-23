@@ -39,6 +39,8 @@ function mockRepo() {
     hasAccessibleSubscription: vi.fn(),
     deleteTenant: vi.fn(),
     findTenantBySlug: vi.fn(),
+    findUserByEmailCaseInsensitive: vi.fn(),
+    createTenantWithUser: vi.fn(),
     listPlans: vi.fn(),
     listSubscriberCountsByPlan: vi.fn(),
     createPlan: vi.fn(),
@@ -306,6 +308,59 @@ describe("SuperAdminController — erros e validação", () => {
     expect(repo.createClientGoal).not.toHaveBeenCalled();
     expect(repo.updateClientGoal).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: "ZodError" }));
+  });
+});
+
+describe("SuperAdminController — setup tenant", () => {
+  it("cria tenant e usuário com o resultado atômico do repository", async () => {
+    const repo = mockRepo();
+    repo.findTenantBySlug.mockResolvedValue(null);
+    repo.findUserByEmailCaseInsensitive.mockResolvedValue(null);
+    repo.createTenantWithUser.mockResolvedValue({
+      status: "created",
+      tenant: { id: "t-1", name: "Cliente", slug: "cliente" },
+      user: { id: "u-1", email: "owner@example.com", passwordHash: "hash", role: "owner" },
+    });
+    const c = new SuperAdminController(repo as any);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await c.setupTenant({ body: {
+      name: "Cliente", userName: "Owner", userEmail: "owner@example.com", userPassword: "SenhaSegura1!",
+    } } as any, res, next);
+
+    expect(repo.createTenantWithUser).toHaveBeenCalledWith(expect.objectContaining({ slug: "cliente" }));
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ user: expect.not.objectContaining({ passwordHash: expect.anything() }) }) }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("transforma conflito do repository em 409 sem expor o registro existente", async () => {
+    const repo = mockRepo();
+    repo.findTenantBySlug.mockResolvedValue(null);
+    repo.findUserByEmailCaseInsensitive.mockResolvedValue(null);
+    repo.createTenantWithUser.mockResolvedValue({ status: "conflict", code: "EMAIL_EXISTS" });
+    const c = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await c.setupTenant({ body: {
+      name: "Cliente", userName: "Owner", userEmail: "owner@example.com", userPassword: "SenhaSegura1!",
+    } } as any, mockRes(), next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 409, code: "EMAIL_EXISTS" }));
+  });
+
+  it("rejeita slug gerado vazio antes de qualquer escrita", async () => {
+    const repo = mockRepo();
+    const c = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await c.setupTenant({ body: {
+      name: "!!!", userName: "Owner", userEmail: "owner@example.com", userPassword: "SenhaSegura1!",
+    } } as any, mockRes(), next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+    expect(repo.createTenantWithUser).not.toHaveBeenCalled();
   });
 });
 describe("SuperAdminController — usuários do cliente e aba Público", () => {

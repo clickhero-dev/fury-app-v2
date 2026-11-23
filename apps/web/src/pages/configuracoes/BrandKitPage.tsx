@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppLayout, PageHeader, ErrorBoundary, Button, Card, CardContent, CardHeader, CardTitle } from '@/components';
+import { AppLayout, ErrorBoundary, Button, Card, CardContent, CardHeader, CardTitle } from '@/components';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDeletePhoto } from '@/hooks/useBrandKit';
 // OCULTO (feature em teste) — volta no unhide
@@ -7,7 +7,6 @@ import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDelete
 import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
 import { Upload, X, Trash2, Image as ImageIcon, ChevronDown, Check } from 'lucide-react';
-import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 
 const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string }[] = [
   { value: 'professional', label: 'Profissional', description: 'Formal, técnico, confiável' },
@@ -17,6 +16,7 @@ const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string
 ];
 
 const MAX_PHOTOS = 20;
+const SHOW_PHOTO_LIBRARY = false;
 
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
@@ -42,7 +42,7 @@ export function BrandKitPage() {
 }
 
 export function BrandKitContent() {
-  const { brandKit, isLoading } = useBrandKit();
+  const { brandKit, isLoading, isError, refetch } = useBrandKit();
   const saveBrandKit = useSaveBrandKit();
   const uploadLogo = useUploadLogo();
   const uploadPhotos = useUploadPhotos();
@@ -175,6 +175,17 @@ export function BrandKitContent() {
         <Card>
           <CardContent>
             <p className="text-sm text-text-secondary">Carregando...</p>
+          </CardContent>
+        </Card>
+      ) : isError ? (
+        <Card>
+          <CardContent className="space-y-3">
+            <p role="alert" className="text-sm text-error">
+              Não foi possível carregar o Brand Kit. Seus dados não foram alterados.
+            </p>
+            <Button type="button" variant="outline" onClick={() => void refetch()}>
+              Tentar novamente
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -362,7 +373,7 @@ export function BrandKitContent() {
           {/* <WhatsappVerificationCard whatsappNumber={phoneValid ? digitsOnly : null} /> */}
 
           {/* ponytail: Biblioteca de Fotos oculta — reactivar quando Estúdio precisar de upload dedicado */}
-          {false && (
+          {SHOW_PHOTO_LIBRARY && (
             <Card>
               <CardHeader>
                 <CardTitle>Biblioteca de Fotos</CardTitle>

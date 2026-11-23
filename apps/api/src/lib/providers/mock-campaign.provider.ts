@@ -2,6 +2,12 @@ import type { IMetaCampaignProvider } from './meta-campaign.provider.js';
 import type { MetaPageAccess } from '../meta-api.js';
 
 export class MockMetaCampaignProvider implements IMetaCampaignProvider {
+  async listChatAdSets(_id: string, _token: string): Promise<Array<{id:string;name?:string}>> { return []; }
+  async listChatAdCreatives(_id: string, _token: string): Promise<Array<{id:string;name?:string}>> { return []; }
+  async getAdSet(_id: string, _token: string): Promise<Record<string, unknown>> { return {}; }
+  async getAdCreative(_id: string, _token: string): Promise<Record<string, unknown>> { return {}; }
+  async getAd(_adId: string, _accessToken: string): Promise<Record<string, unknown>> { return {}; }
+  async updateAd(_adId: string, _accessToken: string, _body: Record<string, unknown>): Promise<void> {}
   createdCampaigns: any[] = [];
   createdAdSets: any[] = [];
   createdAdCreatives: any[] = [];
@@ -37,6 +43,8 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
     this.createdCampaigns.push(body);
     return { id };
   }
+
+  async getAdAccountCurrency(_adAccountId: string, _accessToken: string): Promise<string | null> { return 'BRL'; }
 
   async updateCampaign(campaignId: string, accessToken: string, body: any) {
     this.updatedCampaigns.set(campaignId, body);

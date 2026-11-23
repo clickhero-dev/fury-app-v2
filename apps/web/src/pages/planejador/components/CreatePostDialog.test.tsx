@@ -81,7 +81,7 @@ describe('CreatePostDialog — resposta de /studio/assets', () => {
 
     Cenário: gerar a partir de tema
       Dado um tema escrito no campo Legenda
-      Quando a pessoa clica em Gerar legenda com IA
+      Quando a pessoa clica em Gerar legenda automática
       Então a sugestão preenche a textarea e continua editável sem salvar o post
 
     Cenário: ausência de contexto
@@ -95,9 +95,9 @@ describe('CreatePostDialog — resposta de /studio/assets', () => {
     renderDialog();
 
     const textarea = screen.getByPlaceholderText('Escreva a legenda do post...');
-    expect(screen.getByRole('button', { name: /Gerar legenda com IA/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Gerar legenda automática/i })).toBeDisabled();
     fireEvent.change(textarea, { target: { value: 'Promoção de verão' } });
-    fireEvent.click(screen.getByRole('button', { name: /Gerar legenda com IA/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Gerar legenda automática/i }));
 
     await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/planner/posts/suggest-caption', { context: 'Promoção de verão' }));
     expect(textarea).toHaveValue('Sugestão pronta.');

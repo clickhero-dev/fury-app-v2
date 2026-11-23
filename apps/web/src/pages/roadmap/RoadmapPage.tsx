@@ -54,6 +54,7 @@ function MilestoneRow({ ms, index }: { ms: Milestone; index: number }) {
   const [open, setOpen] = useState(ms.current ?? ms.status === 'active');
   const Icon = phaseIcons[index] ?? Sparkles;
   const s = statusStyles[ms.status];
+  const panelId = `roadmap-milestone-${index}`;
 
   return (
     <li className="relative pl-14 pb-8 last:pb-0">
@@ -78,7 +79,9 @@ function MilestoneRow({ ms, index }: { ms: Milestone; index: number }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="ady-btn w-full flex items-center justify-between gap-4 px-5 py-4 sm:px-6 sm:py-4.5 text-left rounded-2xl hover:bg-[#F8FAFC] dark:hover:bg-[#181a17] transition-colors"
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="ady-btn w-full flex items-center justify-between gap-4 px-5 py-4 sm:px-6 sm:py-4.5 text-left rounded-2xl hover:bg-[#F8FAFC] dark:hover:bg-[#181a17] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1E88A8] transition-colors"
         >
           <div className="flex min-w-0 items-center gap-3.5 sm:gap-4">
             <div className={`hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.iconBg}`}>
@@ -103,7 +106,7 @@ function MilestoneRow({ ms, index }: { ms: Milestone; index: number }) {
         </button>
 
         {open && (
-          <div className="border-t border-[#E2E8F0] dark:border-[#1F211D] px-5 pt-5 pb-6 sm:px-6 sm:pb-7">
+          <div id={panelId} role="region" aria-label={`Detalhes de ${ms.title}`} className="border-t border-[#E2E8F0] dark:border-[#1F211D] px-5 pt-5 pb-6 sm:px-6 sm:pb-7">
             <div className="mx-auto max-w-xl space-y-5">
               <p className="text-sm leading-relaxed text-[#475569] dark:text-[#A3A8B3]">{ms.summary}</p>
               <div className="space-y-2.5">
@@ -129,7 +132,7 @@ function MilestoneRow({ ms, index }: { ms: Milestone; index: number }) {
   );
 }
 
-export function RoadmapPage() {
+export function RoadmapPage({ items = roadmap }: { items?: Milestone[] }) {
   return (
     <div className="ady-decor min-h-screen bg-[#EBEEF0] text-[#0F172A] dark:bg-[#0C0D0A] dark:text-[#ECEDEF]">
       {/* Faixa de destaque (header hero) */}
@@ -138,20 +141,28 @@ export function RoadmapPage() {
           <div className="inline-flex items-center gap-2 rounded-full border border-[#1E88A8]/40 bg-[#1E88A8]/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-[#17708A] dark:text-[#6fc3dd]">
             <Map className="h-3.5 w-3.5" /> Roadmap do Ady
           </div>
-          <h1 className="mt-5 text-3xl sm:text-5xl font-black tracking-tight">
-            A nossa história &amp; <span className="text-[#1E88A8]">o que vem por aí</span>
-          </h1>
+          <h1 className="mt-5 text-3xl sm:text-5xl font-black tracking-tight">Roadmap do Ady</h1>
           <p className="mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-[#475569] dark:text-[#A3A8B3]">
-            Do primeiro passo até um futuro em que o Ady conversa com você, criamos esta linha do tempo
-            para mostrar tudo que já conquistamos — e para onde estamos indo.
+            Acompanhe as iniciativas publicadas e os próximos passos do produto.
           </p>
         </div>
       </section>
 
-      {/* Resumo em cartões */}
-      <section className="mx-auto max-w-5xl px-6 pt-10 sm:pt-12">
-        <div className="grid gap-4 sm:gap-5 sm:grid-cols-3">
-          {summaryCards.map((c) => (
+      {items.length === 0 ? (
+        <section className="mx-auto max-w-3xl px-6 py-16 sm:py-24" aria-live="polite">
+          <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-[#FFFFFF] p-8 text-center shadow-sm dark:border-[#2a2e2b] dark:bg-[#141512]">
+            <h2 className="text-xl font-bold text-[#0F172A] dark:text-[#ECEDEF]">Estamos preparando as próximas novidades</h2>
+            <p className="mt-3 text-base leading-relaxed text-[#475569] dark:text-[#A3A8B3]">
+              Estamos atualizando nosso roadmap. Volte em breve para acompanhar as novidades.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <>
+          {/* Resumo em cartões */}
+          <section className="mx-auto max-w-5xl px-6 pt-10 sm:pt-12">
+            <div className="grid gap-4 sm:gap-5 sm:grid-cols-3">
+              {summaryCards(items).map((c) => (
             <div key={c.label} className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 sm:p-6 shadow-sm dark:border-[#1F211D] dark:bg-[#141512] dark:shadow-lg">
               <div
                 className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest ${
@@ -174,29 +185,29 @@ export function RoadmapPage() {
                 <span className="text-sm leading-snug text-[#64748B] dark:text-[#8E939D]">{c.description}</span>
               </div>
             </div>
-          ))}
-        </div>
-      </section>
+              ))}
+            </div>
+          </section>
 
-      {/* Timeline */}
-      <section className="mx-auto max-w-3xl px-6 pt-12 sm:pt-14 pb-16">
-        <ol className="relative">
-          {roadmap.map((ms, i) => (
-            <MilestoneRow key={ms.period + ms.title} ms={ms} index={i} />
-          ))}
-        </ol>
-      </section>
+          {/* Timeline */}
+          <section className="mx-auto max-w-3xl px-6 pt-12 sm:pt-14 pb-16">
+            <ol className="relative" aria-label="Iniciativas do roadmap">
+              {items.map((ms, i) => (
+                <MilestoneRow key={ms.period + ms.title} ms={ms} index={i} />
+              ))}
+            </ol>
+          </section>
 
-      {/* Fechamento */}
-      <section className="border-t border-[#E2E8F0] bg-[#FFFFFF] dark:border-[#1F211D] dark:bg-[#0e1116]">
-        <div className="mx-auto max-w-3xl px-6 py-10 text-center">
-          <p className="mx-auto max-w-2xl text-base sm:text-lg font-semibold text-[#0F172A] dark:text-[#E4E8F0] leading-relaxed">
-            “O Ady começou criando conteúdo, passou a publicar sozinho, e agora vai te colocar no Google,
-            conversar com você pelo WhatsApp e aprender sobre o seu negócio.”
-          </p>
-          <p className="mt-2.5 text-sm text-[#64748B] dark:text-[#8E939D]">Até se tornar um parceiro que trabalha junto com você.</p>
-        </div>
-      </section>
+          {/* Fechamento */}
+          <section className="border-t border-[#E2E8F0] bg-[#FFFFFF] dark:border-[#1F211D] dark:bg-[#0e1116]">
+            <div className="mx-auto max-w-3xl px-6 py-10 text-center">
+              <p className="mx-auto max-w-2xl text-base sm:text-lg font-semibold text-[#0F172A] dark:text-[#E4E8F0] leading-relaxed">
+                Acompanhe esta página para conhecer as iniciativas que forem publicadas pelo produto.
+              </p>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
