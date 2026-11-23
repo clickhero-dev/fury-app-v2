@@ -1,6 +1,6 @@
 import { rbacService } from '../services/core/rbac.service.js';
 
-// workers: pula o cliente se o plano tira TODAS estas funcionalidades; erro = pula (na dúvida, não executa)
+// workers: pula o cliente se o plano ou o parceiro tira TODAS estas funcionalidades; erro = pula
 export async function planSkipsTenant(tenantId: string, viewKeys: string[], tag: string): Promise<boolean> {
   try {
     for (const key of viewKeys) if (!(await rbacService.tenantBlocks(tenantId, key))) return false;

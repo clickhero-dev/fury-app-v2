@@ -68,3 +68,11 @@ export function viewKeyForPath(pathname: string): RbacViewKey | null {
   }
   return best ? best[1] : null;
 }
+
+// pais fora do padrão de key: Clientes (leads) vêm das campanhas (espelho da API)
+const EXTRA_VIEW_PARENT: Readonly<Record<string, string>> = { leads: 'campaigns' };
+
+// tela pai (pela key com ponto ou pelo pai extra); null = tela raiz
+export function parentViewKey(key: string): string | null {
+  return EXTRA_VIEW_PARENT[key] ?? (key.includes('.') ? key.slice(0, key.lastIndexOf('.')) : null);
+}

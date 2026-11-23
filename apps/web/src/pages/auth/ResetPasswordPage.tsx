@@ -8,6 +8,8 @@ import { OtpInput } from '@/components/auth/OtpInput';
 import { useResetPassword } from '@/hooks/useResetPassword';
 import { useResendOtp } from '@/hooks/useResendOtp';
 import { AdySymbol } from '@/components/AdySymbol';
+import { isAxiosError } from 'axios';
+import { errorMessage, errorReason } from '@/lib/error-message';
 
 const resetPasswordSchema = z.object({
   newPassword: z
@@ -70,10 +72,10 @@ export function ResetPasswordPage() {
       });
       navigate('/reset-password/success');
     } catch (err) {
-      if (err instanceof Error && err.message.includes('Código')) {
-        setOtpError(err.message);
+      if (isAxiosError(err) && err.response?.data?.error?.code === 'INVALID_OR_EXPIRED_OTP') {
+        setOtpError(errorReason(err));
       } else {
-        setGeneralError(err instanceof Error ? err.message : 'Erro ao redefinir senha');
+        setGeneralError(errorMessage(err, 'Não foi possível redefinir a senha'));
       }
     }
   };
@@ -84,7 +86,7 @@ export function ResetPasswordPage() {
       await resendOtpMutation.mutateAsync(email);
       setResendCountdown(30);
     } catch (err) {
-      setOtpError(err instanceof Error ? err.message : 'Erro ao reenviar código');
+      setOtpError(errorMessage(err, 'Não foi possível reenviar o código'));
     }
   };
 

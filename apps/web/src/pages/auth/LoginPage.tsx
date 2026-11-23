@@ -13,6 +13,7 @@ import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
 import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
 import { login as authLogin } from '@/store/slices/authSlice';
 import { store } from '@/store';
+import { errorMessage } from '@/lib/error-message';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -30,7 +31,7 @@ function getFriendlyError(err: unknown): string {
       return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
     }
   }
-  return 'Ocorreu um erro inesperado. Tente novamente em alguns instantes.';
+  return errorMessage(err, 'Não foi possível entrar');
 }
 
 export function LoginPage() {
@@ -88,8 +89,8 @@ export function LoginPage() {
         stripSocialParams();
         navigate(consumeLoginDestination(), { replace: true });
       })
-      .catch(() => {
-        setError('Não foi possível concluir o login com Facebook. Tente novamente.');
+      .catch((err) => {
+        setError(errorMessage(err, 'Não foi possível concluir o login com Facebook'));
         stripSocialParams();
       });
     }, [navigate]);

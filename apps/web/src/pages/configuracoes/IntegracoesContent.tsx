@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 import { useLogout } from '@/hooks/useLogout';
 import type { MetaConnection } from '@/types/meta';
 // Google Meu Negócio oculto (feature incompleta) — 2026-09
@@ -272,15 +273,11 @@ export function IntegracoesContent() {
     }
   }, [searchParams, setSearchParams]);
 
-  const { data: connections = [], isLoading } = useQuery<MetaConnection[]>({
+  const { data: connections = [], isLoading, error: connectionsError, refetch: refetchConnections } = useQuery<MetaConnection[]>({
     queryKey: ['meta-connections'],
     queryFn: async () => {
-      try {
-        const response = await api.get<{ success: boolean; data: MetaConnection[] }>('/meta/connections');
-        return Array.isArray(response.data.data) ? response.data.data : [];
-      } catch {
-        return [];
-      }
+      const response = await api.get<{ success: boolean; data: MetaConnection[] }>('/meta/connections');
+      return Array.isArray(response.data.data) ? response.data.data : [];
     },
     placeholderData: [],
     refetchOnMount: true,
@@ -321,6 +318,7 @@ export function IntegracoesContent() {
     onSuccess: (authUrl) => {
       window.location.href = authUrl;
     },
+    onError: (err) => showToast(errorMessage(err, 'Não foi possível abrir a conexão com a Meta'), 'error'),
   });
 
   const disconnectMutation = useMutation({
@@ -331,8 +329,9 @@ export function IntegracoesContent() {
       setPendingDisconnect(null);
       logout();
     },
-    onError: () => {
+    onError: (err) => {
       setPendingDisconnect(null);
+      showToast(errorMessage(err, 'Não foi possível desconectar a conta Meta'), 'error');
     },
   });
 
@@ -347,10 +346,14 @@ export function IntegracoesContent() {
       void queryClient.invalidateQueries({ queryKey: ['metrics-daily-week'] });
       showToast('Conta ativa atualizada');
     },
+    onError: (err) => showToast(errorMessage(err, 'Não foi possível trocar a conta ativa'), 'error'),
   });
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+      {connectionsError && connections.length > 0 && (
+        <p role="alert" className="text-sm text-error">{errorMessage(connectionsError, 'Não foi possível carregar as conexões Meta')}</p>
+      )}
       {/* Notification Toast */}
       {toast && (
         <div
@@ -420,6 +423,18 @@ export function IntegracoesContent() {
       {isLoading ? (
         <div className={`${SURFACE} flex items-center justify-center px-6 py-20`}>
           <LoadingSpinner />
+        </div>
+      ) : connectionsError && connections.length === 0 ? (
+        // sem a lista não dá para saber se há conta; não oferece conectar
+        <div role="alert" className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>
+          <p className="text-base font-medium text-text-primary">{errorMessage(connectionsError, 'Não foi possível carregar as conexões Meta')}</p>
+          <button
+            type="button"
+            onClick={() => void refetchConnections()}
+            className={`mt-2 rounded-full bg-[#17708A] px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} cursor-pointer`}
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : connections.length === 0 ? (
         <div className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>

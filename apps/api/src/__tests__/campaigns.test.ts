@@ -915,7 +915,7 @@ describe('GET /api/campaigns/:id', () => {
       .set(getAuthHeader(testUser.token));
 
     expect(response.status).toBe(404);
-    expect(response.body.error).toBe('Campanha não encontrada');
+    expect(response.body.error.message).toBe('Campanha não encontrada');
   });
 });
 

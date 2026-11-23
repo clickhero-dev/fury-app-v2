@@ -90,7 +90,7 @@ export function verifyOAuthState(state: string): OAuthStatePayload {
     const secret = getRequiredEnv('JWT_SECRET');
     return jwt.verify(state, secret) as OAuthStatePayload;
   } catch {
-    throw new AppError(401, GOOGLE_ERROR_CODES.INVALID_OAUTH_STATE, 'State OAuth invalido ou expirado.');
+    throw new AppError(401, GOOGLE_ERROR_CODES.INVALID_OAUTH_STATE, 'A autorização expirou ou é inválida. Tente conectar de novo.');
   }
 }
 

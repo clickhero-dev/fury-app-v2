@@ -46,6 +46,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
 import { postToEvent, extractEventDropData, getPostFromEvent, resolveEventClickAction, localYMD } from './calendarAdapter';
+import { errorMessage, errorReason } from '@/lib/error-message';
 
 // ===== Types =====
 
@@ -167,21 +168,6 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
     setTimeout(() => setToast(null), 3000);
   };
 
-  const getErrorMessage = (err: unknown, defaultMessage: string): string => {
-    if (err instanceof Error) return err.message;
-    if (err && typeof err === 'object') {
-      const axiosError = err as Record<string, unknown>;
-      if (axiosError.response && typeof axiosError.response === 'object') {
-        const responseData = axiosError.response as Record<string, unknown>;
-        if (responseData.data && typeof responseData.data === 'object') {
-          const data = responseData.data as Record<string, unknown>;
-          if (typeof data.message === 'string') return data.message;
-        }
-      }
-    }
-    return defaultMessage;
-  };
-
   // Safe useEffect com limpeza de timer
   useEffect(() => {
     if (currentView !== 'timeGridWeek') return;
@@ -210,15 +196,10 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   const { data, isLoading, error } = useQuery({
     queryKey: ['calendar', effectiveRange.startDate, effectiveRange.endDate],
     queryFn: async () => {
-      try {
-        const { data: res } = await api.get('/planner/calendar', {
-          params: { startDate: effectiveRange.startDate, endDate: effectiveRange.endDate },
-        });
-        return res.data as { posts: CalendarPost[] };
-      } catch (err) {
-        console.error('Falha na requisição da API:', err);
-        return { posts: [] };
-      }
+      const { data: res } = await api.get('/planner/calendar', {
+        params: { startDate: effectiveRange.startDate, endDate: effectiveRange.endDate },
+      });
+      return res.data as { posts: CalendarPost[] };
     },
     retry: 1,
   });
@@ -308,7 +289,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
         await queryClient.invalidateQueries({ queryKey: ['calendar'] });
         showToast('Post movido com sucesso!');
       } catch (err) {
-        showToast(getErrorMessage(err, 'Erro ao mover post'), 'error');
+        showToast(errorMessage(err, 'Não foi possível mover o post'), 'error');
         info.revert();
       }
     },
@@ -328,7 +309,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
       setShowScheduleDialog(false);
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Erro ao agendar posts'), 'error'),
+    onError: (err) => showToast(errorMessage(err, 'Não foi possível agendar os posts'), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -344,7 +325,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
       showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Erro ao excluir post(s)'), 'error'),
+    onError: (err) => showToast(errorMessage(err, 'Não foi possível excluir os posts'), 'error'),
   });
 
   const clearSelection = () => setSelectedIds(new Set());
@@ -379,8 +360,8 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
     return (
       <div className="grid min-h-[420px] place-items-center rounded-2xl border border-border bg-surface p-8 text-center shadow-lg">
         <div>
-          <p className="text-base font-semibold text-text-primary">Erro ao carregar calendário</p>
-          <p className="mt-1 text-sm text-text-secondary">Verifique sua conexão ou dados de login.</p>
+          <p className="text-base font-semibold text-text-primary">Não foi possível carregar o calendário</p>
+          <p role="alert" className="mt-1 text-sm text-text-secondary">{errorReason(error)}</p>
         </div>
       </div>
     );
@@ -598,7 +579,6 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
                 selectionMode={selectionMode}
                 showToast={showToast}
                 queryClient={queryClient}
-                getErrorMessage={getErrorMessage}
               />
             )}
             themeSystem="standard"
@@ -699,14 +679,12 @@ function EventCard({
   selectionMode,
   showToast,
   queryClient,
-  getErrorMessage,
 }: {
   arg: EventContentArg;
   selectedIds: Set<string>;
   selectionMode: boolean;
   showToast: (message: string, type?: 'success' | 'error') => void;
   queryClient: ReturnType<typeof useQueryClient>;
-  getErrorMessage: (err: unknown, defaultMessage: string) => string;
 }) {
   const post = getPostFromEvent(arg.event) as (CalendarPost & Record<string, unknown>) | null;
   const badge = post ? complianceBadge((post.compliance as any)?.status ?? null, (post.compliance as any)?.notes ?? null) : null;
@@ -752,7 +730,7 @@ function EventCard({
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       showToast(`Post movido para ${newDate.toLocaleDateString('pt-BR')}`);
     } catch (err) {
-      showToast(getErrorMessage(err, 'Erro ao mover post'), 'error');
+      showToast(errorMessage(err, 'Não foi possível mover o post'), 'error');
     }
   }, [post, queryClient]);
 

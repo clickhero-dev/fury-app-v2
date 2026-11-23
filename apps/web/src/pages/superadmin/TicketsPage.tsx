@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import api from '@/lib/api';
+import { isAxiosError } from 'axios';
+import { errorMessage } from '@/lib/error-message';
 import { showSnack } from '@/lib/snack';
 
 const PAGE_SIZE = 10;
@@ -326,7 +328,10 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
       onCreated();
     } catch (error) {
       const responseError = (error as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
-      const message = responseError?.message ?? (error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.');
+      // ticket aberto com anexo falho: a API já explica; erro local já vem com texto
+      const message = responseError?.details?.clickupTaskUrl && responseError.message
+        ? responseError.message
+        : isAxiosError(error) ? errorMessage(error, 'Não foi possível abrir o ticket') : error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.';
       closeAndReset();
       if (responseError?.details?.clickupTaskUrl) {
         showSnack(message, 'error', { label: 'Abrir tarefa', href: responseError.details.clickupTaskUrl });
@@ -496,8 +501,7 @@ function ReviewTicketDialog({ ticket, onClose, onComplete }: {
         : { decision, reason: trimmedReason });
       onComplete(decision);
     } catch (cause) {
-      const responseError = (cause as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
-      setError(responseError?.message ?? 'Não foi possível atualizar o ticket. Tente novamente.');
+      setError(errorMessage(cause, 'Não foi possível atualizar o ticket'));
     } finally {
       setSubmitting(false);
     }
@@ -559,8 +563,8 @@ export function TicketsPage() {
       setAssignees(assigneesResponse?.data.data ?? []);
       setStatuses(statusesResponse?.data.data ?? []);
       if (!ticketsResponse || !assigneesResponse || !statusesResponse || ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar todos os dados dos chamados agora. Tente novamente.');
-    } catch {
-      setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
+    } catch (err) {
+      setListWarning(errorMessage(err, 'Não foi possível atualizar os chamados'));
     } finally { setLoading(false); }
   }, []);
 

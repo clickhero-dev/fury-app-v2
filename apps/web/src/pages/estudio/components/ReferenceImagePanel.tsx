@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { KIND_META, countByKind, useStudioLibrary, type LibraryFilter, type LibraryPhoto } from '@/hooks/useStudioLibrary';
+import { errorMessage } from '@/lib/error-message';
 
 type Filter = LibraryFilter;
 
@@ -122,7 +123,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
       setFeedback('Imagem ocultada do painel. Ela continua na biblioteca.');
       await queryClient.invalidateQueries({ queryKey: ['studio-library'] });
     },
-    onError: () => setFeedback('Não foi possível ocultar a imagem. Tente novamente.'),
+    onError: (err) => setFeedback(errorMessage(err, 'Não foi possível ocultar a imagem')),
   });
   const visible = filter === 'todas' ? photos : photos.filter((p) => p.kind === filter);
 

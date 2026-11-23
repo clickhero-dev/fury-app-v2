@@ -32,5 +32,5 @@ export async function tenantOrSuperadminMiddleware(req: Request, _res: Response,
     return next();
   }
 
-  return next(new AppError(403, 'FORBIDDEN', 'Tenant context not found'));
+  return next(new AppError(403, 'FORBIDDEN', 'Sua conta não está vinculada a um cliente. Fale com o suporte.'));
 }

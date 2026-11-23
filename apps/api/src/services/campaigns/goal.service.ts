@@ -27,14 +27,14 @@ export async function getClientGoals(tenantId: string): Promise<ClientGoalsForMe
   });
 
   if (!row) {
-    throw new AppError(404, 'GOALS_NOT_FOUND', 'Metas do cliente nao encontradas para este tenant.');
+    throw new AppError(404, 'GOALS_NOT_FOUND', 'Metas do cliente não encontradas.');
   }
 
   const monthlyBudget = parseMoneyToReais(row.monthlyBudget);
   const targetCpa = parseMoneyToReais(row.targetCpa);
 
   if (targetCpa <= 0) {
-    throw new AppError(400, 'INVALID_GOALS', 'targetCpa invalido nas metas do cliente.');
+    throw new AppError(400, 'INVALID_GOALS', 'CPA alvo inválido nas metas do cliente.');
   }
 
   return {

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Lightbulb, Loader2, X } from 'lucide-react';
+import { errorReason } from '@/lib/error-message';
+
+const STREAM_REASON = 'A IA parou de responder no meio da sugestão. Tente de novo.';
+const NETWORK_REASON = 'Sem conexão com o servidor. Verifique sua internet e tente de novo.';
+const UNKNOWN_REASON = 'Não conseguimos identificar o motivo. Tente de novo; se continuar, fale com o suporte.';
+
+// só este erro tem texto escrito para o usuário
+class ReasonError extends Error {}
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -26,7 +34,11 @@ export function BusinessContextImprover({ value, onChange }: { value: string; on
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') ?? ''}` },
         body: JSON.stringify({ text: value }), signal: controller.signal,
       });
-      if (!response.ok || !response.body) throw new Error('request_failed');
+      if (!response.ok || !response.body) {
+        const body = await response.json().catch(() => ({}));
+        // mesma regra das outras telas (401, 403, 5xx, ponto final)
+        throw new ReasonError(errorReason({ isAxiosError: true, response: { status: response.status, data: body } }));
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = ''; let completed = false;
@@ -40,13 +52,18 @@ export function BusinessContextImprover({ value, onChange }: { value: string; on
           const data = event.match(/^data: (.+)$/m)?.[1];
           if (type === 'fragment' && data) setSuggestion((current) => current + JSON.parse(data).text);
           if (type === 'done') completed = true;
-          if (type === 'error') throw new Error('stream_failed');
+          if (type === 'error') throw new ReasonError(STREAM_REASON);
         }
       }
-      if (!completed) throw new Error('stream_incomplete');
+      if (!completed) throw new ReasonError(STREAM_REASON);
       setFeedback('Sugestão pronta. Revise antes de usar.');
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') { setSuggestion(''); setFeedback('Não foi possível melhorar o texto agora.'); }
+      if ((error as Error).name !== 'AbortError') {
+        // fetch sem resposta lança TypeError
+        const reason = error instanceof ReasonError ? error.message : error instanceof TypeError ? NETWORK_REASON : UNKNOWN_REASON;
+        setSuggestion('');
+        setFeedback(`Não foi possível melhorar o texto. ${reason}`);
+      }
     } finally { setGenerating(false); abortRef.current = null; }
   }
 

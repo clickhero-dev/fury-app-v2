@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '../lib/shared.js';
 import { ZodError } from 'zod';
 import { captureServerException } from '../lib/analytics.js';
+import { describeZodIssues } from '../lib/zod-pt.js';
 
 class AppError extends Error {
   constructor(
@@ -57,7 +58,7 @@ export function errorHandler(
     code = 'VALIDATION_ERROR';
     response.error = {
       code: 'VALIDATION_ERROR',
-      message: 'Validation failed',
+      message: describeZodIssues(err.errors),
       details: {
         errors: err.errors.map((e) => ({
           path: e.path.join('.'),
@@ -69,7 +70,7 @@ export function errorHandler(
   } else {
     response.error = {
       code: 'INTERNAL_SERVER_ERROR',
-      message: 'An unexpected error occurred',
+      message: 'Erro no servidor. Tente de novo; se continuar, fale com o suporte.',
     };
   }
 
@@ -88,6 +89,17 @@ export function errorHandler(
   }
 
   res.status(statusCode).json(response);
+}
+
+// resposta de erro no formato padrão, para quem responde direto (sem next)
+export function errorBody(code: string, message: string, details?: Record<string, unknown>) {
+  return { success: false, error: { code, message, ...(details ? { details } : {}) }, timestamp: new Date().toISOString() };
+}
+
+export function validationBody(err: ZodError) {
+  return errorBody('VALIDATION_ERROR', describeZodIssues(err.errors), {
+    errors: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message, code: e.code })),
+  });
 }
 
 export { AppError };

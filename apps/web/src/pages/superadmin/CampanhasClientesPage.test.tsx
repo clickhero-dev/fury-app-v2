@@ -45,7 +45,7 @@ describe('CampanhasClientesPage', () => {
   it('erro ao carregar mostra aviso', async () => {
     mockGet.mockRejectedValue(new Error('offline'));
     renderPage();
-    expect(await screen.findByText('Erro ao carregar clientes')).toBeInTheDocument();
+    expect(await screen.findByText(/^Não foi possível carregar os clientes\./)).toBeInTheDocument();
   });
 
   it('pagina de 10 em 10 e a busca volta para a página 1', async () => {

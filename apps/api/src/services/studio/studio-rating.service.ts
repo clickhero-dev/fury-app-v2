@@ -13,7 +13,7 @@ export class StudioRatingService {
     }
     const repo = this.repositoryForTenant(input.tenantId);
     const user = await repo.findUserById(input.userId);
-    if (!user || user.tenantId !== input.tenantId) throw new AppError(403, 'FORBIDDEN', 'Usuário não pertence ao tenant.');
+    if (!user || user.tenantId !== input.tenantId) throw new AppError(403, 'FORBIDDEN', 'Usuário não pertence a este cliente.');
     const asset = await repo.findAssetById(input.assetId);
     if (!asset || !['image', 'video'].includes(asset.type)) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
     const row = await repo.upsertAssetRating(input.userId, input.assetId, input.rating as number);

@@ -4,25 +4,60 @@ import bcrypt from "bcrypt";
 import { AppError } from "../middleware/errorHandler.js";
 import { PartnerRepository } from "../repository/partner.repository.js";
 import { SuperAdminRepository } from "../repository/superadmin.repository.js";
+import { EDITABLE_VIEWS, PARTNER_ROLES } from "./permissions.controller.js";
 import { rbacService } from "../services/core/rbac.service.js";
 import { openrouterService } from "../services/llms/openrouter.service.js";
 import { encryptAccessToken } from "../lib/meta-api.js";
 import { clearAiKeyCache } from "../lib/ai-key-context.js";
+import { todaySaoPauloYMD } from "../utils/date-sao-paulo.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const createPartnerSchema = z.object({
   name: z.string().trim().min(1).max(255),
-  maxTenants: z.number().int().min(0).max(10000),
+  partnerPlanId: z.string({ required_error: "Escolha o plano do parceiro" }).uuid("Escolha o plano do parceiro"),
+  // ajuste individual; sem valor, vale o do plano
+  maxTenants: z.number().int().min(0).max(10000).optional(),
   accountName: z.string().trim().min(1).max(255),
   accountEmail: z.string().trim().email(),
   accountPassword: z.string().min(8).max(255),
+});
+
+const assignPlanSchema = z.object({
+  partnerPlanId: z.string({ required_error: "Escolha o plano do parceiro" }).uuid("Escolha o plano do parceiro"),
 });
 
 const updatePartnerSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
   maxTenants: z.number().int().min(0).max(10000).optional(),
 });
+
+// limite técnico da coluna integer (R$ 21.474.836,47)
+const MAX_PAYMENT_CENTS = 2_147_483_647;
+
+// data real (AAAA-MM-DD), nunca futura
+const paidAtSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use o formato AAAA-MM-DD")
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, "Data inválida")
+  .refine((v) => v <= todaySaoPauloYMD(), "A data não pode ser futura");
+
+const createPaymentSchema = z
+  .object({
+    kind: z.enum(["plan", "additional"], { message: "Escolha o tipo: plano ou adicional" }),
+    paidAt: paidAtSchema,
+    amountCents: z
+      .number()
+      .int("Informe o valor em centavos")
+      .min(1, "O valor deve ser maior que zero")
+      .max(MAX_PAYMENT_CENTS, "O valor máximo por lançamento é R$ 21.474.836,47"),
+    note: z.string().trim().max(500, "A descrição pode ter no máximo 500 caracteres").optional(),
+  })
+  // adicional precisa dizer o que foi vendido
+  .refine((b) => b.kind !== "additional" || !!b.note, { path: ["note"], message: "Descreva o adicional, por exemplo: +5 vagas." });
 
 // formato da chave do provedor; a mensagem nunca repete o valor
 const aiKeySchema = z.object({
@@ -32,6 +67,11 @@ const aiKeySchema = z.object({
 export function slugify(name: string) {
   return name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
+
+// serviços ligados a cada tela do catálogo
+const servicesOf = (key: string) => EDITABLE_VIEWS.find((v) => v.key === key)?.services ?? [];
+const ALREADY_HAS_PLAN = () =>
+  new AppError(409, "PARTNER_ALREADY_HAS_PLAN", "Este parceiro já comprou um plano. Upgrades são ajustes individuais em Limites e Permissões.");
 
 function ok(res: Response, data: unknown, status = 200) {
   res.status(status).json({ success: true, data, timestamp: new Date().toISOString() });
@@ -71,17 +111,24 @@ export class PartnerController {
       const body = createPartnerSchema.parse(req.body);
       // e-mail preso mesmo de conta excluída
       if (await this.adminRepo.findUserByEmail(body.accountEmail))
-        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+        throw new AppError(409, "EMAIL_EXISTS", "E-mail já cadastrado");
 
       const base = slugify(body.name) || "parceiro";
       const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;
       const passwordHash = await bcrypt.hash(body.accountPassword, 10);
 
-      const { partner } = await this.repo.createWithAccount(body.name, body.maxTenants, slug, {
-        name: body.accountName,
-        email: body.accountEmail,
-        passwordHash,
-      });
+      const { partner, plan } = await this.repo.createWithAccount(
+        body.name,
+        body.maxTenants,
+        slug,
+        { name: body.accountName, email: body.accountEmail, passwordHash },
+        body.partnerPlanId,
+        servicesOf,
+        PARTNER_ROLES,
+        req.user!.userId,
+      );
+      // telas do plano valem na hora
+      if (plan.views.length) await rbacService.bumpVersion();
       ok(res, await this.repo.findById(partner.id), 201);
     } catch (err) {
       next(err);
@@ -97,6 +144,23 @@ export class PartnerController {
         throw new AppError(409, "LIMIT_BELOW_USAGE", `O parceiro já tem ${partner.usedTenants} cliente(s). O limite não pode ser menor.`);
 
       await this.repo.update(partner.id, body);
+      ok(res, await this.repo.findById(partner.id));
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // parceiro sem plano recebe um: copia vagas e telas; quem já tem não troca
+  assignPlan = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const body = assignPlanSchema.parse(req.body);
+      if (partner.partnerPlanId) throw ALREADY_HAS_PLAN();
+      const result = await this.repo.assignPlan(partner.id, body.partnerPlanId, servicesOf, PARTNER_ROLES, req.user!.userId);
+      if (result === "has_plan") throw ALREADY_HAS_PLAN();
+      if (typeof result === "object")
+        throw new AppError(409, "LIMIT_BELOW_USAGE", `O parceiro já tem ${result.belowUsage} cliente(s) e o plano ${result.plan.name} dá ${result.plan.maxTenants} vaga(s). Escolha um plano com mais vagas.`);
+      await rbacService.bumpVersion();
       ok(res, await this.repo.findById(partner.id));
     } catch (err) {
       next(err);
@@ -127,6 +191,43 @@ export class PartnerController {
       // usuários do cliente voltam a entrar na hora
       await rbacService.bumpVersion();
       ok(res, null);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── Pagamentos do parceiro (histórico; só super) ──
+  listPayments = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const payments = await this.repo.listPayments(partner.id);
+      ok(res, {
+        totalCents: payments.reduce((acc, p) => acc + p.amountCents, 0),
+        lastPaidAt: payments[0]?.paidAt ?? null,
+        payments,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const body = createPaymentSchema.parse(req.body);
+      const id = await this.repo.createPayment(partner.id, { kind: body.kind, amountCents: body.amountCents, paidAt: body.paidAt, note: body.note || null }, req.user!.userId);
+      ok(res, { payment: await this.repo.findPayment(partner.id, id) }, 201);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deletePayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partner = await this.partnerOr404(req.params.id);
+      const removed = UUID_RE.test(req.params.paymentId) && (await this.repo.deletePayment(partner.id, req.params.paymentId, req.user!.userId));
+      if (!removed) throw new AppError(404, "PAYMENT_NOT_FOUND", "Pagamento não encontrado neste parceiro");
+      ok(res, { removed: true });
     } catch (err) {
       next(err);
     }

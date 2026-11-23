@@ -12,6 +12,7 @@ import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, Plan, Post, ViewState } from './types';
 import { buildHistoryRows, generatePayload, shouldGiveUpPolling, shouldShowRecoveryScreen } from './plannerPage.utils';
 import { captureEvent } from '@/lib/posthog';
+import { errorMessage } from '@/lib/error-message';
 
 interface AgentLabelsResponse {
   order: string[];
@@ -139,7 +140,7 @@ export function PlanejadorPage() {
       captureEvent('gerar_plano_sucesso', { jobId: job.id });
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || 'Erro ao iniciar geração';
+      const msg = errorMessage(err, 'Não foi possível iniciar a geração do plano');
       setErrorMsg(msg);
       captureEvent('gerar_plano_falha', { message: msg });
     },

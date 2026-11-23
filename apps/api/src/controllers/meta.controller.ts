@@ -36,7 +36,7 @@ export class MetaController {
   getAuthUrl = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { context, frontendUrl, rerequest } = authUrlQuerySchema.parse(req.query);
       // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
@@ -109,7 +109,7 @@ export class MetaController {
   getScopes = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const scopes = await this.metaService.getTenantMetaScopes(req.tenant.tenantId);
       res.status(200).json({
@@ -125,7 +125,7 @@ export class MetaController {
   getPages = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const pages = await this.metaService.getTenantFacebookPages(req.tenant.tenantId);
       res.status(200).json({
@@ -141,7 +141,7 @@ export class MetaController {
   getPageWhatsappNumbers = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { pageId } = pageIdParamsSchema.parse(req.params);
       const numbers = await this.metaService.getTenantPageWhatsappNumbers(req.tenant.tenantId, pageId);
@@ -158,7 +158,7 @@ export class MetaController {
   getBusinesses = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const businesses = await this.metaService.getTenantBusinesses(req.tenant.tenantId);
       res.status(200).json({
@@ -174,7 +174,7 @@ export class MetaController {
   getPagesByBusiness = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { businessIds } = businessIdsBodySchema.parse(req.body);
       const pages = await this.metaService.getTenantPagesByBusiness(req.tenant.tenantId, businessIds);
@@ -191,7 +191,7 @@ export class MetaController {
   getAdAccountsByBusiness = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { businessIds } = businessIdsBodySchema.parse(req.body);
       const adAccounts = await this.metaService.getTenantAdAccountsByBusiness(req.tenant.tenantId, businessIds);
@@ -208,7 +208,7 @@ export class MetaController {
   getWhatsappByPages = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const { businessIds, pageIds } = whatsappByAssetsBodySchema.parse(req.body);
       const numbers =
@@ -228,7 +228,7 @@ export class MetaController {
   saveSelection = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const selection = saveSelectionBodySchema.parse(req.body);
       const savedSelection = await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
@@ -246,7 +246,7 @@ export class MetaController {
   getAssetSelection = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const selection = await this.metaService.getResolvedTenantAssetSelection(req.tenant.tenantId);
       res.status(200).json({
@@ -270,7 +270,7 @@ export class MetaController {
         });
       }
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const connections = await this.metaService.getTenantMetaConnections(req.tenant.tenantId);
       res.status(200).json({
@@ -286,7 +286,7 @@ export class MetaController {
   selectAdAccount = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const params = connectionIdSchema.parse(req.params);
       const body = selectAdAccountBodySchema.parse(req.body);
@@ -309,7 +309,7 @@ export class MetaController {
   deleteConnection = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
       const params = connectionIdSchema.parse(req.params);
       await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);

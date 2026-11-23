@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
 import { getStoredPlatformRole, roleBadgeClass, roleLabel } from "@/lib/platform-role";
-import { RoleHelp } from "./RoleHelp";
+import { errorMessage } from "@/lib/error-message";
 
 interface User {
   id: string;
@@ -14,8 +14,33 @@ interface User {
   platformRole?: string | null;
   tenantId: string;
   tenantName: string | null;
+  partnerName?: string | null;
   createdAt: string;
 }
+
+const ROLE_FILTERS = [
+  ["", "Todos os cargos"],
+  ["super_admin", "Super Administrador"],
+  ["partner", "Parceiro"],
+  ["owner", "Usuário Titular"],
+  ["admin", "Administrador"],
+  ["member", "Usuário"],
+] as const;
+
+const SORTS = [
+  ["recent", "Mais recentes"],
+  ["oldest", "Mais antigos"],
+  ["role", "Cargo (em blocos)"],
+  ["name", "Nome (A–Z)"],
+  ["email", "E-mail (A–Z)"],
+  ["client", "Cliente (A–Z)"],
+] as const;
+
+// parceiro só alcança titular e usuário dos clientes dele
+const PARTNER_ROLE_FILTERS = ROLE_FILTERS.filter(([value]) => ["", "owner", "member"].includes(value));
+
+const FILTER_KEYS = ["search", "role", "origin", "tenantId", "sort"] as const;
+const selectCls = "bg-surface border border-border rounded-full px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
 interface UsersResponse {
   users: User[];
@@ -31,6 +56,14 @@ export function UsersPage() {
 
   const currentPage = parseInt(searchParams.get("page") || "1");
   const currentSearch = searchParams.get("search") || "";
+  const currentRole = searchParams.get("role") || "";
+  const currentOrigin = searchParams.get("origin") || "";
+  const currentSort = searchParams.get("sort") || "";
+  const currentTenant = searchParams.get("tenantId") || "";
+  const [clientOptions, setClientOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const isSuper = getStoredPlatformRole() === "super_admin";
+  const [partners, setPartners] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterError, setFilterError] = useState("");
 
   const [data, setData] = useState<UsersResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,46 +73,82 @@ export function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
   const [form, setForm] = useState({
     tenantName: "",
     userName: "",
     userEmail: "",
     userPassword: "",
-    userRole: "owner",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [checkingEmail, setCheckingEmail] = useState(false);
 
-  const fetchUsers = useCallback(async (page: number, search: string) => {
+  const fetchUsers = useCallback(async (page: number, search: string, role: string, origin: string, sort: string, tenantId: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("limit", "10");
       if (search) params.set("search", search);
+      if (role) params.set("role", role);
+      if (origin) params.set("origin", origin);
+      if (tenantId) params.set("tenantId", tenantId);
+      if (sort) params.set("sort", sort);
 
       const res = await api.get(`/admin/users?${params.toString()}`);
       setData(res.data.data);
-    } catch {
+      setListError("");
+    } catch (err) {
       setData(null);
+      setListError(errorMessage(err, "Não foi possível carregar os usuários"));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchUsers(currentPage, currentSearch);
-  }, [currentPage, currentSearch, fetchUsers]);
+    fetchUsers(currentPage, currentSearch, currentRole, currentOrigin, currentSort, currentTenant);
+  }, [currentPage, currentSearch, currentRole, currentOrigin, currentSort, currentTenant, fetchUsers]);
+
+  // clientes para o filtro (parceiro recebe só os dele)
+  useEffect(() => {
+    api.get("/admin/tenants")
+      .then((res) => setClientOptions((res.data.data as Array<{ id: string; name: string }>)
+        .map(({ id, name }) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))))
+      .catch((err) => setFilterError(errorMessage(err, "Não foi possível carregar os clientes do filtro")));
+  }, []);
+
+  // parceiros para o filtro de origem (só super)
+  useEffect(() => {
+    if (!isSuper) return;
+    api.get("/admin/partners")
+      .then((res) => setPartners((res.data.data as Array<{ id: string; name: string }>).map(({ id, name }) => ({ id, name }))))
+      .catch((err) => setFilterError(errorMessage(err, "Não foi possível carregar os parceiros do filtro")));
+  }, [isSuper]);
+
+  // mantém os filtros na URL; mudar filtro volta para a página 1
+  const updateParams = (patch: Partial<Record<(typeof FILTER_KEYS)[number] | "page", string>>) => {
+    const next: Record<string, string> = {};
+    for (const key of FILTER_KEYS) {
+      const value = key in patch ? patch[key] : searchParams.get(key);
+      if (value) next[key] = value;
+    }
+    next.page = patch.page ?? "1";
+    setSearchParams(next);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchParams({ search: searchInput, page: "1" });
+    updateParams({ search: searchInput });
   };
 
   const goToPage = (p: number) => {
-    setSearchParams({ search: currentSearch, page: String(p) });
+    updateParams({ page: String(p) });
   };
+
+  const hasFilters = Boolean(currentRole || currentOrigin || currentSort || currentSearch || currentTenant);
 
   // Validators
   function validateTenantName(v: string) {
@@ -185,7 +254,6 @@ export function UsersPage() {
         userName: form.userName,
         userEmail: form.userEmail,
         userPassword: form.userPassword,
-        userRole: form.userRole,
       });
       setShowModal(false);
       setForm({
@@ -193,7 +261,6 @@ export function UsersPage() {
         userName: "",
         userEmail: "",
         userPassword: "",
-        userRole: "owner",
       });
       setErrors({});
       setTouched({});
@@ -207,7 +274,7 @@ export function UsersPage() {
           ? "Já existe um cliente com este identificador. Altere o nome ou verifique os clientes cadastrados."
           : apiError?.code === "EMAIL_EXISTS"
             ? "Este email já está em uso."
-            : "Não foi possível criar o cliente. Tente novamente.",
+            : errorMessage(err, "Não foi possível criar o cliente"),
       );
     } finally {
       setSaving(false);
@@ -245,7 +312,6 @@ export function UsersPage() {
                 userName: "",
                 userEmail: "",
                 userPassword: "",
-                userRole: "owner",
               });
               setErrors({});
               setTouched({});
@@ -272,9 +338,40 @@ export function UsersPage() {
         </div>
       </div>
 
+      <div role="group" aria-label="Filtros de usuários" className="flex flex-wrap items-center gap-3 mb-4">
+        <select aria-label="Filtrar por cargo" value={currentRole} onChange={(e) => updateParams({ role: e.target.value })} className={selectCls}>
+          {(isSuper ? ROLE_FILTERS : PARTNER_ROLE_FILTERS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {isSuper && (
+          <select aria-label="Filtrar por origem" value={currentOrigin} onChange={(e) => updateParams({ origin: e.target.value })} className={selectCls}>
+            <option value="">Todas as origens</option>
+            <option value="ady">ady</option>
+            <option value="partner">Todos os parceiros</option>
+            {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
+        <select aria-label="Filtrar por cliente" value={currentTenant} onChange={(e) => updateParams({ tenantId: e.target.value })} className={`${selectCls} max-w-[16rem] truncate`}>
+          <option value="">Todos os clientes</option>
+          {clientOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select aria-label="Ordenar por" value={currentSort || "recent"} onChange={(e) => updateParams({ sort: e.target.value === "recent" ? "" : e.target.value })} className={selectCls}>
+          {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {filterError && <div role="alert" className="text-xs text-error">{filterError}</div>}
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearchInput(""); setSearchParams({ page: "1" }); }}
+            className="ady-btn rounded-full border border-border px-4 py-2 text-sm text-text-secondary hover:bg-surface-secondary transition-colors"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
       {users.length === 0 ? (
-        <div className="text-center py-12 text-text-tertiary text-sm">
-          Nenhum usuário encontrado
+        <div role={listError ? "alert" : undefined} className="text-center py-12 text-text-tertiary text-sm">
+          {listError || "Nenhum usuário encontrado"}
         </div>
       ) : (
         <>
@@ -286,6 +383,7 @@ export function UsersPage() {
                   <th className="px-5 py-4">Nome</th>
                   <th className="px-5 py-4">Email</th>
                   <th className="px-5 py-4">Cargo</th>
+                  {isSuper && <th className="px-5 py-4">Origem</th>}
                   <th className="px-5 py-4">Criado em</th>
                 </tr>
               </thead>
@@ -304,6 +402,7 @@ export function UsersPage() {
                     <td className="px-5 py-4">
                       <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${roleBadgeClass(u)}`}>{roleLabel(u)}</div>
                     </td>
+                    {isSuper && <td className="px-5 py-4 text-text-secondary">{u.partnerName ?? "ady"}</td>}
                     <td className="px-5 py-4 whitespace-nowrap text-xs text-text-tertiary">
                       {new Date(u.createdAt).toLocaleDateString("pt-BR")}
                     </td>
@@ -482,24 +581,9 @@ export function UsersPage() {
                 )}
               </div>
 
-              {/* Role */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label htmlFor="new-user-role" className="text-xs font-medium text-admin-text-muted">
-                    Cargo
-                  </label>
-                  <RoleHelp />
-                </div>
-                <select
-                  id="new-user-role"
-                  value={form.userRole}
-                  onChange={(e) => setForm({ ...form, userRole: e.target.value })}
-                  className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
-                >
-                  <option value="owner">Usuário Titular</option>
-                  <option value="admin">Administrador</option>
-                  <option value="member">Usuário</option>
-                </select>
+              {/* cargo fixo: todo cliente novo nasce com titular */}
+              <div className="text-xs text-admin-text-muted">
+                Cargo: <strong className="text-admin-text">Usuário Titular</strong> (dono da conta do cliente)
               </div>
 
               {error && (

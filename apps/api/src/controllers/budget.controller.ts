@@ -20,7 +20,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { totalBudget } = z
@@ -93,7 +93,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { status } = z
@@ -141,7 +141,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { id } = req.params;
@@ -149,7 +149,7 @@ export class BudgetController {
         throw new AppError(
           400,
           'MISSING_SUGGESTION_ID',
-          'Suggestion ID is required',
+          'Informe a sugestão.',
         );
       }
 
@@ -159,7 +159,7 @@ export class BudgetController {
         throw new AppError(
           400,
           'APPLY_FAILED',
-          'Failed to apply suggestion (may not exist or already applied)',
+          'Não foi possível aplicar a sugestão: ela não existe ou já foi aplicada.',
         );
       }
 
@@ -197,7 +197,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { id } = req.params;
@@ -205,7 +205,7 @@ export class BudgetController {
         throw new AppError(
           400,
           'MISSING_SUGGESTION_ID',
-          'Suggestion ID is required',
+          'Informe a sugestão.',
         );
       }
 
@@ -215,7 +215,7 @@ export class BudgetController {
         throw new AppError(
           400,
           'REJECT_FAILED',
-          'Failed to reject suggestion (may not exist or already rejected)',
+          'Não foi possível recusar a sugestão: ela não existe ou já foi recusada.',
         );
       }
 
@@ -253,7 +253,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const config = this.budgetOptimizer.getBudgetConfig(tenantId);
@@ -286,7 +286,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const updateData = z
@@ -298,7 +298,7 @@ export class BudgetController {
         .parse(req.body);
 
       if (Object.keys(updateData).length === 0) {
-        throw new AppError(400, 'EMPTY_UPDATE', 'At least one field must be provided');
+        throw new AppError(400, 'EMPTY_UPDATE', 'Informe ao menos um campo para alterar.');
       }
 
       const updated = this.budgetOptimizer.updateBudgetConfig(tenantId, updateData);
@@ -331,7 +331,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { suggestionIds } = z
@@ -374,7 +374,7 @@ export class BudgetController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const { suggestionIds } = z

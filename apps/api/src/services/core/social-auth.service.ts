@@ -223,7 +223,7 @@ export class SocialAuthService {
         throw new AppError(
           409,
           'ACCOUNT_LINK_NOT_ALLOWED',
-          'Nao e possivel vincular o Google a esta conta. Entre com e-mail e senha.',
+          'Não é possível vincular o Google a esta conta. Entre com e-mail e senha.',
         );
       }
       await this.repo('').patchUser(user.id, { googleId, emailVerified: true });
@@ -291,7 +291,7 @@ export class SocialAuthService {
       throw new AppError(
         400,
         'FACEBOOK_EMAIL_MISSING',
-        'Sua conta do Facebook nao tem um e-mail disponivel. Cadastre-se com e-mail e senha.',
+        'Sua conta do Facebook não tem um e-mail disponível. Cadastre-se com e-mail e senha.',
       );
     }
 
@@ -319,7 +319,7 @@ export class SocialAuthService {
         throw new AppError(
           409,
           'ACCOUNT_LINK_NOT_ALLOWED',
-          'Nao e possivel vincular o Facebook a esta conta. Entre com e-mail e senha.',
+          'Não é possível vincular o Facebook a esta conta. Entre com e-mail e senha.',
         );
       }
       await this.repo('').patchUser(user.id, { facebookId, emailVerified: true });

@@ -84,7 +84,7 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization header'));
+    return next(new AppError(401, 'UNAUTHORIZED', 'Sessão não encontrada. Entre novamente.'));
   }
 
   const token = authHeader.substring(7).trim();
@@ -103,7 +103,7 @@ export function authSSEMiddleware(req: Request, _res: Response, next: NextFuncti
   const token = (req.query.token as string) || req.headers.authorization?.substring(7).trim();
 
   if (!token) {
-    return next(new AppError(401, 'UNAUTHORIZED', 'Missing token in query parameter or Authorization header'));
+    return next(new AppError(401, 'UNAUTHORIZED', 'Sessão não encontrada. Entre novamente.'));
   }
 
   try {

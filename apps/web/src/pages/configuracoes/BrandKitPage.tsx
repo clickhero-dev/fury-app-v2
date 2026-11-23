@@ -7,6 +7,7 @@ import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDelete
 import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
 import { Upload, X, Trash2, Image as ImageIcon, ChevronDown, Check } from 'lucide-react';
+import { errorMessage } from '@/lib/error-message';
 
 const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string }[] = [
   { value: 'professional', label: 'Profissional', description: 'Formal, técnico, confiável' },
@@ -98,8 +99,8 @@ export function BrandKitContent() {
     try {
       await uploadLogo.mutateAsync(file);
       showToast('Logo enviada com sucesso!', 'success');
-    } catch {
-      showToast('Erro ao enviar logo. Tente novamente.', 'error');
+    } catch (err) {
+      showToast(errorMessage(err, 'Não foi possível enviar a logo'), 'error');
     }
   }
 
@@ -107,8 +108,8 @@ export function BrandKitContent() {
     try {
       await saveBrandKit.mutateAsync({ logo_url: null });
       showToast('Logo removida.', 'success');
-    } catch {
-      showToast('Erro ao remover logo. Tente novamente.', 'error');
+    } catch (err) {
+      showToast(errorMessage(err, 'Não foi possível remover a logo'), 'error');
     }
   }
 
@@ -137,8 +138,8 @@ export function BrandKitContent() {
     try {
       await uploadPhotos.mutateAsync(files);
       showToast('Fotos enviadas com sucesso!', 'success');
-    } catch {
-      showToast('Erro ao enviar fotos. Tente novamente.', 'error');
+    } catch (err) {
+      showToast(errorMessage(err, 'Não foi possível enviar as fotos'), 'error');
     }
   }
 
@@ -146,8 +147,8 @@ export function BrandKitContent() {
     try {
       await deletePhoto.mutateAsync(url);
       showToast('Foto removida.', 'success');
-    } catch {
-      showToast('Erro ao remover foto. Tente novamente.', 'error');
+    } catch (err) {
+      showToast(errorMessage(err, 'Não foi possível remover a foto'), 'error');
     }
   }
 
@@ -160,8 +161,8 @@ export function BrandKitContent() {
         whatsapp_number: digitsOnly || null,
       });
       showToast('Dados da Marca salvos com sucesso!', 'success');
-    } catch {
-      showToast('Erro ao salvar. Tente novamente.', 'error');
+    } catch (err) {
+      showToast(errorMessage(err, 'Não foi possível salvar os dados da marca'), 'error');
     }
   }
 

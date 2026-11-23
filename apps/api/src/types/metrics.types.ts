@@ -3,7 +3,7 @@ import { z } from 'zod';
 // ==================== Validation Schemas ====================
 
 export const dateSchema = z.string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Use YYYY-MM-DD');
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida. Use o formato AAAA-MM-DD');
 
 export const metricsQuerySchema = z.object({
   startDate: dateSchema.optional(),
@@ -53,7 +53,7 @@ export const dailyQuerySchema = z
     } else if (!dateRe.test(data.startDate)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Invalid date format. Use YYYY-MM-DD',
+        message: 'Data inválida. Use o formato AAAA-MM-DD',
         path: ['startDate'],
       });
     }
@@ -67,7 +67,7 @@ export const dailyQuerySchema = z
     } else if (!dateRe.test(data.endDate)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Invalid date format. Use YYYY-MM-DD',
+        message: 'Data inválida. Use o formato AAAA-MM-DD',
         path: ['endDate'],
       });
     }

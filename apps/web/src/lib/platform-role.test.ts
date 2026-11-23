@@ -36,7 +36,10 @@ describe('canAccessAdmin', () => {
 describe('conta vitalícia (parceiro)', () => {
   it('só o admin_partner não tem plano', () => {
     expect(hasLifetimeAccess('admin_partner')).toBe(true);
-    for (const role of ['super_admin', 'user_partner', 'user'] as const) expect(hasLifetimeAccess(role)).toBe(false);
+    for (const role of ['super_admin', 'user_partner', 'user'] as const) expect(hasLifetimeAccess(role, false)).toBe(false);
+    // equipe da conta do parceiro: sem cobrança, mesmo não sendo admin_partner
+    expect(hasLifetimeAccess('user_partner', true)).toBe(true);
+    expect(hasLifetimeAccess('user', true)).toBe(true);
   });
 
   it('telas de cobrança: /planos e /assinatura (por segmento)', () => {

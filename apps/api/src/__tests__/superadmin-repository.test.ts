@@ -8,15 +8,18 @@ function makeDb() {
   const select = vi.fn(() => ({
     from: (t: any) => ({
       where: async () => [{ total: '3' }],
-      leftJoin: () => ({
-        where: (w: any) => {
-          const result: any[] = [{ total: '3' }];
-          (result as any).orderBy = () => ({
-            limit: () => ({ offset: async () => [{ id: 'u', tenantName: 'T' }] }),
-          });
-          return result;
-        },
-      }),
+      leftJoin: function join(): any {
+        return {
+          leftJoin: join,
+          where: (w: any) => {
+            const result: any[] = [{ total: '3' }];
+            (result as any).orderBy = () => ({
+              limit: () => ({ offset: async () => [{ id: 'u', tenantName: 'T' }] }),
+            });
+            return result;
+          },
+        };
+      },
       groupBy: async () => [{ planId: 'p', count: 2 }],
     }),
   }));

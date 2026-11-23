@@ -4,6 +4,9 @@ import { Link } from "react-router-dom";
 import { Briefcase, Plus, X } from "lucide-react";
 import { isAxiosError } from "axios";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/error-message";
+import { formatBRL } from "./adminDashboard.utils";
+import type { PartnerPlan } from "./PartnerPlanFormModal";
 
 export interface Partner {
   id: string;
@@ -13,9 +16,13 @@ export interface Partner {
   accountEmail: string | null;
   accountUserId?: string | null;
   keyLast4: string | null;
+  partnerPlanId?: string | null;
+  partnerPlanName?: string | null;
+  partnerPlanPriceCents?: number | null;
+  partnerPlanMaxTenants?: number | null;
 }
 
-const EMPTY_FORM = { name: "", maxTenants: 10, accountName: "", accountEmail: "", accountPassword: "" };
+const EMPTY_FORM = { name: "", partnerPlanId: "", maxTenants: "", accountName: "", accountEmail: "", accountPassword: "" };
 
 const inputCls =
   "w-full bg-admin-bg border border-admin-border rounded-xl px-3 py-2.5 text-sm text-admin-text placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
@@ -40,24 +47,52 @@ export function PartnersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
+  const [plans, setPlans] = useState<PartnerPlan[] | null>(null);
+  const [plansError, setPlansError] = useState("");
 
   const load = () =>
     api
       .get("/admin/partners")
-      .then((res) => setPartners(res.data.data))
-      .catch(() => {})
+      .then((res) => { setPartners(res.data.data); setListError(""); })
+      .catch((err) => setListError(errorMessage(err, "Não foi possível carregar os parceiros")))
       .finally(() => setLoading(false));
 
   useEffect(() => {
     load();
   }, []);
 
+  // planos ativos para o "Novo parceiro"
+  function loadPlans() {
+    setPlans(null);
+    setPlansError("");
+    api
+      .get("/admin/partner-plans")
+      .then((res) => setPlans((res.data.data as PartnerPlan[]).filter((p) => p.isActive)))
+      .catch((err) => setPlansError(errorMessage(err, "Não foi possível carregar os planos de parceiro")));
+  }
+
+  function openCreate() {
+    setError("");
+    setForm(EMPTY_FORM);
+    setShowModal(true);
+    loadPlans();
+  }
+
+  const chosenPlan = plans?.find((p) => p.id === form.partnerPlanId) ?? null;
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!chosenPlan) return setError("Escolha o plano do parceiro.");
+    const slots = Number(form.maxTenants);
+    // campo vazio não vira 0 sem querer
+    if (form.maxTenants.trim() === "" || !Number.isInteger(slots) || slots < 0) return setError("Informe o máximo de clientes com um número inteiro, 0 ou mais.");
     setSaving(true);
     setError("");
+    const { maxTenants: _slots, ...rest } = form;
     try {
-      await api.post("/admin/partners", form);
+      // vagas diferentes das do plano = ajuste individual
+      await api.post("/admin/partners", slots === chosenPlan.maxTenants ? rest : { ...rest, maxTenants: slots });
       setShowModal(false);
       setForm(EMPTY_FORM);
       await load();
@@ -86,13 +121,19 @@ export function PartnersPage() {
         </div>
         <div className="flex flex-wrap gap-2">
         <Link
+          to="/admin/parceiros/planos"
+          className="px-4 py-2.5 rounded-full border border-border-light bg-surface-secondary text-text-primary hover:border-brand/50 font-semibold transition-colors text-sm"
+        >
+          Planos de parceiro
+        </Link>
+        <Link
           to="/admin/parceiros/padrao"
           className="px-4 py-2.5 rounded-full border border-border-light bg-surface-secondary text-text-primary hover:border-brand/50 font-semibold transition-colors text-sm"
         >
-          Permissões padrão (todos)
+          Permissões padrão (clientes ady)
         </Link>
         <button
-          onClick={() => { setError(""); setShowModal(true); }}
+          onClick={openCreate}
           className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo parceiro
@@ -117,6 +158,7 @@ export function PartnersPage() {
           <thead>
             <tr className="text-left text-xs text-text-secondary border-b border-border">
               <th className="px-4 py-3 font-medium">Parceiro</th>
+              <th className="px-4 py-3 font-medium">Plano</th>
               <th className="px-4 py-3 font-medium">Vagas</th>
               <th className="px-4 py-3 font-medium">Chave OpenRouter</th>
               <th className="px-4 py-3" />
@@ -124,13 +166,23 @@ export function PartnersPage() {
           </thead>
           <tbody>
             {partners.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-text-tertiary">Nenhum parceiro cadastrado</td></tr>
+              <tr><td colSpan={5} role={listError ? "alert" : undefined} className="px-4 py-10 text-center text-text-tertiary">{listError || "Nenhum parceiro cadastrado"}</td></tr>
             )}
             {partners.map((p) => (
               <tr key={p.id} className="border-b border-border last:border-0">
                 <td className="px-4 py-3">
                   <div className="font-semibold text-text-primary">{p.name}</div>
                   <div className="text-xs text-text-tertiary">{p.accountEmail ?? "Sem conta"}</div>
+                </td>
+                <td className="px-4 py-3">
+                  {p.partnerPlanName ? (
+                    <>
+                      <div className="text-text-primary">{p.partnerPlanName}</div>
+                      <div className="text-xs text-text-tertiary">{formatBRL(p.partnerPlanPriceCents ?? 0)}</div>
+                    </>
+                  ) : (
+                    <div className="text-error">Sem plano</div>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3 text-text-primary">
@@ -167,10 +219,46 @@ export function PartnersPage() {
               <input required className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-text-secondary">Máximo de clientes</span>
-              <input required type="number" min={0} className={inputCls} value={form.maxTenants}
-                onChange={(e) => setForm({ ...form, maxTenants: Number(e.target.value) })} />
+              <span className="text-xs font-medium text-text-secondary">Plano do parceiro</span>
+              <select
+                required
+                className={inputCls}
+                value={form.partnerPlanId}
+                disabled={!plans}
+                onChange={(e) => {
+                  const plan = plans?.find((p) => p.id === e.target.value);
+                  setForm({ ...form, partnerPlanId: e.target.value, maxTenants: plan ? String(plan.maxTenants) : "" });
+                }}
+              >
+                <option value="">{plans ? (plans.length ? "Escolha um plano" : "Nenhum plano ativo") : plansError ? "Planos indisponíveis" : "Carregando planos..."}</option>
+                {plans?.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} · {formatBRL(p.priceCents)} · {p.maxTenants} vagas</option>
+                ))}
+              </select>
             </label>
+            {plansError && (
+              <div className="space-y-2">
+                <div role="alert" className="text-sm text-error">{plansError}</div>
+                <button type="button" onClick={loadPlans} className="ady-btn text-xs font-semibold text-[#17708A] dark:text-[#1E88A8] underline">
+                  Tentar novamente
+                </button>
+              </div>
+            )}
+            {plans?.length === 0 && (
+              <div className="text-xs text-text-secondary">
+                Cadastre um plano em <Link to="/admin/parceiros/planos" className="text-[#17708A] dark:text-[#1E88A8] underline">Planos de parceiro</Link> antes de criar o parceiro.
+              </div>
+            )}
+            {chosenPlan && (
+              <div className="space-y-1.5">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-text-secondary">Máximo de clientes</span>
+                  <input required type="number" min={0} className={inputCls} value={form.maxTenants}
+                    onChange={(e) => setForm({ ...form, maxTenants: e.target.value })} />
+                </label>
+                <div className="text-xs text-text-tertiary">O plano dá {chosenPlan.maxTenants}. Mudar aqui é um ajuste individual.</div>
+              </div>
+            )}
             <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Conta do parceiro</div>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-text-secondary">Nome</span>

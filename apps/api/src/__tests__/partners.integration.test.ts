@@ -12,6 +12,8 @@ import { rbacService } from '../services/core/rbac.service.js';
  */
 describe('Parceiros (super_admin) — integração', () => {
   const id = Date.now().toString().slice(-8);
+  // todo parceiro nasce com plano
+  let partnerPlanId: string;
   const password = 'SecurePass123!';
   const tenantIds: string[] = [];
   const partnerIds: string[] = [];
@@ -32,6 +34,8 @@ describe('Parceiros (super_admin) — integração', () => {
   }
 
   beforeAll(async () => {
+    const [pl] = await db.insert(schema.adyPartnerPlans).values({ name: `Plano pt ${id}`, priceCents: 100000, maxTenants: 5 }).returning();
+    partnerPlanId = pl!.id;
     const sup = await register('super');
     await db.update(schema.users).set({ platformRole: 'super_admin' }).where(eq(schema.users.id, sup.user.id));
     await rbacService.bumpVersion();
@@ -41,12 +45,13 @@ describe('Parceiros (super_admin) — integração', () => {
   afterAll(async () => {
     await db.delete(schema.tenants).where(inArray(schema.tenants.id, tenantIds));
     await db.delete(schema.adyPartners).where(inArray(schema.adyPartners.id, partnerIds));
+    await db.delete(schema.adyPartnerPlans).where(eq(schema.adyPartnerPlans.id, partnerPlanId));
     await rbacService.bumpVersion();
   });
 
   it('cria parceiro com conta própria fora das vagas', async () => {
     const res = await request(app).post('/api/admin/partners').set(asSuper()).send({
-      name: `Parceira ${id}`, maxTenants: 1, accountName: 'Dona', accountEmail: `pt-acc-${id}@test.com`, accountPassword: password,
+      name: `Parceira ${id}`, maxTenants: 1, accountName: 'Dona', accountEmail: `pt-acc-${id}@test.com`, accountPassword: password, partnerPlanId,
     });
     expect(res.status).toBe(201);
     partnerId = res.body.data.id;
@@ -67,7 +72,7 @@ describe('Parceiros (super_admin) — integração', () => {
     expect((await request(app).get('/api/admin/tenants').set(asPartner())).body.data).toEqual([]);
 
     const dup = await request(app).post('/api/admin/partners').set(asSuper()).send({
-      name: 'Outra', maxTenants: 1, accountName: 'X', accountEmail: `pt-acc-${id}@test.com`, accountPassword: password,
+      name: 'Outra', maxTenants: 1, accountName: 'X', accountEmail: `pt-acc-${id}@test.com`, accountPassword: password, partnerPlanId,
     });
     expect(dup.status).toBe(409);
   });

@@ -110,7 +110,7 @@ describe('CampaignsController', () => {
       await ctrl.getCampaign(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Campanha não encontrada' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false, error: expect.objectContaining({ code: 'CAMPAIGN_NOT_FOUND', message: 'Campanha não encontrada' }) }));
     });
   });
 

@@ -19,7 +19,7 @@ describe('Landing Page (public)', () => {
     const res = await request(app).get('/api/public/brand-kit/00000000-0000-0000-0000-000000000000');
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
-    expect(res.body.message).toBe('Tenant não encontrado');
+    expect(res.body.error.message).toBe('Página não encontrada');
   });
 
   it('GET /api/public/brand-kit/:tenantId → 200 with tenant data (no brand kit)', async () => {

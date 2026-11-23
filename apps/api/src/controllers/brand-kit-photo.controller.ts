@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { BrandKitPhotoService, BRAND_KIT_PHOTO_KINDS } from '../services/brand-kit/brand-kit-photo.service.js';
+import { validationBody } from '../middleware/errorHandler.js';
 
 const kindSchema = z.enum(BRAND_KIT_PHOTO_KINDS);
 const listQuerySchema = z.object({ kind: kindSchema.optional() });
@@ -13,7 +14,7 @@ export class BrandKitPhotoController {
 
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ success: false, message: 'Dados inválidos', details: error.errors, timestamp: new Date().toISOString() });
+      res.status(400).json(validationBody(error));
       return true;
     }
     return false;

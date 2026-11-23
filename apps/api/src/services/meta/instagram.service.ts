@@ -179,7 +179,7 @@ export class InstagramService {
     const metaConn = await this.repo(tenantId).findLatestMetaConnection();
 
     if (!metaConn) {
-      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
     }
 
     const accessToken = decryptMetaToken(metaConn.accessToken);
@@ -271,7 +271,7 @@ export class InstagramService {
         throw new AppError(
           401,
           'META_TOKEN_EXPIRED',
-          'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+          'A conexão com a Meta expirou. Reconecte sua conta em Configurações > Integrações.'
         );
       }
 

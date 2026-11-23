@@ -12,6 +12,7 @@ import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupD
 import { VersionCarousel } from './VersionCarousel';
 import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
 import { CreativeRatingPrompt } from './CreativeRatingPrompt';
+import { errorMessage, readBlobError } from '@/lib/error-message';
 
 interface Props {
   result: GenerateCreativeResponse;
@@ -60,6 +61,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [downloadError, setDownloadError] = useState('');
   const [ratingVisible, setRatingVisible] = useState(false);
   const ratingDismissedAssetRef = useRef<string | null>(null);
 
@@ -152,7 +154,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
     try {
       await downloadStudioAsset(selectedVersionId);
       setDownloadState('idle');
-    } catch {
+    } catch (err) {
+      setDownloadError(errorMessage(await readBlobError(err), 'Não foi possível baixar o arquivo'));
       setDownloadState('error');
     }
   };
@@ -588,7 +591,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
                 {downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${isVideo ? 'vídeo' : 'imagem'}`}
               </Button>
             )}
-            {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
+            {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">{downloadError}</p>}
             {!canPublish ? null : isVideo && !onPublish ? (
               <Button size="sm" variant="outline" disabled className="w-full border-dashed">
                 Publicar no Meta · em breve

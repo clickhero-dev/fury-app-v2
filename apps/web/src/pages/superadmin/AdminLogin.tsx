@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 import { clearSession } from '@/lib/clear-session';
 import { canAccessAdmin, platformRoleOf } from '@/lib/platform-role';
 import { useFavicon } from '@/hooks/useFavicon';
@@ -43,7 +44,7 @@ export function AdminLogin() {
       if (isAxiosError(err) && err.response?.status === 401) {
         setError('Email ou senha incorretos');
       } else {
-        setError('Erro ao conectar ao servidor');
+        setError(errorMessage(err, 'Não foi possível entrar'));
       }
     } finally {
       setLoading(false);

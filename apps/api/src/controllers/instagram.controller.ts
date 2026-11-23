@@ -29,7 +29,7 @@ export class InstagramController {
     try {
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
-        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+        throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
       }
 
       const parsed = postsRankedQuerySchema.parse(req.query);
@@ -54,12 +54,12 @@ export class InstagramController {
       try {
         parsedUrl = new URL(url);
       } catch {
-        throw new AppError(400, 'INVALID_MEDIA_URL', 'URL de midia invalida.');
+        throw new AppError(400, 'INVALID_MEDIA_URL', 'Endereço da mídia inválido.');
       }
 
       const isAllowedHost = ALLOWED_MEDIA_HOSTS.some((pattern) => pattern.test(parsedUrl.hostname));
       if (parsedUrl.protocol !== 'https:' || !isAllowedHost) {
-        throw new AppError(400, 'INVALID_MEDIA_URL', 'URL de midia nao permitida.');
+        throw new AppError(400, 'INVALID_MEDIA_URL', 'Endereço da mídia não permitido.');
       }
 
       const response = await fetch(parsedUrl.toString());

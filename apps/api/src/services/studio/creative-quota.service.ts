@@ -1,6 +1,10 @@
 import { AppError } from '../../middleware/errorHandler.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
+import { PartnerRepository } from '../../repository/partner.repository.js';
+
+// conta própria do parceiro: sem cota (usa a chave dele)
+const isPartnerAccount = (tenantId: string) => new PartnerRepository().isPartnerAccount(tenantId);
 
 /**
  * Quota de criativos e modificações do tenant.
@@ -14,6 +18,7 @@ import { StudioRepository } from '../../repository/studio.repository.js';
  * atômica (UPDATE condicional).
  */
 export async function consumeCreativeQuota(tenantId: string): Promise<void> {
+  if (await isPartnerAccount(tenantId)) return;
   const consumed = await new SubscriptionRepository(tenantId).consumeCreativeQuota();
   if (!consumed) {
     throw new AppError(
@@ -27,6 +32,7 @@ export async function consumeCreativeQuota(tenantId: string): Promise<void> {
 /** Estorna uma unidade da cota mensal (usar quando a geração falha após o consumo). */
 export async function refundCreativeQuota(tenantId: string): Promise<void> {
   try {
+    if (await isPartnerAccount(tenantId)) return;
     await new SubscriptionRepository(tenantId).refundCreativeQuota();
   } catch (err) {
     console.error('[creative-quota] refundCreativeQuota falhou:', err);
@@ -66,6 +72,7 @@ export async function refundModificationQuota(rootAssetId: string): Promise<void
 
 /** Teto de modificações do plano vigente do tenant — usado para "congelar" no criativo ao criá-lo. */
 export async function getModificationsPerCreativeLimit(tenantId: string): Promise<number | null> {
+  if (await isPartnerAccount(tenantId)) return null;
   return new SubscriptionRepository(tenantId).getModificationsPerCreativeLimit();
 }
 
@@ -73,6 +80,7 @@ export async function getModificationsPerCreativeLimit(tenantId: string): Promis
 export async function getCreativeQuotaSnapshot(
   tenantId: string,
 ): Promise<{ creativesRemaining: number | null; creativesLimit: number | null }> {
+  if (await isPartnerAccount(tenantId)) return { creativesRemaining: null, creativesLimit: null };
   return new SubscriptionRepository(tenantId).getCreativeQuotaSnapshot();
 }
 

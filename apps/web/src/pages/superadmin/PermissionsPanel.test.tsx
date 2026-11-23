@@ -66,7 +66,7 @@ describe('PermissionsPanel', () => {
     expect(goals).toHaveAttribute('aria-checked', 'false');
     expect(goals).toBeDisabled();
     expect(screen.getByText('Bloqueado para todos')).toBeInTheDocument();
-    expect(screen.getByText(/Também bloqueia a tela de Leads/)).toBeInTheDocument();
+    expect(screen.getByText(/Desligar Campanhas também desliga Clientes/)).toBeInTheDocument();
   });
 
   it('padrão usa a rota de todos; erro mantém o estado', async () => {

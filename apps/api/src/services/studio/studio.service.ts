@@ -355,22 +355,22 @@ export async function downloadStudioAsset(params: { tenantId: string; assetId: s
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const root = asset.rootAssetId ? await repo.findAssetById(asset.rootAssetId) : asset;
   if (root?.archivedAt || asset.archivedAt) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   if (asset.type !== 'image' && asset.type !== 'video') {
-    throw new AppError(400, 'ASSET_NOT_DOWNLOADABLE', 'Este tipo de criativo nao pode ser baixado.');
+    throw new AppError(400, 'ASSET_NOT_DOWNLOADABLE', 'Este tipo de criativo não pode ser baixado.');
   }
 
   // pending_compliance significa que a mídia final já foi persistida e aguarda
   // apenas a análise opcional; só `pending` representa geração ainda em curso.
   if (asset.complianceStatus === 'pending') {
-    throw new AppError(409, 'ASSET_NOT_READY', 'O criativo ainda esta sendo processado.');
+    throw new AppError(409, 'ASSET_NOT_READY', 'O criativo ainda está sendo processado.');
   }
 
   let assetUrl: URL;
@@ -378,7 +378,7 @@ export async function downloadStudioAsset(params: { tenantId: string; assetId: s
     assetUrl = new URL(asset.url);
     if (!['http:', 'https:'].includes(assetUrl.protocol)) throw new Error('unsupported protocol');
   } catch {
-    throw new AppError(400, 'INVALID_ASSET_URL', 'O arquivo do criativo nao esta disponivel.');
+    throw new AppError(400, 'INVALID_ASSET_URL', 'O arquivo do criativo não está disponível.');
   }
 
   let response: Response;
@@ -395,7 +395,7 @@ export async function downloadStudioAsset(params: { tenantId: string; assetId: s
   const contentType = (response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
   const typeRule = DOWNLOAD_CONTENT_TYPES[asset.type];
   if (!contentType.startsWith(typeRule.prefix) || !DOWNLOAD_EXTENSIONS[contentType]) {
-    throw new AppError(400, 'INVALID_ASSET_FORMAT', 'O formato do criativo nao e suportado para download.');
+    throw new AppError(400, 'INVALID_ASSET_FORMAT', 'O formato do criativo não é suportado para download.');
   }
 
   const contentLength = Number(response.headers.get('content-length') ?? 0);
@@ -429,20 +429,20 @@ export async function uploadCreativeAssetToMeta(params: {
   const asset = await repo.findAssetById(params.creativeAssetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const metaConn = await repo.findLatestMetaConnection();
 
   if (!metaConn) {
-    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
   }
 
   const adAccounts = (metaConn.adAccounts || []) as Array<{ id: string }>;
   const accountExists = adAccounts.some((account) => account.id === params.adAccountId);
 
   if (!accountExists) {
-    throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncio nao pertence ao seu tenant.');
+    throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Esta conta de anúncios não pertence a este cliente.');
   }
 
   const accessToken = decryptMetaToken(metaConn.accessToken);
@@ -472,7 +472,7 @@ export async function uploadCreativeAssetToMeta(params: {
   const mimeType = contentType.split(';')[0]?.trim() ?? '';
 
   if (!VALID_IMAGE_TYPES.includes(mimeType)) {
-    throw new AppError(400, 'INVALID_IMAGE_FORMAT', `Formato de imagem invalido: ${mimeType || 'desconhecido'}.`);
+    throw new AppError(400, 'INVALID_IMAGE_FORMAT', `Formato de imagem inválido: ${mimeType || 'desconhecido'}.`);
   }
 
   const arrayBuffer = await imageResponse.arrayBuffer();
@@ -495,7 +495,7 @@ export async function uploadCreativeAssetToMeta(params: {
   } catch (err: any) {
     const metaCode = err.metaCode;
     if (metaCode === 190) {
-      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configuracoes > Integracoes.');
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'A conexão com a Meta expirou. Reconecte sua conta em Configurações > Integrações.');
     }
     throw err;
   }
@@ -516,7 +516,7 @@ export async function deleteStudioAsset(params: { tenantId: string; assetId: str
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const rootId = asset.rootAssetId ?? asset.id;
@@ -533,13 +533,13 @@ export async function restoreStudioAsset(params: { tenantId: string; assetId: st
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const rootId = asset.rootAssetId ?? asset.id;
   const root = await repo.findAssetById(rootId);
   if (!root?.archivedAt) {
-    throw new AppError(400, 'CREATIVE_GROUP_NOT_ARCHIVED', 'Este criativo nao esta arquivado.');
+    throw new AppError(400, 'CREATIVE_GROUP_NOT_ARCHIVED', 'Este criativo não está arquivado.');
   }
 
   await repo.restoreGroup(rootId);

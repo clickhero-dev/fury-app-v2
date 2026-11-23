@@ -40,9 +40,9 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
     return decoded as AccessTokenPayload;
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
-      throw new AppError(401, 'TOKEN_EXPIRED', 'Access token has expired');
+      throw new AppError(401, 'TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
     }
-    throw new AppError(401, 'INVALID_TOKEN', 'Invalid access token');
+    throw new AppError(401, 'INVALID_TOKEN', 'Sessão inválida. Entre novamente.');
   }
 }
 
@@ -55,8 +55,8 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
     return decoded as RefreshTokenPayload;
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
-      throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Refresh token has expired');
+      throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
     }
-    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid refresh token');
+    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sessão expirada. Entre novamente.');
   }
 }

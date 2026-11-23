@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 
 export type NotificationItem = { id: string; type: 'general'; title: string; body: string; actionUrl: string | null; createdAt: string; readAt: string | null };
 type Page = { items: NotificationItem[]; nextCursor: string | null; unreadCount: number };
@@ -9,6 +10,7 @@ const key = ['notifications'];
 export function useNotifications() {
   const queryClient = useQueryClient();
   const [cursor, setCursor] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
   const query = useQuery<Page>({ queryKey: key, queryFn: async () => (await api.get<{ data: Page }>('/notifications?limit=20')).data.data, refetchInterval: 30000, retry: false });
   const refresh = useCallback(() => { setCursor(null); return queryClient.invalidateQueries({ queryKey: key }); }, [queryClient]);
   useEffect(() => {
@@ -26,8 +28,10 @@ export function useNotifications() {
     };
     void connect(0); return () => { stopped = true; controller?.abort(); if (timer) clearTimeout(timer); };
   }, [refresh]);
-  const markRead = async (id: string) => { await api.patch(`/notifications/${id}/read`); await refresh(); };
-  const markAllRead = async () => { await api.post('/notifications/read-all'); await refresh(); };
-  const loadMore = async () => { if (!query.data?.nextCursor || cursor) return; setCursor(query.data.nextCursor); const next = (await api.get<{ data: Page }>(`/notifications?limit=20&cursor=${encodeURIComponent(query.data.nextCursor)}`)).data.data; queryClient.setQueryData<Page>(key, (old) => old ? { ...next, items: [...old.items, ...next.items.filter((item) => !old.items.some((x) => x.id === item.id))] } : next); setCursor(null); };
-  return { ...query, items: query.data?.items ?? [], unreadCount: query.data?.unreadCount ?? 0, markRead, markAllRead, loadMore };
+  // falha de ação vira mensagem com motivo
+  const attempt = async (action: string, run: () => Promise<void>) => { setActionError(''); try { await run(); } catch (err) { setActionError(errorMessage(err, action)); } };
+  const markRead = (id: string) => attempt('Não foi possível marcar como lida', async () => { await api.patch(`/notifications/${id}/read`); await refresh(); });
+  const markAllRead = () => attempt('Não foi possível marcar todas como lidas', async () => { await api.post('/notifications/read-all'); await refresh(); });
+  const loadMore = async () => { if (!query.data?.nextCursor || cursor) return; const next = query.data.nextCursor; setCursor(next); await attempt('Não foi possível carregar mais notificações', async () => { const page = (await api.get<{ data: Page }>(`/notifications?limit=20&cursor=${encodeURIComponent(next)}`)).data.data; queryClient.setQueryData<Page>(key, (old) => old ? { ...page, items: [...old.items, ...page.items.filter((item) => !old.items.some((x) => x.id === item.id))] } : page); }); setCursor(null); };
+  return { ...query, items: query.data?.items ?? [], unreadCount: query.data?.unreadCount ?? 0, markRead, markAllRead, loadMore, actionError };
 }

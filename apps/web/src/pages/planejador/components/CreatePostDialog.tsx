@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
 import { publishNowToast } from '../plannerPage.utils';
 import type { Post } from '../types';
+import { errorMessage } from '@/lib/error-message';
 
 interface Props {
   mode: 'schedule' | 'now';
@@ -271,7 +272,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         url = data.data.url;
-      } catch { throw Object.assign(new Error('Não foi possível enviar a mídia. Tente novamente.'), { captionCode: 'CAPTION_UPLOAD_FAILED' }); }
+      } catch (err) { throw Object.assign(new Error(errorMessage(err, 'Não foi possível enviar a mídia')), { captionCode: 'CAPTION_UPLOAD_FAILED' }); }
       uploadedFiles.current.set(file, url);
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
       return url;
@@ -323,13 +324,13 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     onError: (error: any) => {
       const code = error?.captionCode ?? error?.response?.data?.error?.code;
       const messages: Record<string, string> = {
-        CAPTION_UPLOAD_FAILED: 'Não foi possível enviar a mídia. Tente novamente ou escreva a legenda manualmente.',
+        CAPTION_UPLOAD_FAILED: `${error?.message} Você também pode escrever a legenda manualmente.`,
         MEDIA_NOT_FOUND: 'A mídia não está disponível. Envie novamente ou escreva um tema na legenda.',
         CAPTION_MEDIA_ORIGIN: 'A origem da mídia não é permitida. Selecione uma mídia da biblioteca ou envie novamente.',
         CAPTION_VIDEO_NO_SPEECH: 'Não foi identificada fala no vídeo. Escreva um tema na legenda e tente novamente.',
         CAPTION_TRANSCRIPTION_UNAVAILABLE: 'Não foi possível ouvir o vídeo. Tente novamente ou escreva a legenda manualmente.',
       };
-      setSuggestError(messages[code] ?? 'Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.');
+      setSuggestError(messages[code] ?? `${errorMessage(error, 'Não foi possível gerar a legenda')} Você também pode escrever manualmente.`);
     },
     onSettled: () => { generating.current = false; },
   });
@@ -404,7 +405,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       onCreated('Post criado com sucesso!');
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Erro ao criar post';
+      const msg = errorMessage(err, 'Não foi possível criar o post');
       onError?.(msg);
     },
   });

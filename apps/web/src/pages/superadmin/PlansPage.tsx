@@ -3,6 +3,7 @@ import { Plus, CirclePlus } from 'lucide-react';
 import api from '@/lib/api';
 import { PlanCard } from './plans/PlanCard';
 import { PlanFormModal } from './plans/PlanFormModal';
+import { errorMessage } from '@/lib/error-message';
 import { EMPTY_LIMITS, normalizeLimits, planChanges, type PlanDraft, type PlanLimits, type PlanView } from './plans/planForm';
 
 interface Plan {
@@ -40,9 +41,9 @@ export function PlansPage() {
   useEffect(() => {
     api.get('/admin/plans').then((r) => {
       setPlans(r.data.data);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch((err) => setMsg(errorMessage(err, 'Não foi possível carregar os planos'))).finally(() => setLoading(false));
     // funcionalidades que o perfil pode tirar do plano
-    api.get('/admin/plans/configurable-views').then((r) => setPlanViews(r.data.data?.views ?? [])).catch(() => {});
+    api.get('/admin/plans/configurable-views').then((r) => setPlanViews(r.data.data?.views ?? [])).catch((err) => setMsg(errorMessage(err, 'Não foi possível carregar as funcionalidades do plano')));
   }, []);
 
   const reloadPlans = async () => {
@@ -62,7 +63,7 @@ export function PlansPage() {
       setMsg('Plano criado');
       setForm(null);
       await reloadPlans();
-    } catch { setFormError('Erro ao criar'); }
+    } catch (err) { setFormError(errorMessage(err, 'Não foi possível criar o plano')); }
     finally { setSaving(false); }
   };
 
@@ -77,7 +78,7 @@ export function PlansPage() {
       setMsg('Plano atualizado');
       setForm(null);
       await reloadPlans();
-    } catch { setFormError('Erro ao salvar'); }
+    } catch (err) { setFormError(errorMessage(err, 'Não foi possível salvar o plano')); }
     finally { setSaving(false); }
   };
 
@@ -100,7 +101,7 @@ export function PlansPage() {
       if (data?.error?.code === 'PLAN_HAS_SUBSCRIBERS') {
         setMsg(`Não é possível deletar: ${data.error.message}`);
       } else {
-        setMsg('Erro ao deletar plano');
+        setMsg(errorMessage(err, 'Não foi possível deletar o plano'));
       }
     } finally {
       setSaving(false);

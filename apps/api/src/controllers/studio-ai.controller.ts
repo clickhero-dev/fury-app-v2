@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import { StudioAiService } from '../services/studio/studio-ai.service.js';
 import { IMAGE_MODELS, VIDEO_MODELS } from '../services/studio/studio-model-catalog.js';
+import { errorBody, validationBody } from '../middleware/errorHandler.js';
 
 /**
  * IDs aceitos no body de generate-image/video. Sincronizados MANUALMENTE
@@ -62,7 +63,7 @@ export class StudioAiController {
 
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: error.errors });
+      res.status(400).json(validationBody(error));
       return true;
     }
     return false;
@@ -115,7 +116,7 @@ export class StudioAiController {
     try {
       const { assetId, feedback } = req.body as { assetId: string; feedback: string };
       if (!assetId || !feedback || feedback.length < 3) {
-        res.status(400).json({ error: 'assetId e feedback são obrigatórios' });
+        res.status(400).json(errorBody('VALIDATION_ERROR', 'Escolha o criativo e descreva o ajuste (mínimo de 3 caracteres).'));
         return;
       }
       const tenantId = (req as any).tenant?.tenantId as string;

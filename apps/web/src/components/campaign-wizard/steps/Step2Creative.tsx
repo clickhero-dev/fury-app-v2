@@ -9,6 +9,7 @@ import type { StudioAsset } from '@/types/studio';
 import { useUploadCreative } from '../hooks/useCreateCampaign';
 import type { WizardCreativeState, WizardObjective } from '../types';
 import { InstagramPostsTab } from './InstagramPostsTab';
+import { errorMessage } from '@/lib/error-message';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -179,8 +180,8 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           destinationUrl: currentCopy.destinationUrl,
         })),
       ]);
-    } catch {
-      setUploadError('Erro ao enviar imagem. Tente novamente.');
+    } catch (err) {
+      setUploadError(errorMessage(err, 'Não foi possível enviar a imagem'));
     }
   }
 

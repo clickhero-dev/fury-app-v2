@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eye, Pencil, Plus, Trash2, X } from 'lucide-react';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 import { MarkdownContent } from '@/components/MarkdownContent';
 
 type Faq = { id: string; title: string; slug: string; markdown: string; status: 'draft' | 'published' };
@@ -33,12 +34,12 @@ export function FaqsPage() {
     try {
       const { data } = await api.post('/admin/faqs/images', form);
       setEditing({ ...editing, markdown: `${editing.markdown}\n![imagem](${data.data.url})\n` });
-    } catch { setMessage('Não foi possível enviar a imagem'); }
+    } catch (err) { setMessage(errorMessage(err, 'Não foi possível enviar a imagem')); }
   };
   const remove = async (faq: Faq) => {
     if (!confirm(`Excluir definitivamente “${faq.title}”?`)) return;
     try { await api.delete(`/admin/faqs/${faq.id}`); setMessage('FAQ excluída'); load(); }
-    catch { setMessage('Erro ao excluir FAQ'); }
+    catch (err) { setMessage(errorMessage(err, 'Não foi possível excluir a FAQ')); }
   };
 
   return <div className="space-y-6">

@@ -5,6 +5,16 @@ import crypto from 'node:crypto';
 import type { AuthService } from '../services/core/auth.service.js';
 import type { SocialAuthService } from '../services/core/social-auth.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { rbacService } from '../services/core/rbac.service.js';
+
+// conta do parceiro (ele e a equipe): a tela esconde cobrança; na dúvida, false
+async function partnerAccountOf(userId: string): Promise<boolean> {
+  try {
+    return await rbacService.inPartnerAccount(userId);
+  } catch {
+    return false;
+  }
+}
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit, checkSocialLoginRateLimit, checkSetPasswordRateLimit, getClientIp } from '../middleware/rate-limit.middleware.js';
 import { passwordSchema } from '../lib/shared.js';
 import { audienceGeoSchema } from '../lib/audience-geo.js';
@@ -158,7 +168,7 @@ function verifySocialState(state: string): SocialStatePayload {
     return jwt.verify(state, getSocialStateSecret(), { algorithms: ['HS256'] }) as SocialStatePayload;
   } catch (err) {
     if (err instanceof AppError) throw err;
-    throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
+    throw new AppError(401, 'INVALID_OAUTH_STATE', 'A autorização expirou ou é inválida. Tente conectar de novo.');
   }
 }
 
@@ -204,7 +214,7 @@ function verifySocialCallback(req: Request, res: Response): SocialStatePayload {
   const cookieNonce = readCookie(req, SOCIAL_NONCE_COOKIE);
   res.clearCookie(SOCIAL_NONCE_COOKIE, { path: '/api/auth' });
   if (!state.nonce || !cookieNonce || state.nonce !== cookieNonce) {
-    throw new AppError(401, 'OAUTH_STATE_MISMATCH', 'Falha na verificacao anti-CSRF do login social.');
+    throw new AppError(401, 'OAUTH_STATE_MISMATCH', 'Não foi possível confirmar a origem do login. Tente entrar de novo.');
   }
   return state;
 }
@@ -273,6 +283,7 @@ export class AuthController {
             // o admin decide quem entra por aqui (super_admin / admin_partner)
             platformRole: result.user.platformRole,
             tenantId: result.user.tenantId,
+            partnerAccount: await partnerAccountOf(result.user.id),
           },
           ...(policy ? { policy } : {}),
         },
@@ -563,7 +574,7 @@ export class AuthController {
 
       const code = (req.query.code as string | undefined) ?? ((req.body || {}) as { code?: string }).code;
       if (!code) {
-        throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
+        throw new AppError(400, 'MISSING_CODE', 'O login social não retornou o código de autorização. Tente entrar de novo.');
       }
 
       const { allowed } = await checkSocialLoginRateLimit(getClientIp(req));
@@ -583,6 +594,7 @@ export class AuthController {
           role: result.user.role,
           platformRole: result.user.platformRole,
           tenantId: result.user.tenantId,
+          partnerAccount: await partnerAccountOf(result.user.id),
         },
         isNewUser: result.isNewUser,
         ...(policy ? { policy } : {}),
@@ -644,7 +656,7 @@ export class AuthController {
 
       const code = (req.query.code as string | undefined) ?? ((req.body || {}) as { code?: string }).code;
       if (!code || code.length < 10) {
-        throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
+        throw new AppError(400, 'MISSING_CODE', 'O login social não retornou o código de autorização. Tente entrar de novo.');
       }
 
       const { allowed } = await checkSocialLoginRateLimit(getClientIp(req));
@@ -707,14 +719,14 @@ export class AuthController {
 
       const id = ((req.body || {}) as { id?: string }).id?.trim();
       if (!id || !/^[a-f0-9]{64}$/.test(id)) {
-        throw new AppError(400, 'INVALID_HANDOFF_ID', 'Identificador de sessao invalido.');
+        throw new AppError(400, 'INVALID_HANDOFF_ID', 'Identificador de sessão inválido. Tente entrar de novo.');
       }
 
       const payload = (await this.socialAuthService.consumeSocialHandoff(id)) as
         | { user: { id: string; email: string; name: string | null; role: string; tenantId: string }; isNewUser: boolean }
         | null;
       if (!payload) {
-        throw new AppError(401, 'HANDOFF_EXPIRED', 'Sessao social expirada. Entre novamente.');
+        throw new AppError(401, 'HANDOFF_EXPIRED', 'Sessão do login social expirada. Entre novamente.');
       }
 
       const tokens = await this.socialAuthService.issueSession({

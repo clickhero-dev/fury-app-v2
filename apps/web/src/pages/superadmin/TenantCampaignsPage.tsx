@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { TrendingUp, Image } from "lucide-react";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/error-message";
 import { ListPagination, usePagination } from "./ListPagination";
 
 interface Campaign {
@@ -28,6 +29,7 @@ export function TenantCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [creatives, setCreatives] = useState<CreativeAsset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const paged = usePagination(campaigns);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function TenantCampaignsPage() {
         setCampaigns(res.data.data.campaigns ?? []);
         setCreatives(res.data.data.creativeAssets ?? []);
       })
-      .catch(() => {})
+      .catch((err) => setLoadError(errorMessage(err, "Não foi possível carregar as campanhas do cliente")))
       .finally(() => setLoading(false));
   }, [tenantId]);
 
@@ -60,8 +62,8 @@ export function TenantCampaignsPage() {
           <TrendingUp className="w-4 h-4 text-admin-petrol" /> Campanhas
         </h2>
         {campaigns.length === 0 ? (
-          <div className="text-center py-12 text-admin-text-faint text-sm">
-            Nenhuma campanha encontrada
+          <div role={loadError ? "alert" : undefined} className="text-center py-12 text-admin-text-faint text-sm">
+            {loadError || "Nenhuma campanha encontrada"}
           </div>
         ) : (
           <div className="overflow-x-auto">

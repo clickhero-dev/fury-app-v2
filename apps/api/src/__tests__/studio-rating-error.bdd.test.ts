@@ -19,6 +19,6 @@ it('Dado falha SQL, então retorna erro client-safe que permite tentar novamente
   app.use(errorHandler);
   const response = await request(app).put('/studio/assets/11111111-1111-4111-8111-111111111111/rating').send({ rating: 4 });
   expect(response.status).toBe(500);
-  expect(response.body).toMatchObject({ success: false, error: { code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected error occurred' } });
+  expect(response.body).toMatchObject({ success: false, error: { code: 'INTERNAL_SERVER_ERROR', message: 'Erro no servidor. Tente de novo; se continuar, fale com o suporte.' } });
   expect(response.text).not.toMatch(/SQL|creative_asset_ratings|sensitive-user-id|stack/);
 });
