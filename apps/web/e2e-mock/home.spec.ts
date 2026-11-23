@@ -91,8 +91,7 @@ test('entrada pública Trial vai à Home', async ({ page }) => {
   expect(writes.filter(item => item.path === '/public/trial/access')).toHaveLength(1);
 });
 test('conta demo vai à Home', async ({ page }) => {
-  await mockApp(page, 'demo'); await page.goto('/login'); await dismissCookies(page);
-  await page.getByRole('button', { name: /Conhecer o ady com uma conta demo/i }).click();
+  await mockApp(page, 'demo'); await login(page);
   await expectHome(page);
 });
 for (const card of cards) {
