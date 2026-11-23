@@ -1,14 +1,14 @@
 /*
 # Language: pt-BR
 Funcionalidade: destino inicial após login
-  Cenário: aguarda Trial vigente e abre o chat
-  Cenário: plano pago conserva dashboard
+  Cenário: Trial vigente abre a Home
+  Cenário: plano pago abre a mesma Home
   Cenário: Trial expirado mantém o bloqueio
 */
 import { expect, test } from '@playwright/test';
 for (const scenario of [
-  { name: 'Trial vigente', status: 'trial', end: '2099-01-01T00:00:00.000Z', destination: '/chat' },
-  { name: 'plano pago', status: 'active', end: null, destination: '/dashboard' },
+  { name: 'Trial vigente', status: 'trial', end: '2099-01-01T00:00:00.000Z', destination: '/inicio' },
+  { name: 'plano pago', status: 'active', end: null, destination: '/inicio' },
   { name: 'Trial expirado', status: 'trial', end: '2000-01-01T00:00:00.000Z', destination: '/assinatura-vencida' },
 ]) {
   test(`login com senha: ${scenario.name}`, async ({ page }) => {
@@ -33,7 +33,7 @@ for (const scenario of [
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
     await requestedPromise;
     await expect(page).toHaveURL(/\/inicio$/);
-    await expect(page.getByText('Preparando seu acesso…')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'O que vamos fazer hoje?' })).toBeVisible();
     release();
     await expect(page).toHaveURL(new RegExp(`${scenario.destination}$`));
   });

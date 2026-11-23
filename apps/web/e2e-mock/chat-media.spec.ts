@@ -162,8 +162,12 @@ for (const theme of ['light', 'dark'] as const) {
     for (const file of fixtures) await expect(page.getByText(file, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Abrir referencia.png', exact: true }).click();
     await expect.poll(() => state.downloads).toBeGreaterThan(0);
-    await expect(page.getByRole('dialog', { name: 'Visualização de referencia.png' }).getByRole('img', { name: 'referencia.png', exact: true })).toBeVisible();
-    await expect.poll(() => page.getByRole('dialog', { name: 'Visualização de referencia.png' }).getByRole('img', { name: 'referencia.png', exact: true }).evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    const viewer = page.getByRole('dialog', { name: 'Visualização de referencia.png' });
+    const image = viewer.getByRole('img', { name: 'referencia.png', exact: true });
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Fechar visualização' }).click();
+    await expect(viewer).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath(`media-${theme}-history.png`), fullPage: true });
     expect(errors).toEqual([]);
   });
