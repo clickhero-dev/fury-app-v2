@@ -45,10 +45,9 @@ export class TicketsController {
     }
   };
 
-  list = async (req: Request, res: Response, next: NextFunction) => {
+  list = async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      // ?refresh=1 força buscar no ClickUp (botão Atualizar)
-      const result = await this.ticketService.listTickets({ refresh: req.query?.refresh === '1' });
+      const result = await this.ticketService.listTickets();
       res.json({ success: true, ...result, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);

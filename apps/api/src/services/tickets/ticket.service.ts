@@ -11,13 +11,8 @@ import {
   type ReviewClickUpTicketInput,
 } from '../../lib/clickup-tickets.client.js';
 import { AppError } from '../../middleware/errorHandler.js';
-import type { SupportTicketRepository } from '../../repository/support-ticket.repository.js';
 
-// chamados do sistema: nome começa com [N1]–[N5]
-const TICKET_NAME_RE = /^\s*\[N[1-5]\]/i;
-const TICKETS_SYNC_MS = 60 * 60 * 1000;
-
-type SafeFailureReason = 'timeout' | 'unauthorized' | 'provider_unavailable' | 'invalid_response' | 'missing_config' | 'too_many_tickets';
+type SafeFailureReason = 'timeout' | 'unauthorized' | 'provider_unavailable' | 'invalid_response' | 'missing_config';
 
 function toSafeFailureReason(error: ClickUpTicketsError): SafeFailureReason {
   switch (error.code) {
@@ -25,17 +20,13 @@ function toSafeFailureReason(error: ClickUpTicketsError): SafeFailureReason {
     case 'CLICKUP_TIMEOUT': return 'timeout';
     case 'CLICKUP_INVALID_RESPONSE': return 'invalid_response';
     case 'CLICKUP_MISSING_CONFIG': return 'missing_config';
-    case 'CLICKUP_TOO_MANY_TICKETS': return 'too_many_tickets';
     default: return 'provider_unavailable';
   }
 }
 
 /** Caso de uso de tickets: não conhece HTTP/Express nem segredos do ClickUp. */
 export class TicketService {
-  constructor(
-    private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'listStatuses' | 'updateTicketStatus' | 'reviewTicket'>,
-    private readonly store: Pick<SupportTicketRepository, 'read' | 'replaceAll'> | null = null,
-  ) {}
+  constructor(private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'listStatuses' | 'updateTicketStatus' | 'reviewTicket'>) {}
 
   async reviewTicket(taskId: string, input: ReviewClickUpTicketInput): Promise<{ status: string }> {
     try {
@@ -64,38 +55,24 @@ export class TicketService {
     }
   }
 
-  // lê a cópia do banco; busca no ClickUp se pedirem ou se tiver mais de 1 hora
-  async listTickets(options: { refresh?: boolean } = {}, now = new Date()): Promise<{
+  async listTickets(): Promise<{
     data: { open: ClickUpTicketSummary[]; resolved: ClickUpTicketSummary[] };
-    syncedAt: string | null;
     partial_failures: Array<{ provider: 'clickup'; reason: SafeFailureReason }>;
   }> {
-    const stored = this.store ? await this.store.read() : { tickets: [], syncedAt: null };
-    let tickets = stored.tickets;
-    let syncedAt = stored.syncedAt;
-    const partial_failures: Array<{ provider: 'clickup'; reason: SafeFailureReason }> = [];
-    const stale = !this.store || options.refresh || !syncedAt || now.getTime() - syncedAt.getTime() >= TICKETS_SYNC_MS;
-    if (stale) {
-      try {
-        tickets = (await this.clickUpClient.listTickets()).filter((t) => TICKET_NAME_RE.test(t.name));
-        syncedAt = now;
-        await this.store?.replaceAll(tickets, now);
-      } catch (error) {
-        const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
-        captureServerEvent('ticket_clickup_list_failed', { reason });
-        // ClickUp fora: segue com a cópia guardada
-        tickets = stored.tickets;
-        syncedAt = stored.syncedAt;
-        partial_failures.push({ provider: 'clickup', reason });
+    try {
+      const tickets = await this.clickUpClient.listTickets();
+      const open: ClickUpTicketSummary[] = [];
+      const resolved: ClickUpTicketSummary[] = [];
+      for (const ticket of tickets) {
+        if (ticket.status === 'concluído' || ticket.statusType === 'closed') resolved.push(ticket);
+        else open.push(ticket);
       }
+      return { data: { open, resolved }, partial_failures: [] };
+    } catch (error) {
+      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      captureServerEvent('ticket_clickup_list_failed', { reason });
+      return { data: { open: [], resolved: [] }, partial_failures: [{ provider: 'clickup', reason }] };
     }
-    const open: ClickUpTicketSummary[] = [];
-    const resolved: ClickUpTicketSummary[] = [];
-    for (const ticket of tickets) {
-      if (ticket.status === 'concluído' || ticket.statusType === 'closed') resolved.push(ticket);
-      else open.push(ticket);
-    }
-    return { data: { open, resolved }, syncedAt: syncedAt?.toISOString() ?? null, partial_failures };
   }
 
   async listAssignees(): Promise<ClickUpMember[]> {

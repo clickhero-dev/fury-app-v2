@@ -240,46 +240,9 @@ describe('ClickUpTicketsClient', () => {
       id: 'task-1', name: '[N1] Publicação falhou', status: 'pendente',
       statusType: 'open', priority: 'high', url: 'https://app.clickup.com/t/task-1',
       createdAt: '2026-10-06T00:27:27.809Z',
-      doneAt: null, assignees: [],
       labels: ['app', 'meta'],
     }]);
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/task?include_closed=true&page=0');
-  });
-
-  it('lê todas as páginas até last_page e traz conclusão e responsáveis', async () => {
-    const task = (n: number, extra: Record<string, unknown> = {}) => ({
-      id: `t-${n}`, name: `Chamado ${n}`, status: { status: 'pendente', type: 'open' }, priority: null,
-      url: `https://app.clickup.com/t/${n}`, date_created: '1791246447809', ...extra,
-    });
-    const page = (tasks: unknown[], last: boolean) => ({ ok: true, status: 200, json: async () => ({ tasks, last_page: last }) } as unknown as Response);
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(page(Array.from({ length: 100 }, (_, i) => task(i)), false))
-      .mockResolvedValueOnce(page([task(100, {
-        status: { status: 'concluído', type: 'closed' }, date_done: null, date_closed: '1791332847809',
-        assignees: [{ id: 7, username: 'Kaio' }, { username: 'sem id' }],
-      })], true));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const tickets = await new ClickUpTicketsClient().listTickets();
-
-    expect(tickets).toHaveLength(101);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1][0])).toMatch(/&page=1$/);
-    expect(tickets[100]).toMatchObject({ doneAt: '2026-10-07T00:27:27.809Z', assignees: [{ id: 7, name: 'Kaio' }] });
-  });
-
-  it('sem last_page, para quando a página vem com menos de 100', async () => {
-    const fetchMock = mockFetchOnce(200, { tasks: [] });
-    await expect(new ClickUpTicketsClient().listTickets()).resolves.toEqual([]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('acima de 50 páginas recusa com motivo em vez de números errados', async () => {
-    const full = Array.from({ length: 100 }, (_, i) => ({
-      id: `t-${i}`, name: 'x', status: { status: 'pendente', type: 'open' }, url: 'u', date_created: '1791246447809',
-    }));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ tasks: full, last_page: false }) } as unknown as Response));
-    await expect(new ClickUpTicketsClient().listTickets()).rejects.toMatchObject({ code: 'CLICKUP_TOO_MANY_TICKETS', message: expect.stringMatching(/passou de 5000 tickets/) });
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/task?include_closed=true');
   });
 
   it('lista membros disponíveis no workspace ClickUp', async () => {

@@ -1519,39 +1519,6 @@ export const adyPartnerPayments = pgTable(
   }),
 );
 
-// cópia local dos chamados [N1]–[N5] do ClickUp
-export const adySupportTickets = pgTable(
-  'ady_support_tickets',
-  {
-    clickupId: varchar('clickup_id', { length: 64 }).primaryKey(),
-    name: varchar('name', { length: 1000 }).notNull(),
-    status: varchar('status', { length: 100 }).notNull(),
-    statusType: varchar('status_type', { length: 30 }).notNull(),
-    priority: varchar('priority', { length: 20 }),
-    url: text('url').notNull(),
-    labels: jsonb('labels').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    assignees: jsonb('assignees').$type<Array<{ id: number; name: string }>>().notNull().default(sql`'[]'::jsonb`),
-    ticketCreatedAt: timestamp('ticket_created_at', { withTimezone: true }).notNull(),
-    doneAt: timestamp('done_at', { withTimezone: true }),
-    syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => ({
-    createdIdx: index('ady_support_tickets_created_idx').on(table.ticketCreatedAt),
-  }),
-);
-
-// linha única: hora da última atualização vinda do ClickUp
-export const adySupportTicketsSync = pgTable(
-  'ady_support_tickets_sync',
-  {
-    id: smallint('id').primaryKey().default(1),
-    syncedAt: timestamp('synced_at', { withTimezone: true }).notNull(),
-  },
-  () => ({
-    singleRow: check('ady_support_tickets_sync_id_check', sql`id = 1`),
-  }),
-);
-
 export const allTables = {
   tenants,
   users,
@@ -1606,6 +1573,4 @@ export const allTables = {
   adyPartnerPayments,
   adyPartnerPlans,
   adyPartnerPlanViewsBlocked,
-  adySupportTickets,
-  adySupportTicketsSync,
 };

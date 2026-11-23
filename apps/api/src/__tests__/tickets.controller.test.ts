@@ -190,12 +190,9 @@ describe('TicketsController', () => {
     const client = {
       createTicket: vi.fn(),
       listTickets: vi.fn().mockResolvedValue([
-        { id: 'open-1', name: '[N1] Erro', status: 'pendente', statusType: 'open' },
-        { id: 'open-2', name: '[n5] Ideia', status: 'em progresso', statusType: 'custom' },
-        { id: 'done-1', name: '[N3] Feito', status: 'concluído', statusType: 'closed' },
-        { id: 'pr', name: 'PR#356 revisão', status: 'pendente', statusType: 'open' },
-        { id: 'feat', name: 'FEAT nova tela', status: 'pendente', statusType: 'open' },
-        { id: 'sprint', name: 'Sprint 10', status: 'concluído', statusType: 'closed' },
+        { id: 'open-1', status: 'pendente', statusType: 'open' },
+        { id: 'open-2', status: 'em progresso', statusType: 'custom' },
+        { id: 'done-1', status: 'concluído', statusType: 'closed' },
       ]),
     };
     const response = mockRes();
@@ -205,16 +202,6 @@ describe('TicketsController', () => {
       success: true,
       data: { open: [expect.objectContaining({ id: 'open-1' }), expect.objectContaining({ id: 'open-2' })], resolved: [expect.objectContaining({ id: 'done-1' })] },
       partial_failures: [],
-    }));
-  });
-
-  it('lista grande demais vira motivo próprio na falha parcial', async () => {
-    const client = { createTicket: vi.fn(), listTickets: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_TOO_MANY_TICKETS', 'muitos')) };
-    const response = mockRes();
-    await new TicketsController(new TicketService(client as any)).list({} as any, response, vi.fn());
-
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-      partial_failures: [{ provider: 'clickup', reason: 'too_many_tickets' }],
     }));
   });
 
