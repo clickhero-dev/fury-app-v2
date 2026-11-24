@@ -1,3 +1,4 @@
+import './chat-websocket-test-mock';
 /* # language: pt-BR
 Funcionalidade: continuar um caminho da Home no chat
   Cenário: cada entrada abre pergunta sem restaurar conversa anterior nem enviar automaticamente

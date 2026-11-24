@@ -17,11 +17,15 @@ export function createChatProxy(options: ChatProxyOptions): Router {
     const cancel = /^\/conversations\/[a-zA-Z0-9-]+\/runs\/[a-zA-Z0-9-]+\/cancel\/?$/.test(req.path) && req.method === 'POST';
     const batch = /^\/conversations\/[a-zA-Z0-9-]+\/approvals\/(?:review|confirm-batch)\/?$/.test(req.path) && req.method === 'POST';
     const single = /^\/approvals\/[a-zA-Z0-9-]+\/confirm\/?$/.test(req.path) && req.method === 'POST';
-    if (!retry && !clarify && !cancel && !batch && !single && !/^\/conversations(?:\/[a-zA-Z0-9-]+(?:\/messages)?)?\/?$/.test(req.path)) {
+    const websocketTicket = /^\/websocket-ticket\/?$/.test(req.path) && req.method === 'POST';
+    if (!retry && !clarify && !cancel && !batch && !single && !websocketTicket && !/^\/conversations(?:\/[a-zA-Z0-9-]+(?:\/messages)?)?\/?$/.test(req.path)) {
       return next(new AppError(404, 'NOT_FOUND', 'Recurso não encontrado'));
     }
     // Intent belongs to a fresh authenticated human request, never model/delegated traffic.
     if (getDelegatedUser(req)) return next(new AppError(403, 'CHAT_SCOPE_DENIED', 'Ação não permitida'));
+    if (websocketTicket && req.body && (typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length > 0)) {
+      return next(new AppError(400, 'BAD_INPUT', 'Dados inválidos'));
+    }
     if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'humanIntent')) {
       return next(new AppError(400, 'BAD_INPUT', 'Campo não permitido'));
     }
@@ -43,6 +47,7 @@ export function createChatProxy(options: ChatProxyOptions): Router {
         });
       } finally { clearTimeout(timer); }
       res.status(response.status);
+      if (websocketTicket) res.setHeader('cache-control', 'no-store');
       const contentType = response.headers.get('content-type');
       if (contentType) res.setHeader('content-type', contentType);
       if (contentType?.includes('text/event-stream')) {

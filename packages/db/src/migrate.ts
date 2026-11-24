@@ -204,6 +204,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0079_automation_not_blockable' },
   { tag: '0082_chat_batch_approvals' },
   { tag: '0083_chat_media_publish' },
+  { tag: '0085_chat_websocket_tickets' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

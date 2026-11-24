@@ -71,3 +71,13 @@ export default defineConfig([
   },
 ])
 ```
+
+### Chat WebSocket
+
+Configure `VITE_CHAT_WS_URL` no build do frontend com a URL absoluta do serviço
+WebSocket, por exemplo `wss://chat.example.com/ws`. O valor é incorporado ao
+bundle Vite; alterações exigem novo build. `ws://` é permitido somente em
+localhost no servidor de desenvolvimento. Não inclua credenciais, query string
+ou fragmento. Sem configuração válida, o envio falha sem fallback para HTTP.
+O serviço deve autorizar a origem do frontend e fornecer o ticket pelo endpoint
+`/api/chat/websocket-ticket`.

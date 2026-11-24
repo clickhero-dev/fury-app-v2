@@ -1,3 +1,4 @@
+import './chat-websocket-test-mock';
 // @vitest-environment jsdom
 /*
 Funcionalidade: confirmação recusada sem resultado fictício
