@@ -1008,7 +1008,7 @@ export function EstudioHome() {
             <div className="flex flex-wrap items-center justify-center gap-3">
               {canCreate && <button
                 type="button"
-                onClick={handleStartQuickCreate}
+                onClick={() => { setQuotaErrorMessage(null); setView('quick-create'); }}
                 className={`ady-btn rounded-full bg-brand-hover px-5 py-2 text-sm font-semibold text-white ${BUTTON_HOVER}`}
               >
                 Tentar novamente

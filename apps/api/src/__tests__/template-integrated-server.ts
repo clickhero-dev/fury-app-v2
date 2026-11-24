@@ -1,0 +1,20 @@
+/** Servidor descartável: controller e service reais, portas externas em memória. */
+import express from 'express';
+import { StudioAiController } from '../controllers/studio-ai.controller.js';
+import { StudioAiService } from '../services/studio/studio-ai.service.js';
+import { errorHandler } from '../middleware/errorHandler.js';
+const stats = { analyses: 0, consumed: 0, refunded: 0, generated: 0, persisted: 0 };
+const id = '11111111-1111-4111-8111-111111111111';
+const repo = { findTenant: async () => ({ name: 'Exemplo' }), findBrandKit: async () => null, findBusinessProfile: async () => null, createAsset: async () => { stats.persisted++; throw new Error('unexpected persistence'); } };
+const llm = { chatWithImages: async () => { stats.analyses++; return { content: '{}', costUsd: 0 }; }, generateImageFromImages: async () => { stats.generated++; throw new Error('unexpected generation'); }, generateImageWithMeta: async () => { stats.generated++; throw new Error('unexpected generation'); } };
+const quota = { consumeCreativeQuota: async () => { stats.consumed++; }, refundCreativeQuota: async () => { stats.refunded++; } };
+const photos = { findById: async (photoId: string) => photoId === id ? { id, kind: 'modelo', url: 'https://fixture.invalid/model.png' } : null, findByIds: async () => [] };
+const service = new StudioAiService(() => repo as any, llm as any, quota as any, () => photos as any);
+const controller = new StudioAiController(service);
+const app = express();
+app.use((req, res, next) => { res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5197'); res.setHeader('Access-Control-Allow-Headers', 'authorization,content-type'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); if (req.method === 'OPTIONS') { res.sendStatus(204); return; } next(); });
+app.use(express.json());
+app.get('/__fixture/stats', (_req, res) => { res.json(stats); });
+app.post('/api/studio/ai/generate-image', (req, _res, next) => { (req as any).tenant = { tenantId: 'fixture' }; next(); }, controller.generateImage);
+app.use(errorHandler);
+app.listen(3197, '127.0.0.1');

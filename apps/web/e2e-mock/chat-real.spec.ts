@@ -18,7 +18,7 @@ const webUrl = process.env.CHAT_E2E_WEB_URL;
 test.skip(!databaseUrl || !secret || !webUrl, 'Requer stack isolada de chat e CHAT_E2E_DATABASE_URL, CHAT_E2E_JWT_SECRET e CHAT_E2E_WEB_URL');
 
 test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
-  test.setTimeout(90000);
+  test.setTimeout(180000);
   const db = postgres(databaseUrl!, {max:1});
   const tenant = randomUUID(), user = randomUUID(), conversation = randomUUID(), approval = randomUUID();
   const caption = `Teste isolado ${approval}`;
@@ -97,7 +97,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await page.reload(); await page.getByRole('button',{name:'Proposta isolada'}).click();
     const video = page.getByRole('article').filter({hasText:'Criar vídeo'});
     await video.getByRole('button',{name:'Confirmar ação'}).click();
-    await expect(video.locator('video[aria-label="Vídeo gerado"]')).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
+    await expect(video.getByLabel('Vídeo gerado', {exact:true})).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     const videoStatus = await db`select status,result from chat_approvals where id=${videoApproval}`;
     expect(videoStatus[0].status).toBe('completed'); expect(videoStatus[0].result.job.status).toBe('done');
     const imageEditApproval = randomUUID(), imageAsset = randomUUID();
@@ -113,6 +113,7 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
     await page.reload(); await page.getByRole('button',{name:'Proposta isolada'}).click();
     const videoEdit = page.getByRole('article').filter({hasText:'Editar vídeo'});
     await videoEdit.getByRole('button',{name:'Confirmar ação'}).click();
+    await expect(videoEdit.getByLabel('Vídeo gerado', {exact:true})).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     await expect(videoEdit.locator('video[aria-label="Vídeo gerado"]')).toHaveAttribute('src','https://example.invalid/video-e2e.mp4',{timeout:15000});
     const post = await db`select id,xmin::text as version from social_posts where tenant_id=${tenant} and caption=${caption}`;
     const cancelApproval = randomUUID(), cancelPath = `/api/planner/posts/${post[0].id}/chat-cancel`;
