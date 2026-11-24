@@ -1,3 +1,4 @@
+import { AppError } from '../middleware/errorHandler.js';
 import { describe, it, expect, vi } from 'vitest';
 import { StudioAiService } from '../services/studio/studio-ai.service.js';
 
@@ -392,6 +393,33 @@ describe('StudioAiService — biblioteca nova e modelo de anúncio', () => {
     })).rejects.toMatchObject({ code: 'TEMPLATE_ANALYSIS_INVALID' });
     expect(quota.refundCreativeQuota).toHaveBeenCalledWith('t-1');
     expect(llm.generateImageFromImages).not.toHaveBeenCalled();
+  });
+
+  it.each(['', '{}', 'null'])('Dada análise %j, então devolve cota sem gerar nem persistir', async (content) => {
+    resetMocks();
+    repo = makeRepo();
+    llm.chatWithImages.mockResolvedValueOnce({ content, costUsd: 0 });
+    await expect(svc.generateImage('t-1', {
+      model: 'x', prompt: userText, aspect_ratio: '1:1', resolution: '2K', template_photo_id: MODELO,
+    })).rejects.toMatchObject({ code: 'TEMPLATE_ANALYSIS_INVALID' });
+    expect(quota.refundCreativeQuota).toHaveBeenCalledTimes(1);
+    expect(llm.chatWithImages).toHaveBeenCalledTimes(1);
+    expect(llm.generateImageFromImages).not.toHaveBeenCalled();
+    expect(repo.createAsset).not.toHaveBeenCalled();
+  });
+
+  it('Dado timeout persistente, então repete só a análise e devolve cota uma vez', async () => {
+    resetMocks();
+    repo = makeRepo();
+    llm.chatWithImages.mockRejectedValueOnce(new AppError(502, 'OPENROUTER_CHAT_TIMEOUT', 'safe', { retryable: true }))
+      .mockRejectedValueOnce(new AppError(502, 'OPENROUTER_CHAT_TIMEOUT', 'safe', { retryable: true }));
+    await expect(svc.generateImage('t-1', {
+      model: 'x', prompt: userText, aspect_ratio: '1:1', resolution: '2K', template_photo_id: MODELO,
+    })).rejects.toMatchObject({ code: 'TEMPLATE_ANALYSIS_UNAVAILABLE' });
+    expect(quota.refundCreativeQuota).toHaveBeenCalledTimes(1);
+    expect(llm.chatWithImages).toHaveBeenCalledTimes(2);
+    expect(llm.generateImageFromImages).not.toHaveBeenCalled();
+    expect(repo.createAsset).not.toHaveBeenCalled();
   });
 
   it('nenhum texto aproveitável do usuário → 422 e devolve a cota', async () => {

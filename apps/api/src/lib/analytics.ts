@@ -47,7 +47,7 @@ export function captureServerException(
     context.tenantId ?? 'server',
     {
       source: 'server',
-      environment: context.environment?.trim() || process.env.APP_ENV?.trim() || process.env.NODE_ENV?.trim() || 'unknown',
+      environment: context.environment?.trim() || analyticsEnvironment(),
       requestId: context.requestId,
       reason: context.reason,
       providerStatus: context.providerStatus,
@@ -66,7 +66,7 @@ export function captureServerEvent(event: string, properties: Record<string, unk
   client.capture({
     distinctId: String(properties.tenantId ?? 'server'),
     event,
-    properties,
+    properties: { ...properties, environment: analyticsEnvironment() },
   });
 }
 
@@ -74,4 +74,9 @@ export function captureServerEvent(event: string, properties: Record<string, unk
 export async function flushAnalytics(): Promise<void> {
   if (!client) return;
   await client.flush();
+}
+
+/** Deployment label must be configured explicitly to distinguish hmg from production. */
+export function analyticsEnvironment(): string {
+  return process.env.APP_ENV?.trim() || process.env.DEPLOYMENT_ENV?.trim() || process.env.NODE_ENV?.trim() || 'unknown';
 }
