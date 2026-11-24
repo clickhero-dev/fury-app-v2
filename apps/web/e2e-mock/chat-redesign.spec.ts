@@ -184,8 +184,10 @@ for (const viewport of [{ width: 375, height: 812 }, { width: 390, height: 844 }
     const rect = (await video.boundingBox())!;
     await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height - 15);
     const viewer = page.getByRole('dialog', { name: 'Visualização de Vídeo gerado' });
+    await expect(viewer).toBeVisible();
     await expect(viewer.locator('video[controls]')).toBeVisible();
     await viewer.getByRole('button', { name: 'Fechar visualização' }).click();
+    await expect(viewer).toBeHidden();
     await latest.click();
     await expect(latest).toHaveCount(0);
   });
