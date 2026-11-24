@@ -16,7 +16,7 @@ it('correlaciona controller, serviço e exceção com o ID dos logs', async () =
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
     errorHandler(error, { method: 'GET', originalUrl: '/api/admin/tickets/statuses' } as any, res as any, vi.fn());
-    expect(captureServerException).toHaveBeenCalledWith(error, expect.objectContaining({ requestId: 'req-logs-123', reason: 'unauthorized', providerStatus: 401, environment: process.env.APP_ENV ?? process.env.NODE_ENV ?? 'unknown' }));
+    expect(captureServerException).toHaveBeenCalledWith(error, expect.objectContaining({ requestId: 'req-logs-123', reason: 'unauthorized', providerStatus: 401, environment: process.env.APP_ENV || 'unknown' }));
     expect(captureServerEvent).toHaveBeenCalledWith('ticket_clickup_statuses_failed', expect.objectContaining({ requestId: 'req-logs-123' }));
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: { code: 'TICKET_PROVIDER_UNAVAILABLE', message: 'Não foi possível carregar os status agora. Tente novamente.', details: { requestId: 'req-logs-123' } } }));

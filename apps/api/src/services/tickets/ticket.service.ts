@@ -93,7 +93,7 @@ export class TicketService {
       return await this.clickUpClient.listStatuses();
     } catch (error) {
       const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
-      const diagnostics = { requestId, reason, environment: process.env.APP_ENV ?? process.env.NODE_ENV ?? 'unknown', providerStatus: error instanceof ClickUpTicketsError ? error.providerStatus : undefined };
+      const diagnostics = { requestId, reason, environment: process.env.APP_ENV || 'unknown', providerStatus: error instanceof ClickUpTicketsError ? error.providerStatus : undefined };
       captureServerEvent('ticket_clickup_statuses_failed', diagnostics);
       throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os status agora. Tente novamente.', { requestId }, diagnostics);
     }
