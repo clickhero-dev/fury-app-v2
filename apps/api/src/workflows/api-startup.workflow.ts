@@ -51,7 +51,14 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
       retryPolicy: { maxAttempts: 3, backoffMs: 2_000, backoffType: 'exponential' },
       execute: async (_ctx, _artifacts) => {
         const start = Date.now();
-        await waitForRedisReady();
+        try {
+          await waitForRedisReady();
+        } catch (err) {
+          const code = err instanceof Error && ['REDIS_CONFIG_INVALID', 'REDIS_CONNECTION_TIMEOUT', 'REDIS_CONNECTION_ENDED'].includes(err.message)
+            ? err.message : 'REDIS_CONNECTION_ERROR';
+          setCheck('redis', false, code);
+          throw new Error(code);
+        }
         const latencyMs = Date.now() - start;
         setCheck('redis', true, `latency ${latencyMs}ms`);
         return { ok: true, latencyMs };

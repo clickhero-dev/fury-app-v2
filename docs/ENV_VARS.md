@@ -128,3 +128,6 @@ Em produção, esse valor aponta para a URL do EasyPanel.
 | `DEEPSEEK_API_KEY` | platform.deepseek.com |
 | `ASAAS_API_KEY` | Painel Asaas → Integrações → API |
 | `R2_*` | Cloudflare Dashboard → R2 → seu bucket |
+### Redis do worker Meta
+
+Em produção e homologação, configure `REDIS_URL` explicitamente em cada processo da API/worker com a URL `redis://` ou `rediss://` do serviço Redis do próprio ambiente. Ausência ou protocolo inválido falha com `REDIS_CONFIG_INVALID`; o fallback local existe apenas quando `NODE_ENV` é explicitamente `development` ou `test`. Não registre a URL, pois pode conter credenciais. A conexão tenta até 10 reconexões (200 ms a 2 s); cada espera de prontidão dura no máximo 25 s. Se a inicialização de um worker Meta falhar depois que a API estiver ativa, ela é tentada novamente após 30 s, com backoff exponencial até 5 minutos; os checks de startup são atualizados após recuperação e as tentativas param no encerramento. Verifique o check Redis e os checks dos workers no health, além dos códigos sanitizados nos logs. O workflow de inicialização da API continua exigindo Redis antes de atender requisições. Jobs BullMQ usam IDs determinísticos para deduplicação, sem garantia de execução exatamente uma vez.
