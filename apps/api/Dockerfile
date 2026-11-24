@@ -52,4 +52,4 @@ COPY --from=builder /app/packages/db/dist ./packages/db/dist
 COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
 
 EXPOSE 3000
-CMD ["sh", "-c", "node packages/db/dist/migrate.js && node apps/api/dist/index.js"]
+CMD ["node", "apps/api/dist/index.js"]
