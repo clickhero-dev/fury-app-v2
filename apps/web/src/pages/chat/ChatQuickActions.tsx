@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { buildDirectQuickActionPrompt, contextualQuickActions, directQuickActions, guidedSetupPrompt, type QuickActionContext } from './quick-actions';
+import { buildDirectQuickActionPrompt, buildSpecificQuickActionPrompt, contextualQuickActions, directQuickActions, guidedSetupPrompt, quickActions, type QuickActionContext } from './quick-actions';
 
 export function ChatQuickActions({onSelect,context = {},onExplore,disabled = false}: {
   onSelect:(prompt:string)=>void | Promise<void>; context?:QuickActionContext; onExplore?:()=>void; disabled?:boolean;
@@ -21,6 +21,12 @@ export function ChatQuickActions({onSelect,context = {},onExplore,disabled = fal
       {directQuickActions.map((action,index)=><button key={action.label} type="button"
         className={index===0?'ady-chat-quick-primary':undefined} disabled={disabled || pending}
         onClick={()=>{void select(buildDirectQuickActionPrompt(action,context));}}>
+        <action.icon size={18} aria-hidden="true"/> {action.label}
+      </button>)}
+    </div>
+    <div className="ady-chat-quick" role="group" aria-label="Ações específicas">
+      {quickActions.map(action=><button key={action.label} type="button" disabled={disabled || pending}
+        onClick={()=>{void select(buildSpecificQuickActionPrompt(action,context));}}>
         <action.icon size={18} aria-hidden="true"/> {action.label}
       </button>)}
     </div>
