@@ -142,8 +142,8 @@ test('aprova ações e retoma conversa com serviços reais', async ({page}) => {
         await expect(card.getByRole('button',{name:'Confirmar ação'})).toHaveCount(0);
         const rejected = await page.request.post(`${process.env.CHAT_E2E_API_URL ?? 'http://127.0.0.1:3199/api'}/chat/approvals/${id}/confirm`,{headers:{Authorization:`Bearer ${token}`}});
         expect(rejected.status()).toBe(409);
-        const unchanged = await db`select status from chat_approvals where id=${id}`;
-        expect(unchanged[0].status).toBe('pending');
+        const rejectedState = await db`select status,result from chat_approvals where id=${id}`;
+        expect(rejectedState[0].status).toBe('pending'); expect(rejectedState[0].result).toBeNull();
       } else {
         await expect(card).toContainText('15,00'); await card.getByRole('button',{name:'Confirmar ação'}).click(); await expect(card).toContainText('Concluída');
       }

@@ -3,7 +3,6 @@ name: QA - jornada real
 # PRs consultam a API hmg sem mutações de produto. A jornada com campanha/imagem
 # real exige acionamento manual e opt-in explícito.
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       allow_mutations:
@@ -15,8 +14,7 @@ on:
         type: string
         default: ''
 
-# Uma execução por PR; execuções de PRs diferentes não se cancelam.
-# Atualizações da mesma PR substituem a execução obsoleta.
+# Uma execução manual por branch; branches diferentes não se cancelam.
 concurrency:
   group: qa-jornada-real-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

@@ -95,6 +95,8 @@ suite('BullMQ e PostgreSQL reais descartáveis', () => {
         await vi.waitFor(async () => expect((await repo.get(conversation, p.id)).status).toBe('completed'), { timeout: 10000 });
     });
     it('restart repete draft_text interno uma vez e persiste o resultado', async () => {
+        // Stop the previous workers before creating the recovery fixture: a queued
+        // recovery job could otherwise execute the newly approved plan immediately.
         await Promise.all(workers.map(w => w.close()));
         const p = await draft('draft_text', { prompt: 'Texto sintético' });
         await repo.mutate(conversation, p.id, p.version, p => {
