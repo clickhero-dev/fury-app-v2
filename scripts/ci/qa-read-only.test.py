@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/qa-jornada-real.yml'
+ROOT = WORKFLOW.parents[2]
 
 
 class ReadOnlyQAContract(unittest.TestCase):
@@ -26,6 +27,15 @@ class ReadOnlyQAContract(unittest.TestCase):
                 })
                 self.assertEqual(result, expected)
         self.assertIn('pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-real.spec.ts', step.group(1))
+
+    def test_preflight_precedes_all_product_mutations_and_cleanup(self):
+        spec = (ROOT / 'apps/web/e2e-qa/jornada-real.spec.ts').read_text()
+        readiness = (ROOT / 'scripts/ci/qa-readiness.mjs').read_text()
+        self.assertLess(spec.index('runWithReadiness('), spec.index("test.step('Criar campanha"))
+        self.assertLess(spec.index('runWithReadiness('), spec.index("test.step('Gerar imagem"))
+        self.assertIn('if (!result.ok)', readiness)
+        self.assertIn('return journey()', readiness)
+        self.assertIn('if (token && creationStarted)', spec)
 
     def test_safe_journey_is_the_default(self):
         source = WORKFLOW.read_text()
