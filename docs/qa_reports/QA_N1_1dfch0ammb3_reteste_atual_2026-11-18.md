@@ -1,0 +1,9 @@
+# QA — Foto do estúdio, verificação adicional de 18/11
+
+Card 1dfch0ammb3, PR #434. Resultado: **incompleto; manter em rascunho**.
+
+- Base examinada: head `2ab8bdbc`, `hmg` ancestral e GitHub `MERGEABLE`. A árvore principal possui alterações independentes e foi preservada.
+- ClickUp MCP retornou limite diário; o cliente REST existente confirmou a descrição e critérios. Não houve alteração no card.
+- Passaram 55 testes Vitest de serviço, controller, OpenRouter e seleção de texto. Passaram os dois cenários Playwright de estúdio com APIs simuladas, incluindo fallback, em servidor isolado. O console registrou consultas auxiliares sem dados e imagem fictícia inválida. Uma tentativa anterior reutilizou servidor já existente na porta 5175 e falhou por servir outra versão; o reteste usou porta isolada. Estes testes não comprovam geração nem integrações reais.
+- No CI de `2ab8bdbc`, builds, unitários e `test-studio-photos` passaram. `jornada-real` falhou por cota de QA esgotada (20/20), conforme artefato. O job Chatbot falhou em dois cenários de mídia: procuravam botão `Visualizar referencia.png`, enquanto a interface apresenta `Abrir referencia.png`. Corrigido o seletor; em seguida foi reproduzida ambiguidade entre a miniatura e a imagem no modal. A verificação foi delimitada ao modal e os dois cenários, claro e escuro, passaram localmente. CI do commit posterior ainda precisa ser confirmado.
+- Permanecem pendentes três gerações reais repetidas, comparação visual humana da identidade, idioma e legibilidade, validação de upload/tenant/storage reais e CI integral verde. A causa raiz da ocorrência original não está comprovada. É necessário ambiente de teste isolado com cota e credenciais apropriadas; não usar cota do cliente. Não declarar a PR pronta enquanto faltarem essas evidências.

@@ -62,6 +62,25 @@ jobs:
       - name: Build api
         run: pnpm --filter @fury/api run build
 
+  test-studio-photos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+      - name: Install Chromium
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify quick-create photo payload
+        working-directory: apps/web
+        run: pnpm exec playwright test -c playwright.studio.config.ts
+
   # ─────────────────────────────────────────────────────────────
   # Testes unitários (API + WEB)
   # ─────────────────────────────────────────────────────────────
