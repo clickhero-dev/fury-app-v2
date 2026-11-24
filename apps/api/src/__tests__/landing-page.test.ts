@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import app from '../index.js';
+import app from './ready-app.js';
 import { db, tenants, brandKits } from '@fury/db';
 
 describe('Landing Page (public)', () => {

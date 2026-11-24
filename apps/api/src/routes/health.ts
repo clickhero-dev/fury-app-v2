@@ -5,7 +5,7 @@ const router = Router();
 
 router.get('/', (_req, res) => {
   const state = getApiState();
-  res.json({
+  res.status(200).json({
     status: state.status,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
