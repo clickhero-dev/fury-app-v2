@@ -569,3 +569,20 @@ describe('CampaignsController', () => {
     });
   });
 });
+
+// Dado falha transitória/retorno inválido, a copy mantém contrato client-safe.
+describe('BDD: sugestões de campanha recuperáveis', () => {
+  it.each(['timeout', '503', 'invalid'])('Cenário: %s seguido de sucesso → fallback limitado', async kind => {
+    const { SuggestionProviderError } = await import('../services/llms/suggestion-runner.js');
+    mockChat.mockReset();
+    if (kind === 'invalid') mockChat.mockResolvedValueOnce('invalid');
+    else mockChat.mockRejectedValueOnce(new SuggestionProviderError(kind === '503' ? 'http' : 'timeout', kind === '503' ? 503 : undefined));
+    mockChat.mockResolvedValueOnce('{"headline":"Título","primaryText":"Texto completo"}');
+    const repo = { findBrandKit: vi.fn(), findTenant: vi.fn() };
+    const ctrl = new CampaignsController({} as CampaignsService, (() => repo) as any);
+    const res = makeRes(); const next = vi.fn();
+    await ctrl.suggestText(makeReq({ body: { imageUrl: 'https://cdninstagram.com/a.jpg' } }), res, next);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { headline: 'Título', primaryText: 'Texto completo' } }));
+    expect(mockChat).toHaveBeenCalledTimes(2); expect(next).not.toHaveBeenCalled();
+  });
+});

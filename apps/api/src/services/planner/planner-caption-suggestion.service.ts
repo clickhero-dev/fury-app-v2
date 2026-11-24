@@ -1,3 +1,4 @@
+import { runSuggestion } from '../llms/suggestion-runner.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import type { ChatMessage } from '../llms/openrouter.service.js';
 import type { StudioRepository } from '../../repository/studio.repository.js';
@@ -66,12 +67,8 @@ export class PlannerCaptionSuggestionService {
         ? [{ type: 'text', text: context ? `Tema informado: ${context}` : 'Crie uma legenda contextual para esta imagem.' }, { type: 'image_url', image_url: { url: imageUrl } }]
         : `Tema informado: ${context}` },
     ];
-    for (const model of MODELS) {
-      try {
-        const caption = parseCaption(await this.llm.chat(messages, { model, max_tokens: 1024, response_format: { type: 'json_object' }, timeoutMs: 20_000 }));
-        if (caption) return { caption, imageUsed: Boolean(imageUrl) };
-      } catch { /* tenta o modelo seguinte sem vazar erro do provedor */ }
-    }
+    const caption = await runSuggestion(this.llm, messages, MODELS, parseCaption);
+    if (caption) return { caption, imageUsed: Boolean(imageUrl) };
     throw new AppError(503, 'CAPTION_SUGGESTION_UNAVAILABLE', UNAVAILABLE);
   }
 }

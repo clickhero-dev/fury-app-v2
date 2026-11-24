@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { runWithTenant } from '../../lib/ai-key-context.js';
 import { ExternalHttpError } from '../../lib/http-client.js';
 import { openrouterService, OpenRouterChatError } from '../llms/openrouter.service.js';
+import { SuggestionProviderError } from '../llms/suggestion-runner.js';
 import { PlanStepError } from './chat-plan-executor.js';
 
 const PRIMARY_MODEL = 'deepseek/deepseek-chat';
@@ -30,6 +31,7 @@ function fallbackModel(env: FallbackEnvironment): string | undefined {
 function transient(error: unknown): boolean {
     if (error instanceof OpenRouterChatError)
         return error.providerStatus === 408 || error.providerStatus === 429 || error.providerStatus >= 500;
+    if (error instanceof SuggestionProviderError) return error.kind === 'network' || error.kind === 'timeout';
     return error instanceof ExternalHttpError ||
         (error instanceof DOMException && ['AbortError', 'TimeoutError'].includes(error.name));
 }

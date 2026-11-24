@@ -1,3 +1,4 @@
+import { runSuggestion } from '../services/llms/suggestion-runner.js';
 import type { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
@@ -249,10 +250,7 @@ const PRIMARY_TEXT_MAX_LENGTH = 125;
 // O Gemini Flash é o modelo de visão principal; o Nemotron VL fica como
 // fallback de provedor. Nenhum texto genérico deve ser devolvido quando ambos
 // falham, porque isso mascara que a imagem não foi analisada.
-const SUGGESTION_MODELS: { id: string; maxAttempts: number }[] = [
-  { id: 'google/gemini-2.5-flash', maxAttempts: 2 },
-  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 2 },
-];
+const SUGGESTION_MODELS = ['google/gemini-2.5-flash', 'nvidia/nemotron-nano-12b-v2-vl:free'];
 
 interface AdCopySuggestion {
   headline: string;
@@ -263,8 +261,8 @@ function parseAdCopy(raw: string): AdCopySuggestion | null {
   const cleaned = raw.replace(/```json|```/g, '').trim();
   try {
     const parsed = JSON.parse(cleaned);
-    const headline = String(parsed.headline || '').trim();
-    const primaryText = String(parsed.primaryText || '').trim();
+    const headline = typeof parsed?.headline === 'string' ? parsed.headline.trim() : '';
+    const primaryText = typeof parsed?.primaryText === 'string' ? parsed.primaryText.trim() : '';
     if (!headline || !primaryText) return null;
     return { headline, primaryText };
   } catch {
@@ -272,81 +270,15 @@ function parseAdCopy(raw: string): AdCopySuggestion | null {
   }
 }
 
-// Retorna null (por esgotar tentativas ou erro de API) quando o chamador deve tentar o próximo modelo.
-async function tryGenerateAdCopy(
-  systemPrompt: string,
-  promptText: string,
-  imageUrl: string | undefined,
-  model: string,
-  maxAttempts: number,
-): Promise<AdCopySuggestion | null> {
+async function generateAdCopyWithinLimits(systemPrompt: string, promptText: string, imageUrl: string | undefined): Promise<AdCopySuggestion | null> {
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    {
-      role: 'user',
-      // sem imagem (vídeo): só texto
-      content: imageUrl
-        ? [
-            { type: 'text', text: promptText },
-            { type: 'image_url', image_url: { url: imageUrl } },
-          ]
-        : promptText,
-    },
+    { role: 'user', content: imageUrl ? [{ type: 'text', text: promptText }, { type: 'image_url', image_url: { url: imageUrl } }] : promptText },
   ];
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let raw: string;
-    try {
-      raw = await openrouterService.chat(messages, { model, max_tokens: 256 });
-    } catch (err) {
-      console.warn(`[suggestText] modelo ${model} falhou:`, (err as Error).message);
-      return null;
-    }
-
+  return runSuggestion(openrouterService, messages, SUGGESTION_MODELS, raw => {
     const parsed = parseAdCopy(raw);
-
-    if (
-      parsed &&
-      parsed.headline.length <= HEADLINE_MAX_LENGTH &&
-      parsed.primaryText.length <= PRIMARY_TEXT_MAX_LENGTH
-    ) {
-      return parsed;
-    }
-
-    const issues: string[] = [];
-    if (!parsed) {
-      issues.push('a resposta anterior não veio em JSON válido');
-    } else {
-      if (parsed.headline.length > HEADLINE_MAX_LENGTH) {
-        issues.push(`headline ficou com ${parsed.headline.length} caracteres (máximo ${HEADLINE_MAX_LENGTH})`);
-      }
-      if (parsed.primaryText.length > PRIMARY_TEXT_MAX_LENGTH) {
-        issues.push(`primary_text ficou com ${parsed.primaryText.length} caracteres (máximo ${PRIMARY_TEXT_MAX_LENGTH})`);
-      }
-    }
-
-    messages.push(
-      { role: 'assistant', content: raw },
-      {
-        role: 'user',
-        content: `Isso não serve: ${issues.join('; ')}. Reescreva mais curto SEM cortar frases no meio — construa headline e primary_text que já nasçam dentro do limite. Responda APENAS com o JSON {"headline":"...","primaryText":"..."}, sem markdown.`,
-      },
-    );
-  }
-
-  return null;
-}
-
-async function generateAdCopyWithinLimits(
-  systemPrompt: string,
-  promptText: string,
-  imageUrl: string | undefined,
-): Promise<AdCopySuggestion | null> {
-  for (const { id: model, maxAttempts } of SUGGESTION_MODELS) {
-    const result = await tryGenerateAdCopy(systemPrompt, promptText, imageUrl, model, maxAttempts);
-    if (result) return result;
-  }
-  return null;
+    return parsed && parsed.headline.length <= HEADLINE_MAX_LENGTH && parsed.primaryText.length <= PRIMARY_TEXT_MAX_LENGTH ? parsed : null;
+  });
 }
 
 // mirrors ALLOWED_MEDIA_HOSTS em instagram.controller.ts — evita SSRF via imageUrl do cliente.

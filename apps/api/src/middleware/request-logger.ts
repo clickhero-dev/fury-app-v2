@@ -1,3 +1,4 @@
+import { requestContext } from '../lib/request-context.js';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { db, requestLogs } from '@fury/db';
@@ -169,5 +170,5 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     captureLog();
   });
 
-  next();
+  requestContext.run({ requestId, path: req.path }, next);
 }

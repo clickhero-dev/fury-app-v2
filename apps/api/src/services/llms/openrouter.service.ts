@@ -1,4 +1,5 @@
-import { externalFetch } from '../../lib/http-client.js';
+import { SuggestionProviderError } from './suggestion-runner.js';
+import { externalFetch, ExternalHttpError } from '../../lib/http-client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
 import { resolveAiKey } from '../../lib/ai-key-context.js';
@@ -45,10 +46,9 @@ export type ChatMessage = {
   content: string | ChatContentPart[];
 };
 
-/** Safe provider status for internal retry policy; preserves the existing public API error. */
-export class OpenRouterChatError extends AppError {
+export class OpenRouterChatError extends SuggestionProviderError {
   constructor(readonly providerStatus: number) {
-    super(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
+    super('http', providerStatus);
   }
 }
 
@@ -153,7 +153,13 @@ export const openrouterService = {
       }
       // Timer remains active through body consumption, not only response headers.
       const data = (await response.json()) as any;
-      return data.choices?.[0]?.message?.content ?? '';
+      const content = data?.choices?.[0]?.message?.content;
+      return typeof content === 'string' ? content : '';
+    } catch (error) {
+      if (error instanceof SuggestionProviderError) throw error;
+      if (controller.signal.aborted) throw new SuggestionProviderError('timeout');
+      if (error instanceof ExternalHttpError) throw new SuggestionProviderError('network');
+      throw error;
     } finally { clearTimeout(timer); }
   },
 

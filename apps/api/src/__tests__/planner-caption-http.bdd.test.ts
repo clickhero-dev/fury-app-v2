@@ -1,3 +1,4 @@
+import { SuggestionProviderError } from '../services/llms/suggestion-runner.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
@@ -42,7 +43,7 @@ describe('BDD: rota real com serviço de legenda', () => {
     expect(chat).not.toHaveBeenCalled();
   });
   it('Cenário: timeout/erro de ambos modelos → 503 sanitizado', async () => {
-    chat.mockRejectedValue(new Error('token-secret prompt stack'));
+    chat.mockRejectedValue(new SuggestionProviderError('timeout'));
     const res = await send({ context: 'tema' });
     expect(res.status).toBe(503); expect(JSON.stringify(res.body)).not.toContain('token-secret'); expect(chat).toHaveBeenCalledTimes(2);
   });
