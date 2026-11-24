@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useOutletContext } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Image as ImageIcon, Info, Loader2, Play, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
-import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
+import { AppLayout, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import { UsageBadge } from '@/components/UsageBadge';
@@ -17,6 +17,9 @@ import { CreativeResult } from './components/CreativeResult';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
+import type { ShellContext } from '@/components/layout/AuthenticatedShell';
+import { CreationReferences } from './components/CreationReferences';
+import './studio-creation.css';
 import { VideoCreateForm } from './components/VideoCreateForm';
 import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
@@ -79,6 +82,12 @@ export function EstudioHome() {
   const queryClient = useQueryClient();
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
+  const shell = useOutletContext<ShellContext | null>();
+  const setMobileFabHidden = shell?.setMobileFabHidden;
+  useEffect(() => {
+    setMobileFabHidden?.(view === 'quick-create');
+    return () => setMobileFabHidden?.(false);
+  }, [setMobileFabHidden, view]);
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
   const [isNewGeneration, setIsNewGeneration] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
@@ -466,7 +475,7 @@ export function EstudioHome() {
           <button
             type="button"
             onClick={handleBackToLibrary}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-text-tertiary transition-colors hover:text-text-primary"
+            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-text-tertiary transition-colors hover:text-text-primary"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Biblioteca
@@ -478,7 +487,7 @@ export function EstudioHome() {
 
   return (
     <AppLayout>
-      <div className={`mx-auto w-full space-y-6 px-6 pt-2 pb-8 sm:px-10 ${view === 'quick-create' ? '' : 'max-w-5xl'}`}>
+      <div className={`mx-auto w-full space-y-6 pt-2 pb-8 sm:px-10 ${view === 'quick-create' ? 'studio-creation' : 'px-6'} ${view === 'quick-create' ? '' : 'max-w-5xl'}`}>
         {toast && (
           <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
             toast.type === 'success'
@@ -642,14 +651,14 @@ export function EstudioHome() {
 
         {/* QUICK CREATE VIEW */}
         {view === 'quick-create' && videoEnabled && imageEnabled && (
-          <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface-secondary p-1 w-fit">
+          <div role="group" aria-label="Tipo de criação" className="grid grid-cols-2 gap-1 rounded-full border border-border bg-surface-secondary p-1 sm:w-fit">
             {([['image', 'Imagem', ImageIcon], ['video', 'Vídeo', Video]] as const).map(([mode, label, Icon]) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setCreateMode(mode)}
                 aria-pressed={createMode === mode}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm transition ${createMode === mode ? 'bg-brand font-semibold text-white shadow-sm' : CHIP_OFF}`}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm transition ${createMode === mode ? 'bg-brand font-semibold text-white shadow-sm' : CHIP_OFF}`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -659,203 +668,203 @@ export function EstudioHome() {
         )}
 
         {view === 'quick-create' && videoEnabled && (createMode === 'video' || !imageEnabled) && (
-          <>
-            <p className="text-sm text-text-tertiary">
-              Descreva o vídeo, revise o roteiro e o ady gera o vídeo com IA usando suas fotos
-            </p>
-            <VideoCreateForm onCreated={handleTrackVideo} />
-          </>
+          <VideoCreateForm onCreated={handleTrackVideo} />
         )}
 
         {view === 'quick-create' && imageEnabled && (createMode === 'image' || !videoEnabled) && (
-          <div className="w-full space-y-5">
-            <p className="text-sm text-text-tertiary">
-              Descreva o anúncio que deseja gerar para criar a imagem ideal
-            </p>
-
+          <div className="w-full min-w-0 space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold text-text-primary">Criar imagem</h2>
+              <p className="text-sm text-text-secondary">Comece descrevendo o anúncio que você quer criar.</p>
+            </div>
             {quotaReached && (
-              <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div role="alert" className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-text-primary">
                 Limite de criativos do mês atingido — faça upgrade do plano para continuar.
               </div>
             )}
-
-            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-5">
-            <Card className={`${SURFACE} border-0 bg-transparent p-0 shadow-none`}>
-              <CardContent className={`${SURFACE} space-y-3 p-5`}>
-                <div className="ady-decor flex flex-wrap items-center gap-2">
-                  <label htmlFor="quick-create-prompt" className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-                    {templatePhoto ? 'O que muda no modelo?' : 'Descreva o anúncio'}
-                  </label>
-                  {templatePhoto && (
-                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">Modelo anexado</span>
-                  )}
-                </div>
-                <textarea
-                  id="quick-create-prompt"
-                  value={orPrompt}
-                  maxLength={1000}
-                  onChange={(e) => setOrPrompt(e.target.value)}
-                  placeholder={
-                    templatePhoto
-                      ? 'Diga o que trocar. Ex: Empresa DUO Oral Care, vaga de Consultor(a) em Joinville-SC, fixo de R$ 3.000 + comissões...'
-                      : 'Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves...'
-                  }
-                  className="min-h-36 w-full resize-none rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                />
-                <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
-                  <span>{orPrompt.trim().length}/1000</span>
-                  <span>
-                    {templatePhoto
-                      ? 'Com modelo, é só dizer o que trocar. O resto fica igual.'
-                      : 'Imagem • explicação detalhada = melhor resultado'}
-                  </span>
-                </div>
-
-                {/* Imagens: modelo (copia o estilo) e fotos na arte (aparecem no anúncio) */}
-                <div className="ady-decor space-y-2.5 border-t border-border pt-4">
-                  <div className="flex items-baseline gap-2">
-                    <h3 className="text-sm font-semibold text-text-primary">Quer usar imagens?</h3>
-                    <span className="text-xs text-text-tertiary">Opcional</span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className={`rounded-xl border p-4 ${templatePhoto ? 'border-2 border-brand' : 'border-border'}`}>
-                      {templatePhoto ? (
-                        <div className="flex gap-3">
-                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border">
-                            <img src={templatePhoto.url} alt="" className="h-full w-full object-cover" />
-                            <span className="absolute bottom-1 left-1 rounded-full bg-brand-hover px-1.5 py-px text-[9px] font-bold text-white">Modelo</span>
-                          </div>
-                          <div className="min-w-0 space-y-1.5">
-                            <p className="text-sm font-semibold text-text-primary">Modelo escolhido</p>
-                            <p className="text-xs leading-relaxed text-text-secondary">
-                              Vamos seguir o layout, as cores e o estilo deste anúncio e trocar só os textos.
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setPickerMode('modelo')}
-                                className="ady-btn rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary"
-                              >
-                                Trocar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setTemplatePhoto(null)}
-                                className="ady-btn rounded-full px-2 py-1.5 text-xs font-semibold text-destructive"
-                              >
-                                Remover
-                              </button>
-                            </div>
-                          </div>
+            <section className={`${SURFACE} space-y-3 p-4 sm:p-5`} aria-label="Descrição da imagem">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="quick-create-prompt" className="text-base font-semibold text-text-primary">
+                  {templatePhoto ? 'O que muda no modelo?' : 'Descreva o anúncio'}
+                </label>
+                {templatePhoto && <span className="rounded-full bg-brand/10 px-2 py-1 text-xs text-brand">Modelo anexado</span>}
+              </div>
+              <textarea
+                id="quick-create-prompt"
+                aria-describedby="image-prompt-help"
+                value={orPrompt}
+                maxLength={1000}
+                onChange={(e) => setOrPrompt(e.target.value)}
+                placeholder={
+                  templatePhoto
+                    ? 'Diga o que trocar. Ex: Empresa DUO Oral Care, vaga de Consultor(a) em Joinville-SC, fixo de R$ 3.000 + comissões...'
+                    : 'Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves...'
+                }
+                className="min-h-36 w-full resize-y rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              />
+              <div className="flex items-start justify-between gap-3 text-xs text-text-secondary">
+                <p id="image-prompt-help">
+                  {templatePhoto ? 'Diga o que trocar no modelo.' : 'Conte a ideia, o público e a oferta.'} Use pelo menos 10
+                  caracteres.
+                </p>
+                <span className="shrink-0">{orPrompt.trim().length}/1000</span>
+              </div>
+            </section>
+            <CreationReferences title="Referências de imagem" selected={artPhotos.length + (templatePhoto ? 1 : 0)}>
+              <div className="ady-decor min-w-0 space-y-2.5">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className={`rounded-xl border p-4 ${templatePhoto ? 'border-2 border-brand' : 'border-border'}`}>
+                    {templatePhoto ? (
+                      <div className="flex flex-wrap gap-3">
+                        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border">
+                          <img src={templatePhoto.url} alt="" className="h-full w-full object-cover" />
+                          <span className="absolute bottom-1 left-1 rounded-full bg-brand-hover px-1.5 py-px text-[9px] font-bold text-white">
+                            Modelo
+                          </span>
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-text-primary">Usar um anúncio como modelo</p>
-                            <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">1 imagem</span>
-                          </div>
+                        <div className="min-w-0 space-y-1.5">
+                          <p className="text-sm font-semibold text-text-primary">Modelo escolhido</p>
                           <p className="text-xs leading-relaxed text-text-secondary">
-                            Gostou de um anúncio? A gente analisa e cria um parecido, com os seus textos.
+                            Vamos seguir o layout, as cores e o estilo deste anúncio e trocar só os textos.
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={() => setPickerMode('modelo')}
-                              className="ady-btn rounded-full bg-brand-hover px-3.5 py-2 text-xs font-semibold text-white"
+                              className="ady-btn rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary"
                             >
-                              Meus modelos
+                              Trocar
                             </button>
-                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-brand/50 bg-brand/5 px-3.5 py-2 text-xs font-semibold text-brand hover:bg-brand/10">
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg"
-                                className="sr-only"
-                                aria-label="Enviar modelo"
-                                onChange={(e) => {
-                                  const files = Array.from(e.target.files ?? []);
-                                  e.target.value = '';
-                                  if (files.length) requestTemplateUpload(files);
-                                }}
-                              />
-                              <Upload className="h-3.5 w-3.5" />
-                              Enviar modelo
-                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setTemplatePhoto(null)}
+                              className="ady-btn rounded-full px-2 py-1.5 text-xs font-semibold text-destructive"
+                            >
+                              Remover
+                            </button>
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    <div className={`rounded-xl border p-4 ${artPhotos.length ? 'border-2 border-amber-600' : 'border-border'}`}>
+                      </div>
+                    ) : (
                       <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-text-primary">
-                            {artPhotos.length ? 'Fotos na arte' : 'Colocar foto na arte'}
-                          </p>
+                          <p className="text-sm font-semibold text-text-primary">Usar um anúncio como modelo</p>
                           <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                            {artPhotos.length ? `${artPhotos.length} de ${MAX_ART_PHOTOS}` : `até ${MAX_ART_PHOTOS} fotos`}
+                            1 imagem
                           </span>
                         </div>
-                        {artPhotos.length ? (
-                          <div className="flex flex-wrap gap-2">
-                            {artPhotos.map((photo) => (
-                              <div key={photo.id} className="relative h-20 w-20 overflow-hidden rounded-lg border border-border">
-                                <img src={photo.url} alt="" className="h-full w-full object-cover" />
-                                <button
-                                  type="button"
-                                  onClick={() => toggleArtPhoto(photo)}
-                                  aria-label="Remover foto da arte"
-                                  className="ady-btn absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                            {artPhotos.length < MAX_ART_PHOTOS && (
+                        <p className="text-xs leading-relaxed text-text-secondary">
+                          Gostou de um anúncio? A gente analisa e cria um parecido, com os seus textos.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPickerMode('modelo')}
+                            className="ady-btn rounded-full bg-brand-hover px-3.5 py-2 text-xs font-semibold text-white"
+                          >
+                            Meus modelos
+                          </button>
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-brand/50 bg-brand/5 px-3.5 py-2 text-xs font-semibold text-brand hover:bg-brand/10">
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg"
+                              className="sr-only"
+                              aria-label="Enviar modelo"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files ?? []);
+                                e.target.value = '';
+                                if (files.length) requestTemplateUpload(files);
+                              }}
+                            />
+                            <Upload className="h-3.5 w-3.5" />
+                            Enviar modelo
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`rounded-xl border p-4 ${artPhotos.length ? 'border-2 border-amber-600' : 'border-border'}`}>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-text-primary">
+                          {artPhotos.length ? 'Fotos na arte' : 'Colocar foto na arte'}
+                        </p>
+                        <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                          {artPhotos.length ? `${artPhotos.length} de ${MAX_ART_PHOTOS}` : `até ${MAX_ART_PHOTOS} fotos`}
+                        </span>
+                      </div>
+                      {artPhotos.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {artPhotos.map((photo) => (
+                            <div key={photo.id} className="relative h-20 w-20 overflow-hidden rounded-lg border border-border">
+                              <img src={photo.url} alt="" className="h-full w-full object-cover" />
                               <button
                                 type="button"
-                                onClick={() => setPickerMode('arte')}
-                                className="ady-btn flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-amber-600/60 text-xs font-semibold text-amber-700"
+                                onClick={() => toggleArtPhoto(photo)}
+                                aria-label="Remover foto da arte"
+                                className="ady-btn absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
                               >
-                                <Plus className="h-4 w-4" />
-                                Adicionar
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs leading-relaxed text-text-secondary">
-                              Seu produto, você ou sua equipe aparecendo dentro do anúncio.
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setPickerMode('arte')}
-                                className="ady-btn rounded-full bg-amber-700 px-3.5 py-2 text-xs font-semibold text-white"
-                              >
-                                Minhas fotos
-                              </button>
-                              <button
-                                type="button"
-                                onClick={requestArtUpload}
-                                className="ady-btn inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-600/60 bg-amber-500/5 px-3.5 py-2 text-xs font-semibold text-amber-700"
-                              >
-                                <Upload className="h-3.5 w-3.5" />
-                                Enviar foto
+                                <X className="h-3 w-3" />
                               </button>
                             </div>
-                          </>
-                        )}
-                      </div>
+                          ))}
+                          {artPhotos.length < MAX_ART_PHOTOS && (
+                            <button
+                              type="button"
+                              onClick={() => setPickerMode('arte')}
+                              className="ady-btn flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-amber-600/60 text-xs font-semibold text-amber-700"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Adicionar
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs leading-relaxed text-text-secondary">
+                            Seu produto, você ou sua equipe aparecendo dentro do anúncio.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPickerMode('arte')}
+                              className="ady-btn rounded-full bg-amber-700 px-3.5 py-2 text-xs font-semibold text-white"
+                            >
+                              Minhas fotos
+                            </button>
+                            <button
+                              type="button"
+                              onClick={requestArtUpload}
+                              className="ady-btn inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-600/60 bg-amber-500/5 px-3.5 py-2 text-xs font-semibold text-amber-700"
+                            >
+                              <Upload className="h-3.5 w-3.5" />
+                              Enviar foto
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {templatePhoto && (
-                    <p className="text-xs text-text-tertiary">Use artes suas ou que você tenha direito de usar.</p>
-                  )}
                 </div>
+                {templatePhoto && (
+                  <p className="text-xs text-text-tertiary">Use artes suas ou que você tenha direito de usar.</p>
+                )}
+              </div>
 
-                <div className="ady-decor flex flex-wrap items-center gap-2.5 border-t border-border pt-4">
+              <ReferenceImagePanel
+                templateId={templatePhoto?.id ?? null}
+                artPhotoIds={artPhotos.map((p) => p.id)}
+                onPickTemplate={toggleTemplate}
+                onToggleArtPhoto={toggleArtPhoto}
+                onUploadClick={() => setUploadRequest({ kinds: ['modelo', 'produto', 'equipe'], max: null })}
+              />
+            </CreationReferences>
+            <div className="ady-decor space-y-3 rounded-2xl border border-border bg-surface-secondary p-4">
+              <h3 className="text-sm font-semibold text-text-primary">Configurações da imagem</h3>
+              <div className="flex flex-wrap items-start gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-text-secondary">Modelo de IA</p>
                   {templatePhoto ? (
                     <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
                       <Info className="h-3.5 w-3.5" />
@@ -870,8 +879,14 @@ export function EstudioHome() {
                       compact
                     />
                   )}
-
-                  <div className="flex items-center gap-1 rounded-full border border-border bg-surface-muted p-1">
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-text-secondary">Proporção</p>
+                  <div
+                    role="group"
+                    aria-label="Proporção da imagem"
+                    className="flex items-center gap-1 rounded-full border border-border bg-surface-muted p-1"
+                  >
                     <button
                       type="button"
                       onClick={() => setOrAspectRatio('1:1')}
@@ -891,33 +906,22 @@ export function EstudioHome() {
                       Vertical
                     </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={handleQuickCreate}
-                    disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
-                    className={`ady-btn ml-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
-                  >
-                    {orImageMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    Gerar imagem
-                  </button>
                 </div>
-              </CardContent>
-            </Card>
-            <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
+              </div>
             </div>
 
-            <ReferenceImagePanel
-              templateId={templatePhoto?.id ?? null}
-              artPhotoIds={artPhotos.map((p) => p.id)}
-              onPickTemplate={toggleTemplate}
-              onToggleArtPhoto={toggleArtPhoto}
-              onUploadClick={() => setUploadRequest({ kinds: ['modelo', 'produto', 'equipe'], max: null })}
-            />
+            <div className="space-y-3">
+              <p className="text-sm text-text-secondary">Tudo pronto? Gere sua imagem com as opções escolhidas.</p>
+              <button
+                type="button"
+                onClick={handleQuickCreate}
+                disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
+                className={`ady-btn inline-flex min-h-11 w-full sm:ml-auto sm:w-auto items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
+              >
+                {orImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Gerar imagem
+              </button>
+              <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
             </div>
           </div>
         )}

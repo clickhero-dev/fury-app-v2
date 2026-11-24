@@ -247,6 +247,8 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     mockApiGet.mockReset();
     mockApiPost.mockReset();
     mockApiGet.mockImplementation((url: string) => {
+      if (url === '/studio/video/jobs') return Promise.resolve({ data: { jobs: [] } });
+      if (url === '/studio/video/options') return Promise.resolve({ data: { enabled: false } });
       if (url.includes('/studio/ai/models')) {
         return Promise.resolve({ data: MOCK_MODELS });
       }
@@ -300,7 +302,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     await user.click(trigger);
     await user.click(await screen.findByText('Realista'));
 
-    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    fireEvent.change(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), { target: { value: 'Anúncio fashion minimalista com luz natural' } });
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
@@ -312,7 +314,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
-    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    fireEvent.change(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), { target: { value: 'Anúncio fashion minimalista com luz natural' } });
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {

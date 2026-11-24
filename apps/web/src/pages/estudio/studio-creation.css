@@ -1,0 +1,19 @@
+/* Regras limitadas à criação: o formulário continua no fluxo normal da página. */
+.studio-creation :is(button, select, summary, label:has(> input[type='file'])):focus-visible,
+.studio-creation label:has(> input[type='file']:focus-visible) {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+}
+
+@media (max-width: 639px) {
+  .studio-creation :is(button, select, summary, label:has(> input[type='file'])) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .studio-creation textarea {
+    font-size: 16px;
+  }
+  .studio-creation button {
+    overflow-wrap: anywhere;
+  }
+}
