@@ -28,3 +28,9 @@
 - Red de viewport: simulação 300x320 com offsetLeft=10/offsetTop=30 recebeu borda direita 382 em tela 390 e 828 em tela 844, limite esperado 310. O hook anterior só acompanhava altura e offsetTop. Correção passa também largura e offsetLeft, inclui safe areas e usa posicionamento até 1023 px.
 - Primeira execução E2E paralela de dois comandos compartilhou diretório de artefatos e gerou ENOENT no fechamento; reexecução isolada com diretório próprio. Não foi falha de produto.
 - TypeScript e build Vite concluídos; aviso preexistente de bundle >500 kB.
+
+## Reconciliação em hmg — revisão da PR #477
+- A base atual mantém os três pedidos diretos de outros tickets; acrescentar os seis atalhos específicos sem remover essas capacidades. Cada toque abre formulário local com pergunta própria; espaços não são resposta, Cancelar retorna sem envio, e Continuar envia o briefing com o construtor e submit existentes. Erros preservam a resposta e permitem cancelar ou tentar novamente.
+- Cobrir os seis caminhos com teste unitário e E2E nos quatro viewports, incluindo toque sem rede, resposta inválida, cancelamento e envio apenas após Continuar. Manter testes dos três pedidos existentes e do teclado simulado.
+- Contrato da confirmação: proposta inexistente retorna 404; proposta existente mas expirada/inválida retorna 409. A base atual testa 409 para o segundo caso; não alterar o contrato para mascarar CI.
+- Conferir build e CI no commit candidato e integrar com hmg sem tocar nos checkouts existentes. Jornada real depende de sandbox com cota; não usar conta sabidamente esgotada.

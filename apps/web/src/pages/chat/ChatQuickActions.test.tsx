@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatQuickActions } from './ChatQuickActions';
@@ -84,5 +84,43 @@ describe('Pedidos diretos com sugestões contextuais opcionais',()=>{
     render(<ChatQuickActions onSelect={onSelect} disabled/>);
     screen.getAllByRole('button').forEach(button=>{expect(button).toBeDisabled();fireEvent.click(button);});
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('ações específicas do Ady', () => {
+  it.each([
+    'Criar post para o Instagram', 'Agendar posts da semana', 'Criar Reels para o Instagram',
+    'Criar vídeo para o negócio', 'Aumentar seguidores no Instagram', 'Atrair clientes pelo WhatsApp',
+  ])('abre %s localmente e só envia após resposta válida', async label => {
+    const onSelect = vi.fn().mockResolvedValue(undefined);
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:label}));
+    expect(onSelect).not.toHaveBeenCalled();
+    const input = screen.getByRole('textbox',{name:/resposta/i});
+    fireEvent.change(input,{target:{value:'   '}});
+    expect(screen.getByRole('button',{name:'Continuar'})).toBeDisabled();
+    fireEvent.change(input,{target:{value:'Minha ideia'}});
+    fireEvent.click(screen.getByRole('button',{name:'Continuar'}));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    expect(onSelect.mock.calls[0][0]).toContain('Minha ideia');
+    expect(onSelect.mock.calls[0][0]).toContain('confirmação explícita');
+  });
+  it('preserva a resposta e permite cancelar quando o envio falha', async () => {
+    const onSelect=vi.fn().mockRejectedValue(new Error('offline'));
+    render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Criar post para o Instagram'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'Resposta'}),{target:{value:'Minha ideia'}});
+    fireEvent.click(screen.getByRole('button',{name:'Continuar'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível enviar');
+    expect(screen.getByRole('textbox',{name:'Resposta'})).toHaveValue('Minha ideia');
+    fireEvent.click(screen.getByRole('button',{name:'Cancelar'}));
+    expect(screen.getByRole('button',{name:'Criar post para o Instagram'})).toBeVisible();
+  });
+  it('cancela sem enviar', () => {
+    const onSelect=vi.fn(); render(<ChatQuickActions onSelect={onSelect}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Criar post para o Instagram'}));
+    fireEvent.click(screen.getByRole('button',{name:'Cancelar'}));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('button',{name:'Criar post para o Instagram'})).toBeInTheDocument();
   });
 });
