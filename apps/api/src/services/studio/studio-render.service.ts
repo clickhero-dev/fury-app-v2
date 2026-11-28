@@ -35,7 +35,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 async function fetchImageBuffer(imageUrl: string): Promise<Buffer> {
   if (imageUrl.startsWith('data:')) {
     const comma = imageUrl.indexOf(',');
-    if (comma === -1) throw new AppError(400, 'INVALID_DATA_URL', 'Invalid data URL format.');
+    if (comma === -1) throw new AppError(400, 'INVALID_DATA_URL', 'Formato da imagem enviada inválido.');
     return Buffer.from(imageUrl.slice(comma + 1), 'base64');
   }
   const res = await fetch(imageUrl);

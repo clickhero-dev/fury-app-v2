@@ -11,7 +11,7 @@ import app as chat
 
 
 @pytest.mark.parametrize('model_text', ['Resposta breve.', 'Alerta importante. ' + 'Detalhe necessário. ' * 100])
-def test_instrucoes_do_agente_pedem_concisao_sem_ocultar_alertas(monkeypatch, model_text):
+def test_instrucoes_do_agente_pedem_concisao_sem_ocultar_alertas(monkeypatch, model_text, checkpoint_store):
     # Dado um pedido que pode exigir detalhes e alertas
     tenant, user, cid = uuid4(), uuid4(), uuid4()
     now = int(time.time())
@@ -64,10 +64,15 @@ def test_instrucoes_do_agente_pedem_concisao_sem_ocultar_alertas(monkeypatch, mo
     assert 'alertas' in instructions and 'detalhes essenciais' in instructions
     assert 'não afirme que uma ação foi executada' in instructions
 
-    # Cenário: política de coleta chega ao agente real, em toda resposta.
+    # A pergunta excepcional não pode transformar o chat em um briefing.
     assert 'um dado por vez' in instructions
     assert 'não antecipe' in instructions
-    assert 'outro período' in instructions
     assert 'resposta digitada' in instructions
-    assert 'pode decidir por mim' in instructions
     assert 'confirmação' in instructions
+    assert 'baixa carga cognitiva' in instructions
+    assert 'não sabe o que postar' in instructions
+    assert 'não exija briefing' in instructions
+    assert 'uma ação principal' in instructions
+    assert 'não invente preços' in instructions
+    assert 'primeiro prepare' in instructions
+    assert 'comece pelo período' not in instructions

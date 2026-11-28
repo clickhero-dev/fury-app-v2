@@ -10,6 +10,7 @@ import { useVerifyEmail } from '@/hooks/useVerifyEmail';
 import { useResendOtp } from '@/hooks/useResendOtp';
 import type { RegisterRequest } from '@/types/auth';
 import { AdySymbol } from '@/components/AdySymbol';
+import { errorMessage } from '@/lib/error-message';
 
 const registerSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
@@ -74,7 +75,7 @@ export function RegisterFormPage() {
       setStep(2);
       setResendCountdown(30);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao registrar');
+      setError(errorMessage(err, 'Não foi possível concluir o cadastro'));
     }
   };
 
@@ -90,7 +91,7 @@ export function RegisterFormPage() {
       localStorage.setItem('user', JSON.stringify(response.user));
       navigate('/inicio');
     } catch (err) {
-      setOtpError(err instanceof Error ? err.message : 'Código inválido');
+      setOtpError(errorMessage(err, 'Não foi possível confirmar o código'));
     }
   };
 
@@ -100,7 +101,7 @@ export function RegisterFormPage() {
       await resendMutation.mutateAsync(userId);
       setResendCountdown(30);
     } catch (err) {
-      setOtpError(err instanceof Error ? err.message : 'Erro ao reenviar código');
+      setOtpError(errorMessage(err, 'Não foi possível reenviar o código'));
     }
   };
 

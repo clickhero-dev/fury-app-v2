@@ -42,7 +42,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       throw new AppError(
         401,
         'META_NOT_CONNECTED',
-        'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+        'Conta Meta não conectada. Acesse Configurações > Integrações.'
       );
     }
 
@@ -55,7 +55,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       adAccounts[0]?.id;
 
     if (!adAccountId) {
-      throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
+      throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anúncios encontrada');
     }
 
     const response = await getMetaInsights({
@@ -76,7 +76,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       throw new AppError(
         401,
         'META_NOT_CONNECTED',
-        'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+        'Conta Meta não conectada. Acesse Configurações > Integrações.'
       );
     }
 
@@ -88,7 +88,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       adAccounts[0]?.id;
 
     if (!adAccountId) {
-      throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
+      throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anúncios encontrada');
     }
 
     return { accessToken, adAccountId };
@@ -475,7 +475,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         throw new AppError(
           401,
           'META_NOT_CONNECTED',
-          'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+          'Conta Meta não conectada. Acesse Configurações > Integrações.'
         );
       }
 
@@ -553,7 +553,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         throw new AppError(
           401,
           'META_NOT_CONNECTED',
-          'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+          'Conta Meta não conectada. Acesse Configurações > Integrações.'
         );
       }
 

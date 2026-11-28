@@ -5,7 +5,9 @@ import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
 import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
-import { errorHandler } from './middleware/errorHandler.js';
+// mensagens do zod em português desde o início
+import './lib/zod-pt.js';
+import { errorBody, errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { serve as swaggerServe, setup as swaggerSetup } from 'swagger-ui-express';
 import { readFileSync } from 'fs';
@@ -35,6 +37,7 @@ import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { startStudioVideoWorker, stopStudioVideoWorker } from './workers/studio-video.worker.js';
 import { startChatPlanWorker, stopChatPlanWorker } from './workers/chat-plan.worker.js';
+import { startChatTurnRecoveryWorker, stopChatTurnRecoveryWorker } from './workers/chat-turn-recovery.worker.js';
 import { chatPlanRuntime, studioVideoService } from './di.js';
 import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
@@ -188,7 +191,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 
     const tenantId = await resolveTenantId(req.params.slug);
     if (!tenantId) {
-      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+      return res.status(404).json(errorBody('TENANT_NOT_FOUND', 'Página não encontrada'));
     }
 
     // Fetch tenant name and brand kit in parallel
@@ -198,7 +201,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
     ]);
 
     if (!tenant) {
-      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+      return res.status(404).json(errorBody('TENANT_NOT_FOUND', 'Página não encontrada'));
     }
 
     res.json({
@@ -235,7 +238,7 @@ app.use((req, res) => {
     success: false,
     error: {
       code: 'NOT_FOUND',
-      message: 'Route not found',
+      message: 'Endereço não encontrado',
     },
     timestamp: new Date().toISOString(),
   });
@@ -331,6 +334,7 @@ app.use((req, res) => {
       }).catch((error) => {
         console.error('Failed to start planner worker:', error);
       });
+      startChatTurnRecoveryWorker();
       void startChatPlanWorker(chatPlanRuntime.executor).catch(() => {
         console.error('[chat-plan] worker não iniciou; a fila permanece persistida para recuperação');
       });
@@ -357,6 +361,7 @@ app.use((req, res) => {
         await stopFuryEngine();
         await stopPlannerWorker();
         await stopChatPlanWorker();
+        await stopChatTurnRecoveryWorker();
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();

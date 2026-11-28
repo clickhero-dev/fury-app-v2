@@ -22,7 +22,6 @@ const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https
 // acesso liberado nesse app (é a mesma do fluxo "Conectar conta").
 // Num app tipo Consumer bastaria `public_profile,email` — daí o override por env.
 const DEFAULT_FACEBOOK_LOGIN_SCOPE = 'public_profile,email,pages_show_list';
-const REFRESH_TOKEN_TTL = SESSION_TTL_SECONDS;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
@@ -71,7 +70,7 @@ async function storeRefreshTokenHash(userId: string, refreshToken: string): Prom
   const { getRedis } = await import('../../lib/redis.js');
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  await redis.setex(`refresh:${userId}`, REFRESH_TOKEN_TTL, hash);
+  await redis.setex(`refresh:${userId}`, SESSION_TTL_SECONDS, hash);
 }
 
 async function revokeRefreshToken(userId: string): Promise<void> {
@@ -224,7 +223,7 @@ export class SocialAuthService {
         throw new AppError(
           409,
           'ACCOUNT_LINK_NOT_ALLOWED',
-          'Nao e possivel vincular o Google a esta conta. Entre com e-mail e senha.',
+          'Não é possível vincular o Google a esta conta. Entre com e-mail e senha.',
         );
       }
       await this.repo('').patchUser(user.id, { googleId, emailVerified: true });
@@ -292,7 +291,7 @@ export class SocialAuthService {
       throw new AppError(
         400,
         'FACEBOOK_EMAIL_MISSING',
-        'Sua conta do Facebook nao tem um e-mail disponivel. Cadastre-se com e-mail e senha.',
+        'Sua conta do Facebook não tem um e-mail disponível. Cadastre-se com e-mail e senha.',
       );
     }
 
@@ -320,7 +319,7 @@ export class SocialAuthService {
         throw new AppError(
           409,
           'ACCOUNT_LINK_NOT_ALLOWED',
-          'Nao e possivel vincular o Facebook a esta conta. Entre com e-mail e senha.',
+          'Não é possível vincular o Facebook a esta conta. Entre com e-mail e senha.',
         );
       }
       await this.repo('').patchUser(user.id, { facebookId, emailVerified: true });

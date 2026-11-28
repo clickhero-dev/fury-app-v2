@@ -95,6 +95,7 @@ describe('Sidebar — navegação', () => {
   it('renderiza os itens principais de cada seção com seus destinos', () => {
     renderSidebar();
 
+    expect(screen.getByRole('link', { name: 'Início', exact: true })).toHaveAttribute('href', '/inicio');
     expect(screen.getByRole('link', { name: /painel/i })).toHaveAttribute('href', '/dashboard');
     expect(screen.getByRole('link', { name: /campanhas/i })).toHaveAttribute('href', '/campanhas');
     expect(screen.getByRole('link', { name: /clientes/i })).toHaveAttribute('href', '/leads');

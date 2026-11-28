@@ -7,6 +7,7 @@ const CACHE_TTL_SECONDS = 300;
 const VERSION_KEY = 'rbac:version';
 const SUPER_ADMIN_ROLE = 'super_admin';
 const PARTNER_ADMIN_ROLE = 'admin_partner';
+const PARTNER_CLIENT_ROLE = 'user_partner';
 
 export type ServiceCheckResult = 'allowed' | 'blocked' | 'unknown_user';
 
@@ -19,14 +20,25 @@ interface RedisLike {
 
 interface RbacRepoLike {
   findUserContext(userId: string): Promise<RbacUserContext | null>;
-  listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
-  listBlockedViewKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
+  listBlockedServiceKeys(roleKey: string, partnerId: string | null, withDefault?: boolean): Promise<string[]>;
+  listBlockedViewKeys(roleKey: string, partnerId: string | null, withDefault?: boolean): Promise<string[]>;
   listPlanBlockedViewKeys?(tenantId: string): Promise<string[]>;
+  findTenantPartnerScope?(tenantId: string): Promise<{ partnerWorld: boolean; partnerId: string | null } | null>;
+}
+
+// parceiro e clientes dele: só o que o parceiro tem liberado (plano + ajustes), sem o padrão
+function inPartnerWorld(ctx: RbacUserContext): boolean {
+  return ctx.platformRole === PARTNER_ADMIN_ROLE || ctx.platformRole === PARTNER_CLIENT_ROLE || !!ctx.partnerAccount;
+}
+
+// parceiro do usuário; sem parceiro identificado = bloqueia tudo (na dúvida, não libera)
+function partnerOf(ctx: RbacUserContext): string | null {
+  return inPartnerWorld(ctx) ? ctx.partnerId : null;
 }
 
 // isentos do plano: equipe ady, super_admin e conta do parceiro
 function exemptFromPlan(ctx: RbacUserContext): boolean {
-  return ctx.role === 'admin' || ctx.platformRole === SUPER_ADMIN_ROLE || ctx.platformRole === PARTNER_ADMIN_ROLE;
+  return ctx.role === 'admin' || ctx.platformRole === SUPER_ADMIN_ROLE || ctx.platformRole === PARTNER_ADMIN_ROLE || !!ctx.partnerAccount;
 }
 
 export class RbacService {
@@ -95,9 +107,29 @@ export class RbacService {
     return this.planViews(v, ctx.tenantId);
   }
 
-  // workers: o plano do cliente tira esta funcionalidade?
+  // telas que o parceiro não tem (plano + ajustes), valem para ele e os clientes
+  private partnerViews(v: string | null, partnerId: string): Promise<string[]> {
+    return this.cached(v && `rbac:v${v}:view:partner:${partnerId}`, () => this.repo.listBlockedViewKeys(PARTNER_CLIENT_ROLE, partnerId, false));
+  }
+
+  // workers: o plano do cliente ou o parceiro dele tira esta funcionalidade?
   async tenantBlocks(tenantId: string, viewKey: string): Promise<boolean> {
-    return (await this.planViews(await this.version(), tenantId)).includes(viewKey);
+    const v = await this.version();
+    if ((await this.planViews(v, tenantId)).includes(viewKey)) return true;
+    const find = this.repo.findTenantPartnerScope;
+    if (!find) return false;
+    const scope = await this.cached(v && `rbac:v${v}:tenant-scope:${tenantId}`, () => find.call(this.repo, tenantId));
+    if (!scope?.partnerWorld) return false;
+    // cliente de parceiro sem parceiro identificado: não roda nada
+    if (!scope.partnerId) return true;
+    const raw = await this.partnerViews(v, scope.partnerId);
+    // mesma herança das telas: sem Campanhas também sem Leads
+    return [...expandBlocked(raw, RBAC_ALL_KEY), ...expandPlanViews(raw)].includes(viewKey);
+  }
+
+  // usuário dentro da conta própria do parceiro (segue o plano do parceiro)
+  async inPartnerAccount(userId: string): Promise<boolean> {
+    return !!(await this.context(await this.version(), userId))?.partnerAccount;
   }
 
   // platform_role do banco (não do JWT); null = usuário inexistente
@@ -122,10 +154,14 @@ export class RbacService {
     if (serviceKeys.some((k) => DISABLED_SERVICE_KEYS.includes(k))) return 'blocked';
     if (ctx.platformRole === SUPER_ADMIN_ROLE || serviceKeys.length === 0) return 'allowed';
 
-    const blocked = await this.cached(
-      v && `rbac:v${v}:svc:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
-      () => this.repo.listBlockedServiceKeys(ctx.platformRole, ctx.partnerId),
-    );
+    if (inPartnerWorld(ctx) && !ctx.partnerId) return 'blocked';
+    const partnerId = partnerOf(ctx);
+    const blocked = partnerId
+      ? await this.cached(v && `rbac:v${v}:svc:partner:${partnerId}`, () => this.repo.listBlockedServiceKeys(PARTNER_CLIENT_ROLE, partnerId, false))
+      : await this.cached(
+          v && `rbac:v${v}:svc:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
+          () => this.repo.listBlockedServiceKeys(ctx.platformRole, ctx.partnerId),
+        );
     if (blocked.includes(RBAC_ALL_KEY)) return 'blocked';
     if (serviceKeys.some((k) => blocked.includes(k))) return 'blocked';
     const planServices = planServicesOf(await this.userPlanViews(v, ctx));
@@ -139,10 +175,14 @@ export class RbacService {
     if (!ctx) return null;
     if (ctx.platformRole === SUPER_ADMIN_ROLE) return [];
 
-    const raw = await this.cached(
-      v && `rbac:v${v}:view:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
-      () => this.repo.listBlockedViewKeys(ctx.platformRole, ctx.partnerId),
-    );
+    if (inPartnerWorld(ctx) && !ctx.partnerId) return expandBlocked([RBAC_ALL_KEY], RBAC_ALL_KEY);
+    const partnerId = partnerOf(ctx);
+    const raw = partnerId
+      ? await this.partnerViews(v, partnerId)
+      : await this.cached(
+          v && `rbac:v${v}:view:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
+          () => this.repo.listBlockedViewKeys(ctx.platformRole, ctx.partnerId),
+        );
     const plan = await this.userPlanViews(v, ctx);
     return expandBlocked([...raw, ...plan], RBAC_ALL_KEY);
   }

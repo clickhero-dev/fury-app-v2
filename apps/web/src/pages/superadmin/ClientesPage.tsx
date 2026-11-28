@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Building2, Plus, X } from "lucide-react";
 import api from "@/lib/api";
 import { apiMessage, SlotsBar } from "./PartnersPage";
+import { statusLabel } from "./subscriptionLabels";
 
 interface Slots {
   maxTenants: number;
@@ -15,7 +16,13 @@ interface Client {
   name: string;
   userCount: number;
   createdAt: string;
+  subscription?: { status: string; plan: { name: string } | null } | null;
 }
+
+type Sort = "recent" | "oldest" | "name" | "users";
+const SORTS: Array<[Sort, string]> = [["recent", "Mais recentes"], ["oldest", "Mais antigos"], ["name", "Nome (A–Z)"], ["users", "Mais usuários"]];
+const NO_SUB = "__none";
+const filterCls = "bg-surface border border-border rounded-full px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
 interface PlanOption {
   id: string;
@@ -38,6 +45,10 @@ export function ClientesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [planFilter, setPlanFilter] = useState("");
+  const [sort, setSort] = useState<Sort>("recent");
 
   const load = () =>
     Promise.all([api.get("/admin/my-partner"), api.get("/admin/tenants"), api.get("/admin/plans")])
@@ -73,6 +84,20 @@ export function ClientesPage() {
   if (!slots) return error ? <div role="alert" className="text-sm text-error">{error}</div> : <div className="text-text-tertiary text-sm">Carregando...</div>;
 
   const full = slots.usedTenants >= slots.maxTenants;
+  // filtros na lista que já veio só com os clientes do parceiro
+  const statusOptions = [...new Set(clients.map((c) => c.subscription?.status).filter((v): v is string => Boolean(v)))].sort();
+  const planOptions = [...new Set(clients.map((c) => c.subscription?.plan?.name).filter((v): v is string => Boolean(v)))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const term = search.trim().toLowerCase();
+  const shown = clients
+    .filter((c) => !term || c.name.toLowerCase().includes(term))
+    .filter((c) => !statusFilter || (statusFilter === NO_SUB ? !c.subscription : c.subscription?.status === statusFilter))
+    .filter((c) => !planFilter || (planFilter === NO_SUB ? !c.subscription?.plan : c.subscription?.plan?.name === planFilter))
+    .sort((a, b) =>
+      sort === "name" ? a.name.localeCompare(b.name, "pt-BR")
+      : sort === "users" ? b.userCount - a.userCount
+      : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt)
+      : b.createdAt.localeCompare(a.createdAt));
+  const hasFilters = Boolean(term || statusFilter || planFilter || sort !== "recent");
 
   return (
     <div>
@@ -105,24 +130,51 @@ export function ClientesPage() {
       )}
       {error && !showModal && <div role="alert" className="mb-4 text-sm text-error">{error}</div>}
 
+      <div role="group" aria-label="Filtros de clientes" className="flex flex-wrap items-center gap-3 mb-4">
+        <input type="search" aria-label="Buscar cliente" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente..." className={`${filterCls} w-56 placeholder:text-text-tertiary`} />
+        <select aria-label="Filtrar por situação" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterCls}>
+          <option value="">Todas as situações</option>
+          {statusOptions.map((v) => <option key={v} value={v}>{statusLabel(v)}</option>)}
+          <option value={NO_SUB}>Sem assinatura</option>
+        </select>
+        <select aria-label="Filtrar por plano" value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} className={`${filterCls} max-w-[16rem] truncate`}>
+          <option value="">Todos os planos</option>
+          {planOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+          <option value={NO_SUB}>Sem plano</option>
+        </select>
+        <select aria-label="Ordenar por" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={filterCls}>
+          {SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        </select>
+        {hasFilters && (
+          <button type="button" onClick={() => { setSearch(""); setStatusFilter(""); setPlanFilter(""); setSort("recent"); }} className="ady-btn rounded-full border border-border px-4 py-2 text-sm text-text-secondary hover:bg-surface-secondary transition-colors">
+            Limpar filtros
+          </button>
+        )}
+        <div className="text-xs text-text-tertiary">{shown.length} de {clients.length}</div>
+      </div>
+
       <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
         <table className="w-full min-w-[480px] text-sm">
           <thead>
             <tr className="text-left text-xs text-text-secondary border-b border-border">
               <th className="px-4 py-3 font-medium">Cliente</th>
+              <th className="px-4 py-3 font-medium">Plano</th>
+              <th className="px-4 py-3 font-medium">Situação</th>
               <th className="px-4 py-3 font-medium">Usuários</th>
               <th className="px-4 py-3 font-medium">Criado em</th>
             </tr>
           </thead>
           <tbody>
-            {clients.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-10 text-center text-text-tertiary">Nenhum cliente cadastrado</td></tr>
+            {shown.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-text-tertiary">{clients.length === 0 ? "Nenhum cliente cadastrado" : "Nenhum cliente encontrado para os filtros selecionados"}</td></tr>
             )}
-            {clients.map((c) => (
+            {shown.map((c) => (
               <tr key={c.id} className="border-b border-border last:border-0">
                 <td className="px-4 py-3">
                   <Link to={`/admin/tenants/${c.id}`} className="font-semibold text-text-primary hover:text-[#17708A] dark:hover:text-[#1E88A8]">{c.name}</Link>
                 </td>
+                <td className="px-4 py-3 text-text-secondary">{c.subscription?.plan?.name ?? "Sem plano"}</td>
+                <td className="px-4 py-3 text-text-secondary">{c.subscription ? statusLabel(c.subscription.status) : "Sem assinatura"}</td>
                 <td className="px-4 py-3 text-text-primary">{c.userCount}</td>
                 <td className="px-4 py-3 text-text-secondary">{new Date(c.createdAt).toLocaleDateString("pt-BR")}</td>
               </tr>

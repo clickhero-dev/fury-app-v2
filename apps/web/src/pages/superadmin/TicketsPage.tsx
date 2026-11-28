@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import api from '@/lib/api';
+import { isAxiosError } from 'axios';
+import { errorMessage } from '@/lib/error-message';
 import { showSnack } from '@/lib/snack';
 
 const PAGE_SIZE = 10;
@@ -215,9 +217,11 @@ function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: Tick
   </section>;
 }
 
-function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
+function StatusDialog({ ticket, statuses, loading, onRetry, open, onOpenChange, onSaved }: {
   ticket: Ticket | null;
   statuses: TicketStatus[];
+  loading: boolean;
+  onRetry: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
@@ -227,7 +231,7 @@ function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!ticket || !status || status.toLocaleLowerCase() === ticket.status.toLocaleLowerCase()) return;
+    if (!ticket || statuses.length === 0 || !status || status.toLocaleLowerCase() === ticket.status.toLocaleLowerCase()) return;
     setSaving(true); setError(null);
     try {
       await api.patch(`/admin/tickets/${encodeURIComponent(ticket.id)}/status`, { expectedStatus: ticket.status, status });
@@ -259,10 +263,14 @@ function StatusDialog({ ticket, statuses, open, onOpenChange, onSaved }: {
               {statuses.length === 0 ? <option value="">Status indisponíveis</option> : statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
+          {statuses.length === 0 && <div className="mt-3 space-y-2">
+            <p role={loading ? 'status' : 'alert'} className="text-sm text-text-secondary">{loading ? 'Carregando status…' : 'Não foi possível carregar os status. Tente novamente.'}</p>
+            <button type="button" disabled={loading} onClick={onRetry} className="ady-btn rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50">Tentar carregar status novamente</button>
+          </div>}
           {error && <p role="alert" className="mt-3 text-sm text-[#DC2626] dark:text-red-300">{error}</p>}
           <div className="mt-5 flex justify-end gap-2">
             <DialogPrimitive.Close disabled={saving} className="ady-btn rounded-lg border border-border px-3 py-2 text-sm text-text-primary disabled:opacity-50">Cancelar</DialogPrimitive.Close>
-            <button type="button" onClick={() => void submit()} disabled={saving || !status || status.toLocaleLowerCase() === ticket?.status.toLocaleLowerCase()} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Salvando…' : 'Confirmar alteração'}</button>
+            <button type="button" onClick={() => void submit()} disabled={saving || loading || statuses.length === 0 || !status || status.toLocaleLowerCase() === ticket?.status.toLocaleLowerCase()} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Salvando…' : 'Confirmar alteração'}</button>
           </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Overlay>
@@ -320,7 +328,10 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
       onCreated();
     } catch (error) {
       const responseError = (error as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
-      const message = responseError?.message ?? (error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.');
+      // ticket aberto com anexo falho: a API já explica; erro local já vem com texto
+      const message = responseError?.details?.clickupTaskUrl && responseError.message
+        ? responseError.message
+        : isAxiosError(error) ? errorMessage(error, 'Não foi possível abrir o ticket') : error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.';
       closeAndReset();
       if (responseError?.details?.clickupTaskUrl) {
         showSnack(message, 'error', { label: 'Abrir tarefa', href: responseError.details.clickupTaskUrl });
@@ -490,8 +501,7 @@ function ReviewTicketDialog({ ticket, onClose, onComplete }: {
         : { decision, reason: trimmedReason });
       onComplete(decision);
     } catch (cause) {
-      const responseError = (cause as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
-      setError(responseError?.message ?? 'Não foi possível atualizar o ticket. Tente novamente.');
+      setError(errorMessage(cause, 'Não foi possível atualizar o ticket'));
     } finally {
       setSubmitting(false);
     }
@@ -553,8 +563,8 @@ export function TicketsPage() {
       setAssignees(assigneesResponse?.data.data ?? []);
       setStatuses(statusesResponse?.data.data ?? []);
       if (!ticketsResponse || !assigneesResponse || !statusesResponse || ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar todos os dados dos chamados agora. Tente novamente.');
-    } catch {
-      setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
+    } catch (err) {
+      setListWarning(errorMessage(err, 'Não foi possível atualizar os chamados'));
     } finally { setLoading(false); }
   }, []);
 
@@ -593,7 +603,7 @@ export function TicketsPage() {
     </p>
     {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
     <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} onReview={setReviewingTicket} />
-    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
+    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} loading={loading} onRetry={refresh} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
     <details className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
         <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />

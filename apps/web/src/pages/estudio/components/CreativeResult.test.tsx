@@ -132,6 +132,27 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
     vi.unstubAllGlobals();
   });
 
+  it('falha no download mostra o motivo que veio dentro do Blob', async () => {
+    const prev = mockApiGet.getMockImplementation();
+    mockApiGet.mockImplementation(async (url: string, ...rest: unknown[]) => {
+      if (url.endsWith('/download')) {
+        const data = new Blob([JSON.stringify({ error: { code: 'ASSET_NOT_FOUND', message: 'Arquivo não encontrado' } })], { type: 'application/json' });
+        throw Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404, data } });
+      }
+      return prev ? prev(url, ...rest) : { data: { data: [] } };
+    });
+    const user = userEvent.setup();
+    renderWithProviders({
+      ...BASE_RESULT,
+      type: 'video',
+      assetId: 'video-1',
+      imageUrl: 'https://example.com/video.mp4',
+      videoUrl: 'https://example.com/video.mp4',
+    });
+    await user.click(await screen.findByRole('button', { name: /baixar vídeo/i }));
+    expect(await screen.findByText('Não foi possível baixar o arquivo. Arquivo não encontrado.')).toBeInTheDocument();
+  });
+
   it('carrega o histórico ao montar (set-active na versão inicial) e mostra a numeração', async () => {
     mockApiPost.mockImplementation((url: string) => {
       if (url === '/studio/assets/v1/set-active') {

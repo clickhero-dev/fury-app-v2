@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from './LoginPage';
+import { rememberLoginDestination } from './initialDestination';
 import { store } from '@/store';
 
 const loginMutateAsync = vi.hoisted(() => vi.fn());
@@ -29,14 +31,14 @@ function LocationProbe() {
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <Provider store={store}>
+    <StrictMode><Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/login']}>
           <LoginPage />
           <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>
-    </Provider>,
+    </Provider></StrictMode>,
   );
 }
 
@@ -44,6 +46,23 @@ describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+
+
+  it('retains deep link for an authenticated session under StrictMode', async () => {
+    localStorage.setItem('token', 'session');
+    rememberLoginDestination('/estudio/imagem?origem=convite#criar');
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/estudio/imagem'));
+  });
+
+  it('retains deep link after Google login under StrictMode', async () => {
+    rememberLoginDestination('/calendario?view=week#hoje');
+    const session = { token: 'session', refreshToken: 'refresh', user: { name: 'Teste', email: 'test@example.invalid', role: 'owner', tenantId: 'test' } };
+    window.history.replaceState({}, '', `/login?social_login=${encodeURIComponent(JSON.stringify(session))}`);
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/calendario'));
   });
 
   it('não oferece acesso direto à conta demo e mantém o formulário de login', () => {

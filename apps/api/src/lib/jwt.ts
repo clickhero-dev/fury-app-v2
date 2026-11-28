@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import { AppError } from '../middleware/errorHandler.js';
 
 function requireEnv(name: string): string {
@@ -20,6 +21,7 @@ export interface AccessTokenPayload {
 export interface RefreshTokenPayload {
   userId: string;
   sessionExpiresAt?: number;
+  exp: number;
 }
 
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -29,7 +31,7 @@ export function generateAccessToken(payload: AccessTokenPayload, sessionExpiresA
 }
 
 export function generateRefreshToken(userId: string, sessionExpiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS): string {
-  return jwt.sign({ userId, sessionExpiresAt, exp: sessionExpiresAt }, JWT_REFRESH_SECRET);
+  return jwt.sign({ userId, sessionExpiresAt, exp: sessionExpiresAt }, JWT_REFRESH_SECRET, { jwtid: crypto.randomUUID() });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
@@ -38,20 +40,23 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
     return decoded as AccessTokenPayload;
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
-      throw new AppError(401, 'TOKEN_EXPIRED', 'Access token has expired');
+      throw new AppError(401, 'TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
     }
-    throw new AppError(401, 'INVALID_TOKEN', 'Invalid access token');
+    throw new AppError(401, 'INVALID_TOKEN', 'Sessão inválida. Entre novamente.');
   }
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   try {
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
+    if (typeof decoded !== 'object' || typeof decoded.userId !== 'string' || typeof decoded.exp !== 'number') {
+      throw new Error('Invalid refresh payload');
+    }
     return decoded as RefreshTokenPayload;
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
-      throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Refresh token has expired');
+      throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Sessão expirada. Entre novamente.');
     }
-    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid refresh token');
+    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sessão expirada. Entre novamente.');
   }
 }

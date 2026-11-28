@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { consumeLoginDestination } from './initialDestination';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,6 +13,7 @@ import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
 import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
 import { login as authLogin } from '@/store/slices/authSlice';
 import { store } from '@/store';
+import { errorMessage } from '@/lib/error-message';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -29,7 +31,7 @@ function getFriendlyError(err: unknown): string {
       return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
     }
   }
-  return 'Ocorreu um erro inesperado. Tente novamente em alguns instantes.';
+  return errorMessage(err, 'Não foi possível entrar');
 }
 
 export function LoginPage() {
@@ -37,8 +39,12 @@ export function LoginPage() {
   const loginMutation = useLogin();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const entryHandled = useRef(false);
 
   useEffect(() => {
+    // O StrictMode repete effects de montagem; o destino de retorno é de uso único.
+    if (entryHandled.current) return;
+    entryHandled.current = true;
     // Handle social login redirect
     const params = new URLSearchParams(window.location.search);
     const socialData = params.get('social_login');
@@ -57,7 +63,7 @@ export function LoginPage() {
           tenantId: data.user.tenantId,
           policy: data.policy ?? null,
         }));
-        navigate('/inicio', { replace: true });
+        navigate(consumeLoginDestination(), { replace: true });
         return;
       } catch {
         setError('Erro ao fazer login com Google');
@@ -71,15 +77,20 @@ export function LoginPage() {
       return;
     }
 
+    if (localStorage.getItem('token') && !params.has('fb_handoff')) {
+      navigate(consumeLoginDestination(), { replace: true });
+      return;
+    }
+
     // Retorno do login com Facebook: troca o handoff id pela sessão (sem token na URL)
     consumeFacebookHandoff(window.location.search)
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate('/inicio', { replace: true });
+        navigate(consumeLoginDestination(), { replace: true });
       })
-      .catch(() => {
-        setError('Não foi possível concluir o login com Facebook. Tente novamente.');
+      .catch((err) => {
+        setError(errorMessage(err, 'Não foi possível concluir o login com Facebook'));
         stripSocialParams();
       });
     }, [navigate]);
@@ -97,7 +108,7 @@ export function LoginPage() {
     try {
       setError('');
       await loginMutation.mutateAsync({ email: data.email, password: data.password });
-      navigate('/inicio', { replace: true });
+      navigate(consumeLoginDestination(), { replace: true });
     } catch (err) {
       setError(getFriendlyError(err));
     }
@@ -213,6 +224,8 @@ export function LoginPage() {
           <GoogleLoginButton label="Entrar com Google" />
 
           <FacebookLoginButton />
+
+
 
           {error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">

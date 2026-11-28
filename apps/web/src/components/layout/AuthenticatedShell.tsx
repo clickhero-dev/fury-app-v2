@@ -1,3 +1,4 @@
+import { rememberLoginDestination } from '../../pages/auth/initialDestination';
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -152,7 +153,7 @@ export function AuthenticatedShell() {
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
-  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
+  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole()) || hasLifetimeAccess();
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),
@@ -181,7 +182,10 @@ export function AuthenticatedShell() {
     reduxPlanExpired,
   });
 
-  if (shouldCheckSubscription && !isAdmin && redirectToExpired) {
+  // Sem plano conhecido, a Home orienta o próximo passo; ferramentas mantêm seus
+  // gates. Vencimento comprovado pela API ou persistido continua bloqueando.
+  const homeWithoutKnownExpiration = location.pathname === '/inicio' && subscriptionState === 'none' && reduxPlanExpired !== true;
+  if (shouldCheckSubscription && !isAdmin && redirectToExpired && !homeWithoutKnownExpiration) {
     return <Navigate to="/assinatura-vencida" replace />;
   }
 
@@ -193,7 +197,10 @@ export function AuthenticatedShell() {
   */
 
   // Sem token — redireciona para login
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) {
+    rememberLoginDestination(location.pathname + location.search + location.hash);
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">

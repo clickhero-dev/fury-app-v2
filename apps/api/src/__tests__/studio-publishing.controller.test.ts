@@ -79,7 +79,7 @@ describe('StudioPublishingController', () => {
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Validation error' }),
+        expect.objectContaining({ error: expect.objectContaining({ code: 'VALIDATION_ERROR' }) }),
       );
       expect(service.listStudioAssetsForTenant).not.toHaveBeenCalled();
       expect(next).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe('StudioPublishingController', () => {
       await controller.generateImage(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Validation error' }));
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.objectContaining({ code: 'VALIDATION_ERROR' }) }));
       expect(service.generateImage).not.toHaveBeenCalled();
     });
   });
@@ -174,7 +174,7 @@ describe('StudioPublishingController', () => {
       await controller.uploadToMeta(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Validation error' }));
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.objectContaining({ code: 'VALIDATION_ERROR' }) }));
       expect(service.publishAssetToMeta).not.toHaveBeenCalled();
     });
 

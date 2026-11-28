@@ -4,6 +4,7 @@ import { Button } from '@/components';
 import api from '@/lib/api';
 import { LAYOUT_META, type CreativeLayout, type LayoutFieldSpec } from '@/lib/layout-labels';
 import type { CreativeCopyFields, PreviewCreativePayload, SuggestedFields } from '@/types/studio';
+import { errorMessage, readBlobError } from '@/lib/error-message';
 
 interface Props {
   layout: CreativeLayout;
@@ -25,7 +26,7 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCr
   // Salva sem navegar; feedback inline (o projeto não tem lib de toast).
   const [savingLib, setSavingLib] = useState(false);
   const [savedLib, setSavedLib] = useState(false);
-  const [saveError, setSaveError] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const [texts, setTexts] = useState<Record<TextKey, string>>(() => {
     const seed = {} as Record<TextKey, string>;
@@ -82,8 +83,8 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCr
         lastUrlRef.current = url;
         setPreviewUrl(url);
         setPreviewError(null);
-      } catch {
-        setPreviewError('Não foi possível gerar o preview com esses dados.');
+      } catch (err) {
+        setPreviewError(errorMessage(await readBlobError(err), 'Não foi possível gerar o preview com esses dados'));
       } finally {
         setPreviewLoading(false);
       }
@@ -97,19 +98,19 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCr
 
   const setText = (key: TextKey, value: string) => {
     setSavedLib(false);
-    setSaveError(false);
+    setSaveError('');
     setTexts((t) => ({ ...t, [key]: value }));
   };
 
   const handleSaveToLibrary = async () => {
     setSavingLib(true);
-    setSaveError(false);
+    setSaveError('');
     setSavedLib(false);
     try {
       await onSaveToLibrary(buildCopy());
       setSavedLib(true);
-    } catch {
-      setSaveError(true);
+    } catch (err) {
+      setSaveError(errorMessage(err, 'Não foi possível salvar na biblioteca'));
     } finally {
       setSavingLib(false);
     }
@@ -190,7 +191,7 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCr
           <p className="text-xs font-medium text-emerald-600">Rascunho salvo na biblioteca ✓</p>
         )}
         {saveError && (
-          <p className="text-xs font-medium text-red-600">Não foi possível salvar. Tente novamente.</p>
+          <p role="alert" className="text-xs font-medium text-red-600">{saveError}</p>
         )}
       </div>
     </div>

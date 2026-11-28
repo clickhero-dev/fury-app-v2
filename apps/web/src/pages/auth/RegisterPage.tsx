@@ -7,6 +7,7 @@ import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
 import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
 import { login as authLogin } from '@/store/slices/authSlice';
 import { store } from '@/store';
+import { errorMessage } from '@/lib/error-message';
 
 /**
  * Tela de escolha de cadastro: cadastro social (Google) ou formulário manual.
@@ -54,8 +55,8 @@ export function RegisterPage() {
         stripSocialParams();
         navigate('/inicio');
       })
-      .catch(() => {
-        setError('Não foi possível concluir o cadastro com Facebook. Tente novamente.');
+      .catch((err) => {
+        setError(errorMessage(err, 'Não foi possível concluir o cadastro com Facebook'));
         stripSocialParams();
       });
     }, [navigate]);

@@ -1,10 +1,19 @@
 name: QA - jornada real
 
-# Jornada real (login, campanha, pausa, imagem) com a conta de teste,
-# rodando o front da branch do PR contra a API do hmg.
+# PRs consultam a API hmg sem mutações de produto. A jornada com campanha/imagem
+# real exige acionamento manual e opt-in explícito.
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      allow_mutations:
+        description: 'Autorizar criação/pausa de campanha e geração de imagem reais (pode gerar custo)'
+        type: boolean
+        default: false
+      pause_qa_campaign:
+        description: 'Remedia execução interrompida: pausar somente a campanha QA com este nome exato'
+        type: string
+        default: ''
 
 # Uma execução por PR; execuções de PRs diferentes não se cancelam.
 # Atualizações da mesma PR substituem a execução obsoleta.
@@ -13,11 +22,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pause-qa-campaign:
+    if: github.event_name == 'workflow_dispatch' && inputs.pause_qa_campaign != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate exact QA campaign pause
+        run: node --test scripts/ci/qa-pause-campaign.node-test.mjs
+      - name: Pause exact QA campaign without creating new actions
+        env:
+          QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_PAUSE_CAMPAIGN: ${{ inputs.pause_qa_campaign }}
+        run: node scripts/ci/qa-pause-campaign.mjs
+
   jornada-real:
+    if: github.event_name != 'workflow_dispatch' || inputs.pause_qa_campaign == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate QA read-only contract
+        run: python scripts/ci/qa-read-only.test.py
 
       - uses: actions/setup-node@v4
         with:
@@ -34,14 +65,26 @@ jobs:
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
 
-      - name: Run QA jornada real
+      - name: Run QA login e navegação sem mutações
+        if: github.event_name != 'workflow_dispatch' || !inputs.allow_mutations
         working-directory: apps/web
         env:
           QA_BASE_URL: http://127.0.0.1:5173
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
           QA_EMAIL: ${{ secrets.QA_EMAIL }}
           QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
-        run: pnpm test:qa
+        run: pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-leitura.spec.ts
+
+      - name: Run QA jornada real com ações reais
+        if: github.event_name == 'workflow_dispatch' && inputs.allow_mutations
+        working-directory: apps/web
+        env:
+          QA_ALLOW_MUTATIONS: 'true'
+          QA_BASE_URL: http://127.0.0.1:5173
+          QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+        run: pnpm exec playwright test -c playwright.qa.config.ts e2e-qa/jornada-real.spec.ts
 
       - name: Upload report
         if: failure()

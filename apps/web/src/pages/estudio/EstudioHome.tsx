@@ -22,6 +22,7 @@ import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
 import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
 import { useBlockedViews } from '@/hooks/useBlockedViews';
+import { errorMessage, readBlobError } from '@/lib/error-message';
 import {
   completeGeneration,
   failGeneration,
@@ -161,8 +162,8 @@ export function EstudioHome() {
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: () => {
-      setToast({ message: 'Erro ao arquivar o criativo. Tente novamente.', type: 'error' });
+    onError: (err) => {
+      setToast({ message: errorMessage(err, 'Não foi possível arquivar o criativo'), type: 'error' });
       setTimeout(() => setToast(null), 3000);
     },
   });
@@ -1089,6 +1090,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [downloadError, setDownloadError] = useState('');
   const canDownload = !archived && !!imageUrl && (asset.type === 'image' || asset.type === 'video');
   // pending_compliance é análise posterior: o arquivo final já existe.
   const downloadReady = canDownload && asset.complianceStatus !== 'pending';
@@ -1099,7 +1101,8 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
     try {
       await downloadStudioAsset(asset.id);
       setDownloadState('idle');
-    } catch {
+    } catch (err) {
+      setDownloadError(errorMessage(await readBlobError(err), 'Não foi possível baixar o arquivo'));
       setDownloadState('error');
     }
   };
@@ -1236,7 +1239,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
       )}
 
       <div className="space-y-3 p-4">
-        {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
+        {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">{downloadError}</p>}
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {videoMeta?.prompt ?? asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}

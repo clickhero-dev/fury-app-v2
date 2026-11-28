@@ -7,6 +7,7 @@ import { WorkflowJobRepository } from '../../repository/workflow-job.repository.
 import { BrandKitPhotoRepository } from '../../repository/brand-kit-photo.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
+import { PartnerRepository } from '../../repository/partner.repository.js';
 import { openrouterVideoClient, type OpenRouterVideoClient, type VideoSubmitParams } from '../../lib/openrouter-video.js';
 import { runWithTenant } from '../../lib/ai-key-context.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
@@ -215,7 +216,10 @@ export function resolveVideoLimits(
   };
 }
 
-async function loadVideoLimits(tenantId: string): Promise<VideoLimits> {
+export async function loadVideoLimits(tenantId: string): Promise<VideoLimits> {
+  // conta própria do parceiro: ilimitado (usa a chave dele)
+  if (await new PartnerRepository().isPartnerAccount(tenantId))
+    return { videosPerMonth: null, modificationsPerVideo: null, periodStart: new Date() };
   const repo = new SubscriptionRepository(tenantId);
   const sub = await repo.findSubscription();
   // sem assinatura: vídeo desligado

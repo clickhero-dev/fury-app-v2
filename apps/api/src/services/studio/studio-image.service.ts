@@ -110,7 +110,7 @@ function parseCopyAssetPayload(url: string): {
   cta: string;
 } {
   if (!url.startsWith('data:application/json;base64,')) {
-    throw new AppError(400, 'INVALID_COPY_ASSET', 'Formato do asset de copy invalido.');
+    throw new AppError(400, 'INVALID_COPY_ASSET', 'Formato do texto (copy) inválido.');
   }
 
   const base64 = url.replace('data:application/json;base64,', '');
@@ -194,11 +194,11 @@ export async function generateImage(prompt: string, tenantId: string, publicBase
   const normalizedPrompt = prompt.trim();
 
   if (!normalizedPrompt) {
-    throw new AppError(400, 'INVALID_PROMPT', 'Prompt da imagem e obrigatorio.');
+    throw new AppError(400, 'INVALID_PROMPT', 'Descreva a imagem que deseja gerar.');
   }
 
   if (!tenantId) {
-    throw new AppError(400, 'INVALID_TENANT', 'tenantId e obrigatorio.');
+    throw new AppError(400, 'INVALID_TENANT', 'Cliente não informado.');
   }
 
   if (!publicBaseUrl) {
@@ -226,7 +226,7 @@ export async function getStudioAssetById(params: {
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const rootId = asset.rootAssetId ?? asset.id;
@@ -277,7 +277,7 @@ export async function setActiveStudioAssetVersion(params: {
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   const rootId = asset.rootAssetId ?? asset.id;
@@ -295,25 +295,25 @@ export async function publishStudioAssetToMeta(params: {
   const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
-    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Criativo não encontrado.');
   }
 
   // Trava de aprovação desativada
   // if (asset.complianceStatus !== 'approved') {
-  //   throw new AppError(409, 'ASSET_NOT_APPROVED', 'O asset precisa estar aprovado no compliance antes da publicacao.');
+  //   throw new AppError(409, 'ASSET_NOT_APPROVED', 'O criativo precisa ser aprovado na verificação de políticas antes de publicar.');
   // }
 
   const connection = await repo.findLatestMetaConnection();
 
   if (!connection) {
-    throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+    throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
   }
 
   const adAccounts = (connection.adAccounts || []) as Array<{ id?: string }>;
   const selectedAdAccountId = params.adAccountId || adAccounts.find((account) => account.id)?.id;
 
   if (!selectedAdAccountId) {
-    throw new AppError(400, 'AD_ACCOUNT_MISSING', 'Nenhuma ad account disponivel para publicar o asset.');
+    throw new AppError(400, 'AD_ACCOUNT_MISSING', 'Nenhuma conta de anúncios disponível para publicar o criativo.');
   }
 
   const accessToken = decryptMetaToken(connection.accessToken);
@@ -326,7 +326,7 @@ export async function publishStudioAssetToMeta(params: {
     const linkUrl = process.env.META_DEFAULT_LINK_URL || 'https://example.com';
 
     if (!pageId && process.env.META_USE_MOCK !== 'true') {
-      throw new AppError(400, 'META_PAGE_ID_MISSING', 'META_PAGE_ID e obrigatoria para publicar copy no Meta.');
+      throw new AppError(400, 'META_PAGE_ID_MISSING', 'Nenhuma página do Facebook configurada para publicar na Meta.');
     }
 
     const creativeId = await createAdCreativeFromCopy({
@@ -361,7 +361,7 @@ export async function publishStudioAssetToMeta(params: {
   const mimeType = contentType.split(';')[0]?.trim() ?? '';
 
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
-    throw new AppError(400, 'INVALID_IMAGE_FORMAT', `Formato de imagem invalido: ${mimeType || 'desconhecido'}.`);
+    throw new AppError(400, 'INVALID_IMAGE_FORMAT', `Formato de imagem inválido: ${mimeType || 'desconhecido'}.`);
   }
 
   const arrayBuffer = await response.arrayBuffer();

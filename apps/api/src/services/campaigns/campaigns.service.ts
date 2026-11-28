@@ -314,7 +314,7 @@ export function mapWizardMetaError(err: unknown, step: string, context?: Record<
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
   if (metaSubcode === 3858258) {
-    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'A Meta não conseguiu baixar a imagem do criativo. O endereço pode estar bloqueado ou o formato ser inválido. Use uma imagem JPEG ou PNG em um servidor acessível.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
   // "Legal content missing" — Meta exige privacy_policy ou legal_content_id na
   // criação do leadgen_forms. O wizard já envia a página pública de política de
@@ -408,7 +408,7 @@ export class CampaignsService {
     if (metaCode === undefined && metaType === undefined && httpStatus === undefined) throw err;
 
     if (metaCode === 190) {
-      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'A conexão com a Meta expirou. Reconecte sua conta em Configurações > Integrações.');
     }
     if (metaCode === 100 && metaSubcode === 1487566) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada. Se quiser reativar, duplique a campanha.');
@@ -449,11 +449,11 @@ export class CampaignsService {
     dailyBudget: number; adAccountId: string; enforceBrl?: boolean;
   }) {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
-    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
 
     const adAccounts = (metaConn.adAccounts as { id: string }[]) || [];
     if (!adAccounts.some((acc) => acc.id === args.adAccountId)) {
-      throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Ad account does not belong to this tenant');
+      throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Esta conta de anúncios não pertence a este cliente.');
     }
 
     const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
@@ -493,7 +493,7 @@ export class CampaignsService {
     const connection=await this.repo.findMetaConnection(args.tenantId);
     if (!connection) throw new AppError(403,'META_CONNECTION_NOT_FOUND','Conexão Meta não encontrada.');
     if (!((connection.adAccounts as {id:string}[] | null) ?? []).some(account=>account.id===args.adAccountId))
-      throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Conta de anúncios não pertence a este tenant.');
+      throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Esta conta de anúncios não pertence a este cliente.');
     const currency=await this.meta.getAdAccountCurrency(args.adAccountId,this.deps.decryptMetaToken(connection.accessToken));
     return {id:args.adAccountId,currency};
   }
@@ -506,7 +506,7 @@ export class CampaignsService {
 
   private async getAccessToken(tenantId: string): Promise<string> {
     const metaConn = await this.repo.findMetaConnection(tenantId);
-    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
     return this.deps.decryptMetaToken(metaConn.accessToken);
   }
 
@@ -524,7 +524,7 @@ export class CampaignsService {
 
   private async findCampaignOrThrow(tenantId: string, campaignId: string): Promise<CampaignRecord> {
     const campaign = await this.repo.findCampaignById(campaignId);
-    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
     await this.verifyCampaignOwnership(campaign, tenantId);
     return campaign;
   }
@@ -635,7 +635,7 @@ export class CampaignsService {
         if (typeof remote.account_id !== 'string' || !remote.account_id) throw new AppError(400,'META_ACCOUNT_CURRENCY_UNSUPPORTED','Não foi possível confirmar a moeda da conta Meta.');
         const accountId = remote.account_id.startsWith('act_') ? remote.account_id : `act_${remote.account_id}`;
         const connection = await this.repo.findMetaConnection(args.tenantId);
-        if (!((connection?.adAccounts as {id:string}[] | null) ?? []).some(account => account.id === accountId)) throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Ad account does not belong to this tenant');
+        if (!((connection?.adAccounts as {id:string}[] | null) ?? []).some(account => account.id === accountId)) throw new AppError(403,'AD_ACCOUNT_NOT_FOUND','Esta conta de anúncios não pertence a este cliente.');
         await this.assertBrlAccount(accountId, accessToken);
       }
       await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget });
@@ -973,7 +973,7 @@ export class CampaignsService {
   async softDeleteCampaign(args: { tenantId: string; campaignId: string; userId: string }) {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
-    if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
 
     // Isolamento de tenant: `resolveCampaignIds` pode resolver uma campanha local
     // de OUTRO tenant (a busca por id não é tenant-filtered) — valida ownership
@@ -1188,7 +1188,7 @@ export class CampaignsService {
     } catch (err) {
       console.error('[getCampaignInsights] Meta API error:', err);
       const metaCode = (err as any).metaCode;
-      if (metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+      if (metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'A conexão com a Meta expirou. Reconecte sua conta em Configurações > Integrações.');
       throw err;
     }
   }
@@ -1231,7 +1231,7 @@ export class CampaignsService {
 
   async createCampaignFromWizard(args: CreateWizardCampaignArgs): Promise<CreateWizardCampaignResult> {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
-    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conta Meta conectada. Conecte em Configurações > Integrações.');
 
     let adAccountId = metaConn.selectedAdAccountId;
     // ponytail: fallback para primeira conta disponível se ainda não foi

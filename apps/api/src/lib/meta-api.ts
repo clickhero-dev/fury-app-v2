@@ -129,10 +129,8 @@ function buildMetaError(
     return new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta ou peça acesso ao administrador.');
   }
   const message = sanitizeMetaReason(payload?.error?.message || fallbackMessage, fallbackMessage);
-  return new AppError(status, 'META_API_ERROR', message, {
-    status,
-    metaError: payload,
-  });
+  // payload da Meta fica só no servidor (log), fora da resposta
+  return Object.assign(new AppError(status, 'META_API_ERROR', message, { status }), { metaError: payload });
 }
 
 export async function exchangeCodeForToken(params: {
@@ -148,7 +146,7 @@ export async function exchangeCodeForToken(params: {
   url.searchParams.set('code', params.code);
 
   const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
-  return parseMetaResponse<MetaTokenResponse>(response, 'Falha ao trocar o code por access token no Meta.');
+  return parseMetaResponse<MetaTokenResponse>(response, 'Não foi possível concluir a conexão com a Meta. Tente conectar de novo.');
 }
 
 export async function exchangeForLongLivedToken(params: {
@@ -165,7 +163,7 @@ export async function exchangeForLongLivedToken(params: {
   const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(
     response,
-    'Falha ao obter token de longa duracao (60 dias) no Meta.'
+    'Não foi possível concluir a conexão com a Meta. Tente conectar de novo.'
   );
 }
 
@@ -183,7 +181,7 @@ export async function getUserBusinesses(accessToken: string): Promise<MetaBusine
     const response = await externalFetch(url, { method: 'GET' });
     const payload = await parseMetaResponse<MetaBusinessesResponse>(
       response,
-      'Falha ao buscar Business Managers no Meta.'
+      'Não foi possível buscar os Gerenciadores de Negócios na Meta.'
     );
 
     all.push(...(payload.data || []));
@@ -201,7 +199,7 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
-    'Falha ao buscar contas de anuncios da Business Manager no Meta.'
+    'Não foi possível buscar as contas de anúncios do Gerenciador de Negócios na Meta.'
   );
 
   return payload.data || [];
@@ -231,7 +229,7 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
   const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
     response,
-    'Falha ao buscar Paginas da Business Manager no Meta.'
+    'Não foi possível buscar as páginas do Gerenciador de Negócios na Meta.'
   );
 
   return (payload.data || []).map((page) => ({
@@ -252,7 +250,7 @@ async function getPersonalAdAccounts(accessToken: string): Promise<MetaAdAccount
   const response = await fetch(url, { method: 'GET' });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
-    'Falha ao buscar contas de anuncios no Meta.'
+    'Não foi possível buscar as contas de anúncios na Meta.'
   );
 
   return payload.data || [];
@@ -569,7 +567,7 @@ export async function getPageAccessToken(
     const response = await externalFetch(url, { method: 'GET' });
     const payload = await parseMetaResponse<MetaPagesAccessResponse>(
       response,
-      'Falha ao buscar as Paginas do usuario no Meta.'
+      'Não foi possível buscar as suas páginas na Meta.'
     );
 
     for (const page of payload.data || []) {
@@ -857,7 +855,7 @@ async function getBusinessPagesWhatsappNumbers(
   const response = await fetch(url, { method: 'GET' });
   const payload = await parseMetaResponse<{ data: MetaPageWithWhatsapp[] }>(
     response,
-    'Falha ao buscar Paginas da Business Manager no Meta.'
+    'Não foi possível buscar as páginas do Gerenciador de Negócios na Meta.'
   );
 
   const numbers: WhatsappNumberWithContext[] = [];
@@ -1023,7 +1021,7 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   const response = await externalFetch(url, { method: 'GET' });
   const payload = await parseMetaResponse<MetaUserProfileResponse>(
     response,
-    'Falha ao buscar o id do usuario Meta.'
+    'Não foi possível identificar a sua conta na Meta.'
   );
 
   if (!payload.id) {

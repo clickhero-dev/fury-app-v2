@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { hasLifetimeAccess, isMemberAccount } from '@/lib/platform-role';
+import { errorMessage } from '@/lib/error-message';
 
 type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'publico';
 const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'publico'];
@@ -114,11 +115,7 @@ export function Configuracoes() {
       showToast('Alterações salvas com sucesso!', 'success');
     },
     onError: (error: unknown) => {
-      const apiMessage =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-          : undefined;
-      showToast(apiMessage || 'Erro ao salvar. Tente novamente.', 'error');
+      showToast(errorMessage(error, 'Não foi possível salvar as alterações'), 'error');
     },
   });
 
@@ -149,8 +146,8 @@ export function Configuracoes() {
       setConfirmPassword('');
       showToast('Senha alterada com sucesso!', 'success');
     },
-    onError: () => {
-      showToast('Erro ao alterar senha. Verifique a senha atual e tente novamente.', 'error');
+    onError: (error: unknown) => {
+      showToast(errorMessage(error, 'Não foi possível alterar a senha'), 'error');
     },
   });
 
@@ -166,8 +163,8 @@ export function Configuracoes() {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       showToast('Senha definida com sucesso!', 'success');
     },
-    onError: () => {
-      showToast('Erro ao definir senha. Tente novamente.', 'error');
+    onError: (error: unknown) => {
+      showToast(errorMessage(error, 'Não foi possível definir a senha'), 'error');
     },
   });
 

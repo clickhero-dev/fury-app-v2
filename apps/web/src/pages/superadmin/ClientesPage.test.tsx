@@ -80,3 +80,48 @@ describe('ClientesPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Email já cadastrado');
   });
 });
+
+describe('ClientesPage — filtros do parceiro', () => {
+  const many = [
+    { id: 'a', name: 'Bruno Loja', userCount: 1, createdAt: '2026-11-03T00:00:00Z', subscription: { status: 'trial', plan: { name: 'Teste' } } },
+    { id: 'b', name: 'Ana Café', userCount: 3, createdAt: '2026-11-01T00:00:00Z', subscription: { status: 'active', plan: { name: 'Ouro' } } },
+    { id: 'c', name: 'Casa Nova', userCount: 2, createdAt: '2026-11-02T00:00:00Z', subscription: null },
+  ];
+  const rows = () => screen.getAllByRole('row').slice(1).map((r) => r.querySelector('a')?.textContent);
+
+  function setupMany() {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/admin/my-partner' ? { id: 'p-1', name: 'Alfa', maxTenants: 5, usedTenants: 3 } : url === '/admin/plans' ? plans : many } }),
+    );
+    render(<MemoryRouter><ClientesPage /></MemoryRouter>);
+  }
+
+  it('mostra plano e situação, e filtra por busca, situação e plano', async () => {
+    const user = userEvent.setup();
+    setupMany();
+    await screen.findByText('Bruno Loja');
+    expect(rows()).toEqual(['Bruno Loja', 'Casa Nova', 'Ana Café']);
+    expect(screen.getByText('Casa Nova').closest('tr')).toHaveTextContent('Sem planoSem assinatura');
+    await user.type(screen.getByLabelText('Buscar cliente'), 'café');
+    expect(rows()).toEqual(['Ana Café']);
+    await user.clear(screen.getByLabelText('Buscar cliente'));
+    await user.selectOptions(screen.getByLabelText('Filtrar por situação'), 'Sem assinatura');
+    expect(rows()).toEqual(['Casa Nova']);
+    await user.selectOptions(screen.getByLabelText('Filtrar por situação'), '');
+    await user.selectOptions(screen.getByLabelText('Filtrar por plano'), 'Ouro');
+    expect(rows()).toEqual(['Ana Café']);
+    expect(screen.getByText('1 de 3')).toBeInTheDocument();
+  });
+
+  it('ordena e limpa; filtro sem resultado avisa', async () => {
+    const user = userEvent.setup();
+    setupMany();
+    await screen.findByText('Bruno Loja');
+    await user.selectOptions(screen.getByLabelText('Ordenar por'), 'users');
+    expect(rows()).toEqual(['Ana Café', 'Casa Nova', 'Bruno Loja']);
+    await user.type(screen.getByLabelText('Buscar cliente'), 'zzz');
+    expect(screen.getByText('Nenhum cliente encontrado para os filtros selecionados')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+    expect(rows()).toEqual(['Bruno Loja', 'Casa Nova', 'Ana Café']);
+  });
+});

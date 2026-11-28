@@ -626,7 +626,7 @@ describe('EstudioHome — arquivar criativo (Fase 6)', () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Erro ao arquivar o criativo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Não foi possível arquivar o criativo\./)).toBeInTheDocument();
     });
   });
 });

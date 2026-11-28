@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Pencil, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
+import { errorMessage } from '@/lib/error-message';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { markdownBodyClass } from '@/components/layout/AnnouncementsModal';
 
@@ -66,7 +67,7 @@ export function AnnouncementsPage() {
       const { data } = await api.post('/admin/faqs/images', form);
       const md = editing.markdown;
       setEditing({ ...editing, markdown: `${md.slice(0, at)}\n![imagem](${data.data.url})\n${md.slice(at)}` });
-    } catch { setMessage('Não foi possível enviar a imagem'); }
+    } catch (err) { setMessage(errorMessage(err, 'Não foi possível enviar a imagem')); }
   };
   const toggle = async (a: Announcement) => {
     try { await api.patch(`/admin/announcements/${a.id}`, { isActive: !a.isActive }); load(); }
@@ -75,7 +76,7 @@ export function AnnouncementsPage() {
   const remove = async (a: Announcement) => {
     if (!confirm(`Excluir definitivamente “${a.title}”?`)) return;
     try { await api.delete(`/admin/announcements/${a.id}`); setMessage('Aviso excluído'); load(); }
-    catch { setMessage('Erro ao excluir aviso'); }
+    catch (err) { setMessage(errorMessage(err, 'Não foi possível excluir o aviso')); }
   };
 
   return <div className="space-y-6">

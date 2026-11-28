@@ -1,14 +1,16 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError, errorBody } from '../middleware/errorHandler.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
 import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
-import { SubscriptionRepository } from '../repository/subscription.repository.js';
+import { getCreativeQuotaSnapshot } from '../services/studio/creative-quota.service.js';
 import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
 import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
+import { ChatMediaPublishService } from '../services/chat/chat-media-publish.service.js';
+import { ChatMediaPublishRepository } from '../repository/chat-media-publish.repository.js';
 
 const listPlansSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -20,6 +22,17 @@ export class PlannerController {
     private plannerService: PlannerService,
     private captionSuggestionService?: PlannerCaptionSuggestionService,
   ) {}
+
+  handleChatMediaPublish = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const approvalId = z.string().uuid().parse(req.params.approvalId);
+      const {caption, instagramUserId} = z.object({caption:z.string().max(5000), instagramUserId:z.string().min(1).max(100)}).strict().parse(req.body);
+      const service = new ChatMediaPublishService(new ChatMediaPublishRepository(),
+        (tenantId, payload) => this.plannerService.publishNow(tenantId, payload));
+      const result = await service.publish(req.tenant!.tenantId, req.user!.userId, approvalId, caption, instagramUserId);
+      res.json({success:true,data:result});
+    } catch (error) { next(error); }
+  };
 
   handleChatSnapshot = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -309,7 +322,7 @@ export class PlannerController {
     try {
       const { tenantId } = req.tenant!;
       if (!req.file) {
-        return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+        return res.status(400).json(errorBody('NO_FILE', 'Nenhum arquivo enviado'));
       }
       const ext = req.file.mimetype === 'image/png' ? 'png'
         : req.file.mimetype === 'image/jpeg' ? 'jpg'
@@ -335,7 +348,8 @@ export class PlannerController {
   handleGetQuota = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = req.tenant!.tenantId;
-      const quota = await new SubscriptionRepository(tenantId).getCreativeQuotaSnapshot();
+      // mesmo cálculo das outras telas (conta do parceiro = ilimitado)
+      const quota = await getCreativeQuotaSnapshot(tenantId);
       res.json({ success: true, data: quota });
     } catch (err) { next(err); }
   };

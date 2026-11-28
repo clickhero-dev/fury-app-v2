@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PASSWORD_RULES, passwordSchema } from './trial-password-policy';
 import api from '../../lib/api';
+import { errorMessage } from '@/lib/error-message';
 
 export function TrialPasswordModal({ onComplete }: { onComplete: () => void }) {
   const [password, setPassword] = useState('');
@@ -25,8 +26,8 @@ export function TrialPasswordModal({ onComplete }: { onComplete: () => void }) {
     try {
       await api.post('/auth/set-password', { newPassword: password });
       onComplete();
-    } catch {
-      setError('Não foi possível salvar sua senha. Tente novamente.');
+    } catch (err) {
+      setError(errorMessage(err, 'Não foi possível salvar sua senha'));
     } finally {
       setSaving(false);
     }

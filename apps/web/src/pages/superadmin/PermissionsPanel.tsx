@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { apiMessage } from "./PartnersPage";
+import { parentViewKey } from "@/lib/rbac-views";
 
 export interface Permission {
   key: string;
@@ -11,10 +12,10 @@ export interface Permission {
 
 // avisos de telas que dividem serviço com outras
 const NOTES: Record<string, string> = {
-  campaigns: "Também bloqueia a tela de Leads (usa o mesmo serviço).",
+  campaigns: "Desligar Campanhas também desliga Clientes.",
 };
 
-// Interruptores de telas; partnerId null = padrão (todos)
+// Interruptores de telas; partnerId null = padrão (clientes ady)
 export function PermissionsPanel({ partnerId }: { partnerId: string | null }) {
   const url = partnerId ? `/admin/partners/${partnerId}/permissions` : "/admin/permissions/default";
   const [items, setItems] = useState<Permission[] | null>(null);
@@ -46,14 +47,14 @@ export function PermissionsPanel({ partnerId }: { partnerId: string | null }) {
   return (
     <div className="bg-surface border border-border rounded-2xl max-w-xl">
       <p className="px-5 pt-4 pb-2 text-xs text-text-secondary">
-        Desligado = tela bloqueada{partnerId ? " para os clientes deste parceiro" : " para todos os clientes"}. Vale na hora.
+        Desligado = tela bloqueada{partnerId ? " para este parceiro e os clientes dele" : " para os clientes da ady (parceiros seguem o plano deles)"}. Vale na hora.
       </p>
       {error && <div role="alert" className="px-5 pb-2 text-sm text-error">{error}</div>}
       <ul>
         {items.map((item) => {
           const on = !item.blocked && !item.locked;
-          const child = item.key.includes(".");
-          const parent = items.find((p) => item.key.startsWith(p.key + ".") && (p.blocked || p.locked));
+          const child = parentViewKey(item.key) !== null;
+          const parent = items.find((p) => (item.key.startsWith(p.key + ".") || parentViewKey(item.key) === p.key) && (p.blocked || p.locked));
           return (
             <li key={item.key} className="flex items-center justify-between gap-4 px-5 py-3 border-t border-border">
               <div className={child ? "pl-4" : ""}>

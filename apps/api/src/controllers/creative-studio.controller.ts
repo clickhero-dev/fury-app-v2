@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { StudioService } from '../services/studio/creative-studio.service.js';
+import { errorBody, validationBody } from '../middleware/errorHandler.js';
 
 const generateCopySchema = z.object({
   type: z.enum(['headline', 'descricao', 'cta', 'completo']),
@@ -82,7 +83,7 @@ export class CreativeStudioController {
 
   private zodError(res: Response, err: unknown): boolean {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: (err as z.ZodError).errors });
+      res.status(400).json(validationBody(err as z.ZodError));
       return true;
     }
     return false;
@@ -104,7 +105,7 @@ export class CreativeStudioController {
     try {
       const body = generateCopySchema.parse(req.body);
       const tenantId = this.tenantId(req);
-      if (!tenantId) { res.status(401).json({ error: 'Tenant not found' }); return; }
+      if (!tenantId) { res.status(401).json(errorBody('UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.')); return; }
       const input = { objective: (body as any).objetivo, product: (body as any).produto, audience: (body as any).publico, tone: (body as any).tom, quantity: (body as any).quantidadeVariacoes ?? 3 };
       const result = await this.service.generateAdCopy(input as any, tenantId);
       res.status(200).json(result);
@@ -154,7 +155,9 @@ export class CreativeStudioController {
       try {
         pngBuffer = await this.service.previewPng(this.tenantId(req), body);
       } catch (renderErr) {
-        res.status(422).json({ error: 'preview_unavailable', message: (renderErr as Error).message });
+        // detalhe do render (pode ter URL/caminho) só no log
+        console.error('[studio] preview-png falhou:', (renderErr as Error).message);
+        res.status(422).json(errorBody('PREVIEW_UNAVAILABLE', 'Não foi possível montar o preview com esses dados. Confira a imagem, o logo e os textos.'));
         return;
       }
       res.setHeader('Content-Type', 'image/png');

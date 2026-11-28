@@ -117,15 +117,15 @@ describe('RBAC de serviços — integração', () => {
     expect((await get('/api/goals')).status).toBe(403);
   });
 
-  it('cliente de parceiro: bloqueio global do papel vale para todos os parceiros', async () => {
+  it('cliente de parceiro: o padrão (global) não vale; só o que o parceiro tem', async () => {
     await setUser('user_partner', { tenantPartner: partnerA });
     await block('user_partner', 'goals');
-    expect((await get('/api/goals')).status).toBe(403);
+    expect((await get('/api/goals')).status).not.toBe(403);
   });
 
-  it('admin_partner: parceiro vem de users.partner_id', async () => {
+  it('admin_partner: segue os bloqueios do próprio parceiro (users.partner_id)', async () => {
     await setUser('admin_partner', { userPartner: partnerA });
-    await block('admin_partner', 'brand_kit', partnerA);
+    await block('user_partner', 'brand_kit', partnerA);
     expect((await get('/api/brand-kit')).status).toBe(403);
     expect((await get('/api/goals')).status).not.toBe(403);
   });
@@ -179,24 +179,24 @@ describe('RBAC de serviços — integração', () => {
       expect(res.headers['cache-control']).toBe('no-store');
     });
 
-    it('admin_partner: global do papel + do próprio parceiro, nunca do outro', async () => {
+    it('admin_partner: só as telas do próprio parceiro; nem padrão, nem outro parceiro', async () => {
       await setUser('admin_partner', { userPartner: partnerA });
+      await blockView('user_partner', 'goals', partnerA);
+      await blockView('user_partner', 'calendar', partnerB);
+      await blockView('user_partner', 'leads');
       await blockView('admin_partner', 'admin.tickets');
-      await blockView('admin_partner', 'admin.users', partnerA);
-      await blockView('admin_partner', 'admin.faqs', partnerB);
-      await blockView('user_partner', 'admin.plans');
-      expect((await views()).body.data.blocked).toEqual(['admin.users', 'admin.tickets']);
+      expect((await views()).body.data.blocked).toEqual(['goals']);
     });
 
     it('cliente do parceiro: pai bloqueado expande para os filhos', async () => {
       await setUser('user_partner', { tenantPartner: partnerA });
       await blockView('user_partner', 'campaigns', partnerA);
-      expect((await views()).body.data.blocked).toEqual(['campaigns', 'campaigns.create', 'campaigns.rules']);
+      expect((await views()).body.data.blocked).toEqual(['campaigns', 'campaigns.create', 'campaigns.rules', 'leads']);
     });
 
     it("'all' → todas as telas", async () => {
       await setUser('user_partner', { tenantPartner: partnerA });
-      await blockView('user_partner', 'all');
+      await blockView('user_partner', 'all', partnerA);
       expect((await views()).body.data.blocked).toEqual(RBAC_VIEWS.map((v) => v.key));
     });
 
@@ -241,6 +241,8 @@ describe('RBAC de serviços — integração', () => {
       expect((await repo.listBlockedServiceKeys('user_partner', partnerB)).sort()).toEqual(['goals', 'studio']);
       expect(await repo.listBlockedServiceKeys('user_partner', null)).toEqual(['goals']);
       expect(await repo.listBlockedServiceKeys('user', partnerA)).toEqual([]);
+      // sem o padrão: só o do parceiro
+      expect(await repo.listBlockedServiceKeys('user_partner', partnerA, false)).toEqual(['brand_kit']);
     });
   });
 });

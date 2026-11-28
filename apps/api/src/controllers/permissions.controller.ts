@@ -4,17 +4,22 @@ import { AppError } from "../middleware/errorHandler.js";
 import { RbacRepository } from "../repository/rbac.repository.js";
 import { PartnerRepository } from "../repository/partner.repository.js";
 import { RBAC_ALL_KEY } from "../lib/rbac-services.js";
-import { RBAC_VIEWS } from "../lib/rbac-views.js";
+import { RBAC_VIEWS, isUnderView } from "../lib/rbac-views.js";
 import { rbacService } from "../services/core/rbac.service.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// cliente de parceiro; o padrão vale também para o cliente direto da ady
-const PARTNER_ROLES = ["user_partner"];
-const DEFAULT_ROLES = ["user", "user_partner"];
+// bloqueios do parceiro (valem para ele e os clientes dele); padrão = só clientes ady
+export const PARTNER_ROLES = ["user_partner"];
+const DEFAULT_ROLES = ["user"];
 
-// telas do cliente (o admin e as desativadas ficam de fora)
-const EDITABLE_VIEWS = RBAC_VIEWS.filter((v) => !v.key.startsWith("admin.") && !v.disabled);
+// nunca bloqueáveis: essenciais, e Automações (segue o que já está liberado)
+const ESSENTIAL_VIEWS = ["dashboard", "settings", "plans", "subscription", "automation"];
+
+// telas do cliente (o admin, as desativadas e as essenciais ficam de fora)
+export const EDITABLE_VIEWS = RBAC_VIEWS.filter(
+  (v) => !v.key.startsWith("admin.") && !v.disabled && !ESSENTIAL_VIEWS.some((e) => v.key === e || v.key.startsWith(e + ".")),
+);
 
 const setPermissionSchema = z.object({
   viewKey: z.string().max(100),
@@ -22,8 +27,8 @@ const setPermissionSchema = z.object({
 });
 
 // bloqueada pela própria key, por um pai ou por 'all'
-function covered(key: string, blocked: string[]) {
-  return blocked.includes(RBAC_ALL_KEY) || blocked.some((b) => key === b || key.startsWith(b + "."));
+export function covered(key: string, blocked: string[]) {
+  return blocked.includes(RBAC_ALL_KEY) || blocked.some((b) => isUnderView(key, b));
 }
 
 /** Permissões (bloqueios de tela + serviço) por parceiro e padrão — rotas só do super_admin. */
@@ -43,11 +48,10 @@ export class PermissionsController {
 
   private async permissions(partnerId: string | null, roles: string[]) {
     const own = await this.rbacRepo.listOwnBlockedViewKeys(roles[0]!, partnerId);
-    const defaults = partnerId ? await this.rbacRepo.listOwnBlockedViewKeys(roles[0]!, null) : [];
     return EDITABLE_VIEWS.map((v) => {
       const blocked = own.includes(v.key);
-      // travada: vem do padrão ou de uma tela pai
-      const locked = covered(v.key, defaults) || (!blocked && covered(v.key, own));
+      // travada: tela pai já bloqueada
+      const locked = !blocked && covered(v.key, own);
       return { key: v.key, description: v.description, blocked, locked };
     });
   }

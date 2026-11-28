@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
@@ -9,6 +9,7 @@ import { store } from '@/store';
 import type { InvoiceHistoryItem, Subscription as SubscriptionType } from '@/types/billing';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
+const mockApiDelete = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   default: {
@@ -16,7 +17,7 @@ vi.mock('@/lib/api', () => ({
     post: vi.fn(),
     put: vi.fn(),
     patch: vi.fn(),
-    delete: vi.fn(),
+    delete: mockApiDelete,
   },
 }));
 
@@ -109,5 +110,18 @@ describe('Subscription — /assinatura', () => {
     expect(await screen.findByText('Profissional')).toBeInTheDocument();
     expect(screen.queryByText('Histórico de faturas')).not.toBeInTheDocument();
     expect(screen.queryByText('Nenhuma fatura ainda')).not.toBeInTheDocument();
+  });
+});
+
+describe('Subscription — erro ao cancelar', () => {
+  it('mostra o motivo vindo da API (envelope error.message)', async () => {
+    mockApi();
+    mockApiDelete.mockImplementation(async () => {
+      throw Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { error: { code: 'ALREADY_CANCELLED', message: 'Assinatura já cancelada' } } } });
+    });
+    render(<Subscription />, { wrapper: makeWrapper() });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar assinatura' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar cancelamento' }));
+    expect(await screen.findByText('Não foi possível cancelar a assinatura. Assinatura já cancelada.')).toBeInTheDocument();
   });
 });

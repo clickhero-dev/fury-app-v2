@@ -15,9 +15,10 @@ import {
   adyRbacAuditLog,
   adyRbacPlanViewsBlocked,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import { provisionTrialSubscription } from '../services/billing/trial-signup.js';
+import { daysAgoSaoPauloYMD, todaySaoPauloYMD } from '../utils/date-sao-paulo.js';
 
 type Tenant = typeof tenants.$inferSelect;
 type User = typeof users.$inferSelect;
@@ -26,6 +27,29 @@ type Subscription = typeof subscriptions.$inferSelect;
 
 // ── Dashboard (stats globais) ───────────────────────────────────
 export type DashboardPeriod = '7d' | '30d' | '90d';
+
+export interface PartnersDashboard {
+  revenueCents: number;
+  activePartners: number;
+  newPartners: number;
+  slotsUsed: number;
+  slotsTotal: number;
+  partnerClientsActive: number;
+  partnerClientsTotal: number;
+  partners: {
+    id: string;
+    name: string;
+    paidCents: number | null;
+    paidAt: string | null;
+    usedTenants: number;
+    maxTenants: number;
+    activeClients: number;
+    aiKeyConfigured: boolean;
+  }[];
+}
+
+// assinatura em dia (mesma regra do checkSubscriptionActive); t = alias de tenants
+const ACTIVE_SUB_SQL = sql.raw(`EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id = t.id AND s.status = 'active' AND (s.is_non_expirable OR s.current_period_end IS NULL OR s.current_period_end > now()))`);
 
 export type ActivityItem = {
   tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao';
@@ -110,10 +134,30 @@ export function mapRecentActivity(
 // usuários que o parceiro alcança: só os dos clientes, nunca contas de admin
 export const PARTNER_REACHABLE_ROLES = ['user', 'user_partner'];
 
+export interface TenantOrigin {
+  tenantId: string;
+  kind: 'ady' | 'partner_client' | 'partner_account';
+  partnerId: string | null;
+  partnerName: string | null;
+}
+
+export const USER_LIST_ROLES = ['super_admin', 'partner', 'owner', 'admin', 'member'] as const;
+export const USER_LIST_SORTS = ['recent', 'oldest', 'name', 'email', 'client', 'role'] as const;
+export interface UserListFilters {
+  role?: (typeof USER_LIST_ROLES)[number];
+  origin?: 'ady' | 'partner' | string;
+  sort?: (typeof USER_LIST_SORTS)[number];
+  // só estreita: o escopo do parceiro continua valendo
+  tenantId?: string;
+}
+
 // dono do plano: null = ady, senão o parceiro
 function planOwner(partnerId: string | null) {
   return partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId);
 }
+
+// cliente direto da ady: sem parceiro e não é a conta própria de um parceiro (usar dentro de SELECT ... FROM tenants)
+export const ADY_DIRECT_TENANT_SQL = sql.raw(`partner_id IS NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.tenant_id = tenants.id AND u.platform_role = 'admin_partner')`);
 
 // clientes não excluídos; com partnerId, só os daquele parceiro
 function liveTenants(partnerId: string | null) {
@@ -135,6 +179,19 @@ export class SuperAdminRepository extends TenantScopedRepository {
   // partnerId null = todos os clientes (super_admin)
   async listTenants(partnerId: string | null = null) {
     return this.db.query.tenants.findMany({ where: liveTenants(partnerId) });
+  }
+  // origem de cada cliente vivo; conta de parceiro excluído vira ady (igual findPartnerAccount)
+  async listTenantOrigins(): Promise<TenantOrigin[]> {
+    return (await this.db.execute(sql`SELECT t.id AS "tenantId",
+        CASE WHEN t.partner_id IS NOT NULL THEN 'partner_client' WHEN acc.partner_id IS NOT NULL THEN 'partner_account' ELSE 'ady' END AS "kind",
+        coalesce(t.partner_id, acc.partner_id) AS "partnerId", p.name AS "partnerName"
+      FROM tenants t
+      LEFT JOIN LATERAL (SELECT u.partner_id FROM users u
+        JOIN ady_partners lp ON lp.id = u.partner_id AND lp.deleted_at IS NULL
+        WHERE u.tenant_id = t.id AND u.platform_role = 'admin_partner' AND u.deleted_at IS NULL
+        ORDER BY u.created_at LIMIT 1) acc ON t.partner_id IS NULL
+      LEFT JOIN ady_partners p ON p.id = coalesce(t.partner_id, acc.partner_id)
+      WHERE t.deleted_at IS NULL`)) as unknown as TenantOrigin[];
   }
   async getTenantById(id: string, partnerId: string | null = null) {
     return this.db.query.tenants.findFirst({ where: and(eq(tenants.id, id), liveTenants(partnerId)) });
@@ -436,8 +493,23 @@ export class SuperAdminRepository extends TenantScopedRepository {
     return rows as Array<{ planId: string; count: number }>;
   }
 
-  /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant. */
-  async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null) {
+  /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant, filtros e ordem. */
+  async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null, filters: UserListFilters = {}) {
+    // parceiro do usuário: pelo cliente ou pela conta do parceiro
+    // conta de parceiro excluído conta como ady (igual à origem dos clientes)
+    const userPartner = sql`coalesce(${tenants.partnerId}, (SELECT lp.id FROM ady_partners lp WHERE lp.id = ${users.partnerId} AND lp.deleted_at IS NULL))`;
+    const notStaff = sql`coalesce(${users.platformRole}, 'user') NOT IN ('super_admin', 'admin_partner')`;
+    const roleWhere =
+      filters.role === 'super_admin' ? eq(users.platformRole, 'super_admin')
+      : filters.role === 'partner' ? eq(users.platformRole, 'admin_partner')
+      : filters.role ? and(eq(users.role, filters.role), notStaff)
+      : undefined;
+    // origem só vale para o super; o parceiro já está preso ao escopo dele
+    const originWhere =
+      partnerId || !filters.origin ? undefined
+      : filters.origin === 'ady' ? sql`${userPartner} IS NULL`
+      : filters.origin === 'partner' ? sql`${userPartner} IS NOT NULL`
+      : sql`${userPartner} = ${filters.origin}`;
     const where = and(
       isNull(users.deletedAt),
       liveTenants(partnerId),
@@ -445,6 +517,9 @@ export class SuperAdminRepository extends TenantScopedRepository {
       search
         ? or(ilike(users.name, `%${search}%`), ilike(users.email, `%${search}%`), ilike(tenants.name, `%${search}%`))
         : undefined,
+      roleWhere,
+      originWhere,
+      filters.tenantId ? eq(users.tenantId, filters.tenantId) : undefined,
     );
 
     const [countResult] = await this.db
@@ -454,6 +529,17 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .where(where);
 
     const total = Number((countResult as any)?.total ?? 0);
+
+    // cargo em blocos: super, parceiro, titular, administrador, usuário
+    const roleRank = sql`CASE WHEN ${users.platformRole} = 'super_admin' THEN 0 WHEN ${users.platformRole} = 'admin_partner' THEN 1 WHEN ${users.role} = 'owner' THEN 2 WHEN ${users.role} = 'admin' THEN 3 ELSE 4 END`;
+    const orderBy = {
+      recent: [desc(users.createdAt)],
+      oldest: [asc(users.createdAt)],
+      name: [sql`lower(${users.name})`, desc(users.createdAt)],
+      email: [sql`lower(${users.email})`],
+      client: [sql`lower(${tenants.name}) NULLS LAST`, sql`lower(${users.name})`],
+      role: [roleRank, sql`lower(${users.name})`],
+    }[filters.sort ?? 'recent'];
 
     const rows = await this.db
       .select({
@@ -465,11 +551,13 @@ export class SuperAdminRepository extends TenantScopedRepository {
         tenantId: users.tenantId,
         createdAt: users.createdAt,
         tenantName: tenants.name,
+        partnerName: adyPartners.name,
       })
       .from(users)
       .leftJoin(tenants, eq(users.tenantId, tenants.id))
+      .leftJoin(adyPartners, sql`${adyPartners.id} = ${userPartner}`)
       .where(where)
-      .orderBy(desc(users.createdAt))
+      .orderBy(...orderBy, asc(users.id))
       .limit(limit)
       .offset(offset);
 
@@ -543,8 +631,9 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const days = parseInt(period, 10);
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const now = new Date();
-    // cliente excluído (soft-delete) ou de outro parceiro fica fora das contas
-    const ofPartner = partnerId ? sql` AND partner_id = ${partnerId}` : sql``;
+    // parceiro: só os clientes dele; super: só clientes diretos da ady (sem parceiro e sem conta de parceiro)
+    const ofPartner = partnerId ? sql` AND partner_id = ${partnerId}` : sql` AND ${ADY_DIRECT_TENANT_SQL}`;
+    const scopedTenants = and(liveTenants(partnerId), partnerId ? undefined : sql`${tenants.id} IN (SELECT id FROM tenants WHERE ${ADY_DIRECT_TENANT_SQL})`);
     const liveTenant = sql`${subscriptions.tenantId} IN (SELECT id FROM tenants WHERE deleted_at IS NULL${ofPartner})`;
 
     // "Ativa" = mesma semântica do middleware checkSubscriptionActive
@@ -580,7 +669,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [newClientsRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(tenants)
-      .where(and(liveTenants(partnerId), gte(tenants.createdAt, start)));
+      .where(and(scopedTenants, gte(tenants.createdAt, start)));
     const [cancelRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(subscriptions)
@@ -603,7 +692,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .limit(10);
 
     const recentNewTenants = await this.db.query.tenants.findMany({
-      where: and(liveTenants(partnerId), gte(tenants.createdAt, start)),
+      where: and(scopedTenants, gte(tenants.createdAt, start)),
       orderBy: [desc(tenants.createdAt)],
       limit: 5,
     });
@@ -656,6 +745,53 @@ export class SuperAdminRepository extends TenantScopedRepository {
         .sort((a, b) => b.clients - a.clients),
       expiredAccounts: countExpiredAccounts(expiredRows as any, now),
       recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any, recentRenewals as any),
+    };
+  }
+
+  // aba Parceiros do super: receita, vagas e clientes; pago = soma, data = último
+  async getPartnersDashboard(period: DashboardPeriod): Promise<PartnersDashboard> {
+    const days = parseInt(period, 10);
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const from = daysAgoSaoPauloYMD(days);
+    const to = todaySaoPauloYMD();
+
+    // pagamento de parceiro excluído também conta (o dinheiro entrou)
+    const [revenue] = await this.db.execute(sql`SELECT COALESCE(SUM(amount_cents), 0)::bigint AS cents
+      FROM ady_partner_payments WHERE paid_at >= ${from}::date AND paid_at <= ${to}::date`);
+
+    const rows = (await this.db.execute(sql`SELECT p.id, p.name, p.max_tenants AS "maxTenants", p.created_at AS "createdAt",
+        (p.openrouter_key_last4 IS NOT NULL) AS "aiKeyConfigured",
+        pay.amount_cents AS "paidCents", pay.paid_at::text AS "paidAt",
+        (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL) AS "usedTenants",
+        (SELECT count(*)::int FROM tenants t WHERE t.partner_id = p.id AND t.deleted_at IS NULL AND ${ACTIVE_SUB_SQL}) AS "activeClients"
+      FROM ady_partners p
+      LEFT JOIN (SELECT partner_id, SUM(amount_cents)::bigint AS amount_cents, MAX(paid_at) AS paid_at
+        FROM ady_partner_payments GROUP BY partner_id) pay ON pay.partner_id = p.id
+      WHERE p.deleted_at IS NULL
+      ORDER BY p.name ASC`)) as unknown as Array<PartnersDashboard['partners'][number] & { createdAt: Date | string; paidCents: number | string | null }>;
+
+    const partners = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      paidCents: r.paidCents === null ? null : Number(r.paidCents),
+      paidAt: r.paidAt,
+      usedTenants: Number(r.usedTenants),
+      maxTenants: Number(r.maxTenants),
+      activeClients: Number(r.activeClients),
+      aiKeyConfigured: Boolean(r.aiKeyConfigured),
+    }));
+    const sum = (f: (p: (typeof partners)[number]) => number) => partners.reduce((acc, p) => acc + f(p), 0);
+    const slotsUsed = sum((p) => p.usedTenants);
+
+    return {
+      revenueCents: Number((revenue as { cents?: string | number } | undefined)?.cents ?? 0),
+      activePartners: partners.length,
+      newPartners: rows.filter((r) => new Date(r.createdAt) >= start).length,
+      slotsUsed,
+      slotsTotal: sum((p) => p.maxTenants),
+      partnerClientsActive: sum((p) => p.activeClients),
+      partnerClientsTotal: slotsUsed,
+      partners,
     };
   }
 }

@@ -151,6 +151,26 @@ jobs:
         working-directory: apps/web
         run: npx vitest run
 
+      - name: Install Chromium for isolated rating E2E
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run isolated rating E2E (mock API, no real accounts)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.rating.config.ts
+
+      - name: Run isolated Home E2E (desktop and mobile, mock API)
+        working-directory: apps/web
+        run: npx playwright test -c playwright.home.config.ts
+
+      - name: Upload Home browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-e2e-failure
+          path: apps/web/test-results-qa/home
+          if-no-files-found: ignore
+
       - name: Generate coverage badge
         if: github.event_name == 'push'
         run: npm run coverage:badge

@@ -18,10 +18,12 @@ Cenário: localizar conta assinante sem usuários ativos
 */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
+import { describeZodIssues } from "../lib/zod-pt.js";
 
 function mockRepo() {
   return {
     listTenants: vi.fn(),
+    listTenantOrigins: vi.fn(async () => []),
     countUsersByTenant: vi.fn(),
     findLatestSubscriptionByTenant: vi.fn(),
     findPlanById: vi.fn(),
@@ -115,7 +117,7 @@ describe("SuperAdminController — happy path", () => {
 
     await c.listUsers({ ...SUPER, query: { page: "1", limit: "10", search: "" } } as any, res, next);
 
-    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0, null);
+    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0, null, {});
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
@@ -348,6 +350,32 @@ describe("SuperAdminController — setup tenant", () => {
     } } as any, mockRes(), next);
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 409, code: "EMAIL_EXISTS" }));
+  });
+
+  it.each(["admin", "member"])("recusa cargo %s: cliente novo nasce só com titular", async (userRole) => {
+    const repo = mockRepo();
+    const next = vi.fn();
+
+    await new SuperAdminController(repo as any).setupTenant({ body: {
+      name: "Cliente", userName: "Owner", userEmail: "owner@example.com", userPassword: "SenhaSegura1!", userRole,
+    } } as any, mockRes(), next);
+
+    const err = next.mock.calls[0][0];
+    expect(describeZodIssues(err.issues)).toBe("Verifique o campo: Cargo: todo cliente novo nasce com o usuário titular.");
+    expect(repo.createTenantWithUser).not.toHaveBeenCalled();
+  });
+
+  it("sem cargo no corpo, cria com titular", async () => {
+    const repo = mockRepo();
+    repo.findTenantBySlug.mockResolvedValue(null);
+    repo.findUserByEmailCaseInsensitive.mockResolvedValue(null);
+    repo.createTenantWithUser.mockResolvedValue({ status: "created", tenant: { id: "t" }, user: { id: "u" } });
+
+    await new SuperAdminController(repo as any).setupTenant({ body: {
+      name: "Cliente", userName: "Owner", userEmail: "owner@example.com", userPassword: "SenhaSegura1!",
+    } } as any, mockRes(), vi.fn());
+
+    expect(repo.createTenantWithUser).toHaveBeenCalledWith(expect.objectContaining({ userRole: "owner" }));
   });
 
   it("rejeita slug gerado vazio antes de qualquer escrita", async () => {

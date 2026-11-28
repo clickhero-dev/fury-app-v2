@@ -41,14 +41,14 @@ describe('Plans', () => {
   it('cliente de parceiro: botão desativado e sem Asaas/trial', () => {
     renderAs('user_partner', [partnerPlan]);
     expect(screen.getByText('Básico Parceiro')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Fale com seu parceiro' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Fale com o suporte' })).toBeDisabled();
     expect(screen.queryByText(/Asaas/)).toBeNull();
     expect(screen.queryByText(/7 dias de trial/)).toBeNull();
   });
 
   it('parceiro sem planos: aviso, sem planos de exemplo', () => {
     renderAs('user_partner', []);
-    expect(screen.getByText('Seu parceiro ainda não publicou planos.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum plano disponível no momento. Fale com o suporte.')).toBeInTheDocument();
     expect(screen.queryByText('Starter')).toBeNull();
   });
 

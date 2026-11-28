@@ -45,6 +45,28 @@ describe('BusinessContextImprover', () => {
     expect(screen.queryByText('Original')).toBeNull();
   });
 
+  it('mostra o motivo da API (ex.: parceiro sem chave de IA)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, body: null, json: async () => ({ error: { code: 'AI_UNAVAILABLE', message: 'IA indisponível no momento. Fale com o suporte.' } }) }));
+    render(<BusinessContextImprover value="Original" onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /melhorar contexto/i }));
+    expect(await screen.findByText('Não foi possível melhorar o texto. IA indisponível no momento. Fale com o suporte.')).toBeTruthy();
+  });
+
+  it('401 sem mensagem diz que a sessão expirou', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, body: null, json: async () => ({}) }));
+    render(<BusinessContextImprover value="Original" onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /melhorar contexto/i }));
+    expect(await screen.findByText('Não foi possível melhorar o texto. Sua sessão expirou. Entre novamente.')).toBeTruthy();
+  });
+
+  it('erro 500 não mostra texto técnico', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, body: null, json: async () => ({ error: { message: 'relation "x" does not exist' } }) }));
+    render(<BusinessContextImprover value="Original" onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /melhorar contexto/i }));
+    expect(await screen.findByText(/^Não foi possível melhorar o texto\. Erro no servidor/)).toBeTruthy();
+    expect(screen.queryByText(/relation/)).toBeNull();
+  });
+
   it('não permite usar sugestão desatualizada depois que o texto original muda', async () => {
     const onChange = vi.fn();
     const body = new ReadableStream({

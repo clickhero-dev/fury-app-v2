@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { AdySymbol } from '@/components/AdySymbol';
 import { Loader2 } from 'lucide-react';
+import { errorMessage } from '@/lib/error-message';
 
 export function MetaAuthorizePage() {
   const navigate = useNavigate();
@@ -37,10 +38,10 @@ export function MetaAuthorizePage() {
           setError('Seu período de teste expirou. Entre em contato com o suporte.');
           setErrorType('trial_expired');
         } else if (status === 500) {
-          setError('Erro no servidor. Tente novamente em alguns momentos.');
+          setError(errorMessage(err, 'Não foi possível conectar com a Meta'));
           setErrorType('server_error');
         } else {
-          setError('Não foi possível conectar com Meta. Tente novamente.');
+          setError(errorMessage(err, 'Não foi possível conectar com a Meta'));
           setErrorType('other');
         }
       });

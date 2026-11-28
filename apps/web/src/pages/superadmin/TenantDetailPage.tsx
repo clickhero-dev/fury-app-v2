@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Save,
   UserPlus,
@@ -45,6 +45,7 @@ import { UserPager } from "./tenant-detail/UserPager";
 import { CreateUserModal } from "./tenant-detail/CreateUserModal";
 import { ResetPasswordModal } from "./tenant-detail/ResetPasswordModal";
 import { formatPlanPrice, intervalLabel, statusLabel } from "./subscriptionLabels";
+import { errorMessage } from "@/lib/error-message";
 
 type Tab =
   "users" | "subscription" | "config" | "metas" | "publico" | "brandkit";
@@ -62,6 +63,8 @@ interface TenantData {
     platformRole?: string | null;
     createdAt: string;
   }[];
+  // conta própria do parceiro: sem assinatura, uso ilimitado
+  partnerAccount?: { partnerId: string; partnerName: string; planName: string | null } | null;
   subscription: {
     id: string;
     planId: string;
@@ -175,6 +178,7 @@ export function TenantDetailPage() {
   const [data, setData] = useState<TenantData | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [renewingQuota, setRenewingQuota] = useState(false);
   // assinatura e planos: só super_admin (a API também recusa)
@@ -344,7 +348,7 @@ export function TenantDetailPage() {
         setPhotoUrls(t.brandKit?.photoUrls ?? []);
         if (t.businessContext) setBusinessContext(t.businessContext);
       })
-      .catch(() => {})
+      .catch((err) => setLoadError(errorMessage(err, "Não foi possível carregar o cliente")))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -361,8 +365,8 @@ export function TenantDetailPage() {
         await fn();
         setMsg(okMsg);
         await reload();
-      } catch {
-        setMsg("Erro ao salvar");
+      } catch (err) {
+        setMsg(errorMessage(err, "Não foi possível salvar"));
       } finally {
         setSaving(false);
       }
@@ -391,8 +395,8 @@ export function TenantDetailPage() {
       await api.post(`/admin/tenants/${id}/reset-quota`);
       setMsg("Cota de créditos renovada");
       await reload();
-    } catch {
-      setMsg("Não foi possível renovar a cota. Tente novamente.");
+    } catch (err) {
+      setMsg(errorMessage(err, "Não foi possível renovar a cota"));
     } finally {
       setRenewingQuota(false);
     }
@@ -452,8 +456,8 @@ export function TenantDetailPage() {
       });
       setBrandForm((prev) => ({ ...prev, logoUrl: res.data.data.url }));
       setMsg("Logo enviada!");
-    } catch {
-      setMsg("Erro ao enviar logo. Use uma URL.");
+    } catch (err) {
+      setMsg(errorMessage(err, "Não foi possível enviar a logo"));
     }
   }
 
@@ -475,8 +479,8 @@ export function TenantDetailPage() {
       });
       setPhotoUrls((prev) => [...prev, ...res.data.data.urls]);
       setMsg("Fotos enviadas!");
-    } catch {
-      setMsg("Erro ao enviar fotos.");
+    } catch (err) {
+      setMsg(errorMessage(err, "Não foi possível enviar as fotos"));
     }
   }
 
@@ -496,8 +500,8 @@ export function TenantDetailPage() {
       const fresh = await reload();
       // mostra o usuário novo
       setUserPage(Math.max(1, Math.ceil(fresh.users.length / USERS_PER_PAGE)));
-    } catch {
-      setCreateError("Erro ao criar usuário");
+    } catch (err) {
+      setCreateError(errorMessage(err, "Não foi possível criar o usuário"));
     } finally {
       setSaving(false);
     }
@@ -512,8 +516,8 @@ export function TenantDetailPage() {
       await api.post(`/admin/users/${resetTarget.id}/password`, { password });
       setMsg(`Senha de ${resetTarget.name} alterada`);
       setResetTarget(null);
-    } catch {
-      setResetError("Não foi possível trocar a senha. Tente novamente.");
+    } catch (err) {
+      setResetError(errorMessage(err, "Não foi possível trocar a senha"));
     } finally {
       setResetting(false);
     }
@@ -539,8 +543,8 @@ export function TenantDetailPage() {
       setMsg("Usuário atualizado");
       setEditUser(null);
       await reload();
-    } catch {
-      setMsg("Erro ao atualizar usuário");
+    } catch (err) {
+      setMsg(errorMessage(err, "Não foi possível atualizar o usuário"));
     } finally {
       setSaving(false);
     }
@@ -559,8 +563,8 @@ export function TenantDetailPage() {
       setMsg("Usuário removido");
       setDeleteUserTarget(null);
       await reload();
-    } catch {
-      setDeleteUserError("Não foi possível remover. Tente novamente.");
+    } catch (err) {
+      setDeleteUserError(errorMessage(err, "Não foi possível remover"));
       // nova tentativa do titular volta a esperar
       if (removesWholeClient) setConfirmSeconds(TITULAR_REMOVAL_WAIT_SECONDS);
     } finally {
@@ -577,8 +581,8 @@ export function TenantDetailPage() {
     );
   if (!data)
     return (
-      <div className="text-admin-text-faint text-sm py-12 text-center">
-        Cliente não encontrado
+      <div role={loadError ? "alert" : undefined} className="text-admin-text-faint text-sm py-12 text-center">
+        {loadError || "Cliente não encontrado"}
       </div>
     );
 
@@ -587,7 +591,9 @@ export function TenantDetailPage() {
     maxMembers: MAX_PARTNER_CLIENT_MEMBERS,
     labels: { objectives: OBJECTIVES, genders: GENDERS, tones: VOICE_TONES },
   });
-  const sectionItems: SectionItem<Tab>[] = SECTIONS.map((s) => ({ ...s, ...summaries[s.key] }));
+  const partnerAccount = data.partnerAccount ?? null;
+  // conta do parceiro não tem assinatura: some a aba
+  const sectionItems: SectionItem<Tab>[] = SECTIONS.filter((s) => !(partnerAccount && s.key === "subscription")).map((s) => ({ ...s, ...summaries[s.key] }));
 
   const memberLimitReached = !isSuperAdmin && data.users.filter((u) => u.role === "member").length >= MAX_PARTNER_CLIENT_MEMBERS;
   // página válida mesmo após remover
@@ -623,6 +629,16 @@ export function TenantDetailPage() {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {partnerAccount && (
+        <div role="note" className="mb-4 bg-admin-petrol/10 border border-admin-petrol/30 rounded-2xl px-5 py-4 text-sm text-admin-text">
+          <strong>Conta do parceiro {partnerAccount.partnerName}</strong>
+          {partnerAccount.planName ? ` · Plano ${partnerAccount.planName}` : ""} · uso ilimitado com a chave OpenRouter do parceiro, sem assinatura.{" "}
+          <Link to={`/admin/parceiros/${partnerAccount.partnerId}`} className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline">
+            Ver parceiro
+          </Link>
         </div>
       )}
 
@@ -826,7 +842,7 @@ export function TenantDetailPage() {
       )}
 
       {/* ── Subscription ────────────────────────────── */}
-      {tab === "subscription" && (
+      {tab === "subscription" && !partnerAccount && (
         <div className="space-y-4">
           {(() => {
             const subscription = data?.subscription;

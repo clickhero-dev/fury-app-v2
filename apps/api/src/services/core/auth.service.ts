@@ -17,7 +17,6 @@ import { AuthRepository } from '../../repository/auth.repository.js';
 import { slugify } from '../../lib/slug.js';
 import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
-const REFRESH_TOKEN_TTL = SESSION_TTL_SECONDS;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export const DEMO_TENANT_SLUG = 'fashion-demo';
@@ -68,11 +67,11 @@ function generateSecureOtp(): string {
   return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 }
 
-async function storeRefreshTokenHash(userId: string, refreshToken: string, ttl = REFRESH_TOKEN_TTL): Promise<void> {
+async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   const key = `refresh:${userId}`;
-  await redis.setex(key, ttl, hash);
+  await redis.setex(key, SESSION_TTL_SECONDS, hash);
 }
 
 async function verifyRefreshTokenHash(userId: string, refreshToken: string): Promise<boolean> {
@@ -126,7 +125,7 @@ export class AuthService {
 
   async register(data: { name: string; email: string; password: string; companyName: string }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
     const existingUser = await this.repo('').findUserByEmail(data.email);
-    if (existingUser) throw new AppError(409, 'EMAIL_EXISTS', 'Email already registered');
+    if (existingUser) throw new AppError(409, 'EMAIL_EXISTS', 'E-mail já cadastrado');
 
     const baseSlug = generateSlug(data.companyName);
     const slug = await this.ensureUniqueSlug(baseSlug);
@@ -165,12 +164,12 @@ export class AuthService {
 
   async login(data: { email: string; password: string }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
     const user = await this.repo('').findUserByEmail(data.email);
-    if (!user || !user.passwordHash) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!user || !user.passwordHash) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
     // conta excluída responde igual a senha errada (não revela que existe)
-    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -203,31 +202,22 @@ export class AuthService {
   }
 
   async refresh(data: { refreshToken: string }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
-    const t0 = Date.now();
     const payload = this.deps.jwt.verifyRefreshToken(data.refreshToken);
-    const t1 = Date.now();
     const isValid = await verifyRefreshTokenHash(payload.userId, data.refreshToken);
-    const t2 = Date.now();
-    if (!isValid) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or revoked refresh token');
+    if (!isValid) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sessão expirada. Entre novamente.');
 
     const user = await this.repo('').findUserById(payload.userId);
-    const t3 = Date.now();
-    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
 
-    const remainingTtl = payload.sessionExpiresAt === undefined ? undefined : payload.sessionExpiresAt - Math.floor(Date.now() / 1000);
-    if (remainingTtl !== undefined && remainingTtl <= 0) throw new AppError(401, 'REFRESH_TOKEN_EXPIRED', 'Refresh token has expired');
-    await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
       role: user.role,
-    }, payload.sessionExpiresAt);
-    const refreshToken = this.deps.jwt.generateRefreshToken(user.id, payload.sessionExpiresAt);
-    await storeRefreshTokenHash(user.id, refreshToken, remainingTtl);
-    const t4 = Date.now();
-    console.log(`[refresh] jwt=${t1 - t0}ms redis.get=${t2 - t1}ms pg.user=${t3 - t2}ms redis.setex=${t4 - t3}ms total=${t4 - t0}ms`);
-
+    }, payload.exp);
+    // O refresh token é estável até o vencimento absoluto da sessão. Isso
+    // permite retries e requisições concorrentes sem perder a sessão.
+    const refreshToken = data.refreshToken;
     return { tokens: { accessToken, refreshToken } };
   }
 
@@ -237,7 +227,7 @@ export class AuthService {
 
   async getMe(userId: string): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     const tenant = await this.repo(user.tenantId).findTenant();
     return {
       ...userToDTO(user),
@@ -259,7 +249,7 @@ export class AuthService {
     data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown>; businessContext?: string },
   ): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
 
     const userUpdates: Record<string, unknown> = {};
     if (data.name !== undefined) userUpdates.name = data.name;
@@ -347,7 +337,7 @@ export class AuthService {
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     if (!user.passwordHash) throw new AppError(400, 'NO_PASSWORD', 'Sua conta usa login social. Defina uma senha primeiro.');
 
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -364,7 +354,7 @@ export class AuthService {
    */
   async setInitialPassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
     if (user.passwordHash && !user.mustChangePassword) {
       throw new AppError(409, 'PASSWORD_ALREADY_SET', 'Esta conta já tem uma senha. Use "alterar senha".');
     }

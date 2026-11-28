@@ -117,7 +117,7 @@ describe('PlansPage', () => {
     await user.click(within(pro).getByRole('button', { name: 'Editar' }));
     await user.click(screen.getByRole('switch', { name: 'Ativo' }));
     await user.click(screen.getByRole('button', { name: 'Salvar' }));
-    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Erro ao salvar');
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Não foi possível salvar o plano.');
   });
 
   it('Sem vídeo trava as modificações de vídeo', async () => {

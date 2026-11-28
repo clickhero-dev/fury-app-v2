@@ -209,7 +209,11 @@ describe('RbacService.checkServices', () => {
   it('consulta bloqueios com papel e parceiro do usuário', async () => {
     const repo = fakeRepo({ platformRole: 'user_partner', partnerId: 'p9' });
     await new RbacService(repo, () => fakeRedis()).checkServices('u1', ['studio']);
-    expect(repo.listBlockedServiceKeys).toHaveBeenCalledWith('user_partner', 'p9');
+    // mundo do parceiro: só o escopo dele, sem o padrão
+    expect(repo.listBlockedServiceKeys).toHaveBeenCalledWith('user_partner', 'p9', false);
+    const ady = fakeRepo({ platformRole: 'user', partnerId: null });
+    await new RbacService(ady, () => fakeRedis()).checkServices('u2', ['studio']);
+    expect(ady.listBlockedServiceKeys).toHaveBeenCalledWith('user', null);
   });
 
   it('usa o cache na segunda chamada', async () => {
@@ -363,9 +367,10 @@ describe('RbacService.listBlockedViews', () => {
   });
 
   it('devolve só as telas bloqueadas', async () => {
-    const repo = fakeViewRepo({ platformRole: 'admin_partner', partnerId: 'p1' }, ['admin.tickets', 'admin.faqs']);
-    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual(['admin.tickets', 'admin.faqs']);
-    expect(repo.listBlockedViewKeys).toHaveBeenCalledWith('admin_partner', 'p1');
+    const repo = fakeViewRepo({ platformRole: 'admin_partner', partnerId: 'p1' }, ['calendar', 'goals']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual(['goals', 'calendar']);
+    // parceiro: bloqueios do próprio parceiro (papel dos clientes), sem o padrão
+    expect(repo.listBlockedViewKeys).toHaveBeenCalledWith('user_partner', 'p1', false);
   });
 
   it('pai bloqueado expande para os filhos', async () => {
@@ -374,6 +379,8 @@ describe('RbacService.listBlockedViews', () => {
       'campaigns',
       'campaigns.create',
       'campaigns.rules',
+      // Clientes (leads) vêm das campanhas
+      'leads',
     ]);
   });
 
@@ -792,5 +799,41 @@ describe('RbacService — plano do cliente', () => {
     expect(await noImage.checkServices('u1', resolveServiceKeys('/studio/assets')!)).toBe('allowed');
     const noVideo = new RbacService(fakePlanRepo(owner, ['studio.video']), () => fakeRedis());
     expect(await noVideo.checkServices('u1', resolveServiceKeys('/studio/ai/generate-video')!)).toBe('blocked');
+  });
+});
+
+describe('RbacService — parceiro sem parceiro identificado (fail-closed)', () => {
+  it('conta ou cliente de parceiro órfão: bloqueado em tudo, menos rota fora do catálogo', async () => {
+    for (const platformRole of ['user_partner', 'admin_partner']) {
+      const repo = fakeViewRepo({ platformRole, partnerId: null });
+      const svc = new RbacService(repo, () => fakeRedis());
+      expect(await svc.checkServices('u1', ['goals'])).toBe('blocked');
+      expect(await svc.checkServices('u1', [])).toBe('allowed');
+      expect(await svc.listBlockedViews('u1')).toEqual(RBAC_VIEWS.map((v) => v.key));
+      expect(repo.listBlockedServiceKeys).not.toHaveBeenCalled();
+    }
+  });
+
+  it('cliente ady não é afetado', async () => {
+    const svc = new RbacService(fakeViewRepo({ platformRole: 'user', partnerId: null }), () => fakeRedis());
+    expect(await svc.checkServices('u1', ['goals'])).toBe('allowed');
+  });
+
+  it('rotinas: cliente de parceiro órfão não roda; cliente ady segue o plano', async () => {
+    const scope = vi.fn();
+    const repo = { ...fakeViewRepo(null, ['calendar']), findTenantPartnerScope: scope, listPlanBlockedViewKeys: vi.fn(async () => []) };
+    const svc = new RbacService(repo, () => fakeRedis());
+    scope.mockResolvedValue({ partnerWorld: true, partnerId: null });
+    expect(await svc.tenantBlocks('t1', 'goals')).toBe(true);
+    scope.mockResolvedValue({ partnerWorld: false, partnerId: null });
+    expect(await svc.tenantBlocks('t1', 'goals')).toBe(false);
+    scope.mockResolvedValue({ partnerWorld: true, partnerId: 'p1' });
+    expect(await svc.tenantBlocks('t1', 'calendar')).toBe(true);
+    expect(await svc.tenantBlocks('t1', 'goals')).toBe(false);
+    // parceiro sem Campanhas: a rotina de leads também pula
+    scope.mockResolvedValue({ partnerWorld: true, partnerId: 'p2' });
+    repo.listBlockedViewKeys.mockResolvedValue(['campaigns']);
+    expect(await svc.tenantBlocks('t2', 'leads')).toBe(true);
+    expect(repo.listBlockedViewKeys).toHaveBeenCalledWith('user_partner', 'p1', false);
   });
 });

@@ -148,9 +148,9 @@ class AdyTools:
 
 
     async def brand_photos(self, kind: str = '', page: int = 1, limit: int = 20) -> dict:
-        """Consultar fotos da marca por tipo (produto, equipe ou modelo), página e limite até 50; confira hasMore. Para vídeo, use apenas fotos produto ou equipe."""
+        """Consultar fotos da marca por tipo (empresa, produto, equipe ou modelo), página e limite até 50; confira hasMore. Para vídeo, use apenas fotos produto ou equipe."""
         try:
-            if kind not in ('', 'produto', 'equipe', 'modelo') or isinstance(page, bool) or isinstance(limit, bool) or page < 1 or not 1 <= limit <= 50:
+            if kind not in ('', 'empresa', 'produto', 'equipe', 'modelo') or isinstance(page, bool) or isinstance(limit, bool) or page < 1 or not 1 <= limit <= 50:
                 raise ValueError()
             params = {'page':page, 'limit':limit}
             if kind: params['kind'] = kind
@@ -169,7 +169,7 @@ class ImageProposal:
         self.emit = emit
         self.ady = ady
 
-    async def propose_image(self, prompt: str, model: str, aspect_ratio: str = '1:1', resolution: str = '2K', reference_image_urls: list[str] | None = None, photo_ids: list[str] | None = None) -> dict:
+    async def propose_image(self, prompt: str, model: str, aspect_ratio: str = '1:1', resolution: str = '2K', reference_image_urls: list[str] | None = None, photo_ids: list[str] | None = None, save_as_logo: bool = False) -> dict:
         """Propor criação de imagem. Modelos: black-forest-labs/flux.2-klein-4b, black-forest-labs/flux.2-max, black-forest-labs/flux.2-pro, bytedance-seed/seedream-5-0-pro, x-ai/grok-imagine-image-2.0, qwen/qwen-image-3-pro, google/gemini-3.1-flash-image. Pode usar até duas fotos produto/equipe da biblioteca por photo_ids; não misture com URLs. Aguardará confirmação."""
         import json
         from uuid import UUID
@@ -184,9 +184,11 @@ class ImageProposal:
             return {'error':'Informe até dois IDs válidos de fotos ou URLs de referência, sem misturar.'}
         if reference_image_urls is not None and (len(reference_image_urls) > 2 or any(urlparse(url).scheme != 'https' or not urlparse(url).netloc for url in reference_image_urls)):
             return {'error':'Informe até duas imagens de referência HTTPS.'}
-        if not 10 <= len(prompt) <= 1000 or model not in self.MODELS or aspect_ratio not in ('1:1', '16:9', '9:16') or resolution not in ('1K','2K','4K'):
+        if type(save_as_logo) is not bool or not 10 <= len(prompt) <= 1000 or model not in self.MODELS or aspect_ratio not in ('1:1', '16:9', '9:16') or resolution not in ('1K','2K','4K'):
             return {'error': 'Informe descrição, modelo, proporção e resolução válidos.'}
         body = {'prompt': prompt, 'model': model, 'aspect_ratio': aspect_ratio, 'resolution': resolution}
+        if save_as_logo:
+            body['save_as_logo'] = True
         if reference_image_urls:
             body['reference_image_urls'] = reference_image_urls
         if normalized_photos:
@@ -196,6 +198,15 @@ class ImageProposal:
         if self.emit:
             await self.emit(approval)
         return approval
+
+    async def propose_logo_creation(self, business_name: str, description: str = '') -> dict:
+        """Propor uma logomarca quadrada. Após confirmação e geração bem-sucedida, ela será salva automaticamente na marca com cores extraídas."""
+        name = business_name.strip()
+        if not 1 <= len(name) <= 255 or len(description) > 500:
+            return {'error': 'Informe um nome de negócio e uma descrição curta opcional.'}
+        detail = f' Estilo desejado: {description.strip()}.' if description.strip() else ''
+        prompt = f'Logomarca original, simples e legível para {name}, sem preços, sem promoções e sem texto pequeno.{detail}'
+        return await self.propose_image(prompt, 'black-forest-labs/flux.2-klein-4b', '1:1', '1K', save_as_logo=True)
 
     async def _propose(self, action: str, path: str, body: dict, display: dict | None = None) -> dict:
         import json

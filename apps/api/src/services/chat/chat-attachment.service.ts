@@ -43,7 +43,7 @@ export class ChatAttachmentService {
     const validated: Array<{ file: MediaInput; item: NewAttachment }> = [];
     for (const file of files) {
       const value = await this.validator.attachment(file);
-      validated.push({ file, item: { ...value, id: randomUUID(), storageKey: randomUUID(), metadata: { ...value.metadata, sha256: hash(file.buffer), uploadState: 'pending' } } });
+      validated.push({ file, item: { ...value, id: randomUUID(), storageKey: this.storage.newKey?.(value.mimeType) ?? randomUUID(), metadata: { ...value.metadata, sha256: hash(file.buffer), uploadState: 'pending' } } });
     }
     const repository = this.repository(tenantId, userId);
     const reserved = await repository.withConversation(conversationId, async repo => {

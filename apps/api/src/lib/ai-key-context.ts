@@ -65,7 +65,7 @@ export async function resolveAiKey(repo: Pick<PartnerRepository, 'findAiKeyByTen
   const row = await repo.findAiKeyByTenant(ctx.tenantId);
   if (!row) throw new AppError(403, 'AI_UNAVAILABLE', 'IA indisponível no momento.');
   if (!row.partnerId) return adyKey();
-  if (!row.encrypted) throw new AppError(503, 'AI_UNAVAILABLE', 'IA indisponível no momento. Fale com seu parceiro.');
+  if (!row.encrypted) throw new AppError(503, 'AI_UNAVAILABLE', 'IA indisponível no momento. Fale com o suporte.');
 
   const value = { key: decryptAccessToken(row.encrypted), scope: row.partnerId };
   cache.set(ctx.tenantId, { expiresAt: Date.now() + CACHE_TTL_MS, value });

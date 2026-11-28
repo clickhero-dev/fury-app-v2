@@ -15,7 +15,8 @@ provider ou ferramenta para aprovar/iniciar/concluir. A UI relê por polling.
 
 Validação de parâmetros espelha chat-plan.domain.ts / ImageProposal, mas não
 substitui autorização, escopo, moeda BRL, propriedade da mídia nem execução no
-backend. dependsOn só estabelece ordem; não interpola parâmetros/resultados.
+backend. Referências tipadas em parameters exigem tarefa anterior e dependência
+direta; somente o backend resolve resultados e verifica propriedade de assets.
 Não são feitas chamadas a provedores para validar ou montar um rascunho.
 Este módulo não emite logs de token, identificador, prompt, payload, resultado
 ou exceção crua; a configuração de logs do cliente HTTP pertence ao caller.
@@ -49,7 +50,8 @@ __all__ = ['PlanTools', 'PLAN_AGENT_INSTRUCTIONS', 'PLAN_READ_ONLY_INSTRUCTIONS'
 
 PLAN_AGENT_INSTRUCTIONS = (
     'Quando a pessoa pedir um plano, checklist, todo ou trabalho com várias etapas, use create_plan para salvar um plano real nesta conversa; não substitua o plano persistido por uma lista apenas em Markdown. Antes de recriar ou continuar um plano, consulte list_plans e get_plan.',
-    'Crie de 1 a 20 tarefas com chaves únicas e dependsOn apontando para chaves, sem ciclos. Use somente as capacidades documentadas. Para trabalho fora do escopo, use manual com instruções claras; não prometa que a Ady o executará. Não invente IDs, URLs de mídias ou parâmetros faltantes: consulte recursos autorizados ou peça os dados. dependsOn não substitui parâmetros com resultados de outras tarefas.',
+    'Crie de 1 a 20 tarefas com chaves únicas e dependsOn apontando para chaves, sem ciclos. Use somente as capacidades documentadas. Para trabalho fora do escopo, use manual com instruções claras; não prometa que a Ady o executará. Não invente IDs ou URLs. Para aproveitar saídas anteriores, use exatamente {"$result":{"task":"key-anterior","field":"text"}} em prompt de draft_text/propose_image/propose_video ou caption de propose_post, vindo somente de draft_text; image_url de propose_post aceita field assetUrl vindo de propose_image/propose_video. Exige origem anterior na lista e dependência direta em dependsOn. Sem templates, expressões, código ou campos de saída arbitrários. O backend resolve a URL pelo asset autorizado, nunca por URL do resultado. Não peça UUID/URL ao usuário quando a mídia será gerada no próprio plano.',
+    'Encadeie ideia (draft_text), legenda (draft_text dependendo da ideia), arte (propose_image dependendo da legenda), revisão humana (manual dependendo de legenda e arte) e agendamento (propose_post dependendo diretamente de legenda, arte e revisão). Use referências à legenda e à arte no agendamento. Cada proposta sensível continua exigindo aprovação separada.',
     'Depois de create_plan retornar plan em draft, explique que o plano está salvo e aguarde o botão Aprovar e executar. Uma resposta textual, arquivo ou ferramenta não é aprovação humana. Não execute nem proponha ações das etapas por outras ferramentas para contornar esse botão; ações sensíveis continuarão exigindo aprovação separada.',
     'Relate somente o estado, resultado e erro confirmados por list_plans/get_plan. Não declare tarefa concluída por ter sido planejada, proposta, aprovada ou enfileirada; waiting_approval ainda aguarda ação humana. Tarefas manual só podem ser concluídas pelo usuário na interface.',
     'Se a ferramenta retornar error, explique a falha sem inventar sucesso. Se outcome for unknown, não repita create_plan: consulte list_plans para verificar se o rascunho já foi salvo. Não faça polling em loop com ferramentas; o card atualiza pela interface.',
@@ -88,6 +90,24 @@ def _origin(value: str) -> str:
 def _text(value: object, maximum: int, field: str, minimum: int = 1) -> None:
     if not isinstance(value, str) or not minimum <= len(value.strip()) or len(value) > maximum:
         raise ValueError(f'Informe {field} com {minimum} a {maximum} caracteres.')
+
+
+def _result_reference(value: dict, field: str) -> str:
+    if set(value) != {'$result'}:
+        raise ValueError()
+    ref = value['$result']
+    if (not isinstance(ref, dict) or set(ref) != {'task', 'field'}
+            or ref['field'] != field or not isinstance(ref['task'], str)
+            or not _KEY.fullmatch(ref['task'])):
+        raise ValueError()
+    return ref['task']
+
+
+def _text_or_reference(value: object, maximum: int, field: str, minimum: int = 1) -> None:
+    if isinstance(value, dict):
+        _result_reference(value, 'text')
+    else:
+        _text(value, maximum, field, minimum)
 
 
 _PARAMETER_FIELDS = {
@@ -134,7 +154,7 @@ def _photo_ids(values: list[str], maximum: int) -> None:
 
 
 def _image_parameters(p: dict) -> None:
-    _text(p['prompt'], 1000, 'prompt', 10)
+    _text_or_reference(p['prompt'], 1000, 'prompt', 10)
     _choice(p['model'], ImageProposal.MODELS)
     _choice(p.get('aspect_ratio', '1:1'), ('1:1', '16:9', '9:16'))
     _choice(p.get('resolution', '2K'), ('1K', '2K', '4K'))
@@ -147,7 +167,7 @@ def _image_parameters(p: dict) -> None:
 
 
 def _video_parameters(p: dict) -> None:
-    _text(p['prompt'], 1000, 'prompt', 10)
+    _text_or_reference(p['prompt'], 1000, 'prompt', 10)
     _text(p['visual'], 600, 'visual', 3)
     _text(p.get('narration', ''), 400, 'narration', 0)
     _choice(p.get('aspect_ratio', '9:16'), ('16:9', '9:16'))
@@ -155,7 +175,7 @@ def _video_parameters(p: dict) -> None:
 
 
 def _post_parameters(p: dict) -> None:
-    _text(p['caption'], 5000, 'caption', 0)
+    _text_or_reference(p['caption'], 5000, 'caption', 0)
     _choice(p['post_type'], ('image', 'reel', 'stories', 'carousel'))
     when = p['scheduled_at']
     if not isinstance(when, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})', when):
@@ -171,6 +191,9 @@ def _post_parameters(p: dict) -> None:
         if 'image_urls' in p or 'image_url' not in p:
             raise ValueError()
         urls = [p['image_url']]
+        if isinstance(p['image_url'], dict):
+            _result_reference(p['image_url'], 'assetUrl')
+            return  # Source capability is checked below; concrete URL only in backend.
     for url in urls:
         _https(url)
     videos = {bool(re.search(r'\.(mp4|mov)(\?|$)', url, re.IGNORECASE)) for url in urls}
@@ -200,7 +223,7 @@ def _validate_parameters(capability: str, parameters: dict) -> None:
             _integer(parameters.get('limit', 20), 1, 100)
             _integer(parameters.get('offset', 0), 0, 100000)
         elif capability == 'draft_text':
-            _text(parameters['prompt'], 6000, 'prompt')
+            _text_or_reference(parameters['prompt'], 6000, 'prompt')
         elif capability == 'manual':
             _text(parameters['instructions'], 4000, 'instructions')
         elif capability == 'propose_image':
@@ -242,6 +265,8 @@ def _validate_tasks(tasks: list[dict], *, validate_parameters: bool = False) -> 
         graph[key] = set(dependencies)
     if any(deps - graph.keys() for deps in graph.values()):
         raise ValueError('Uma dependência aponta para tarefa inexistente.')
+    if validate_parameters:
+        _validate_bindings(tasks)
     remaining = dict(graph)
     while remaining:
         ready = {key for key, deps in remaining.items() if not deps & remaining.keys()}
@@ -249,6 +274,26 @@ def _validate_tasks(tasks: list[dict], *, validate_parameters: bool = False) -> 
             raise ValueError('As dependências do plano não podem formar ciclos nem apontar para a própria tarefa.')
         for key in ready:
             del remaining[key]
+
+
+def _validate_bindings(tasks: list[dict]) -> None:
+    by_key = {item['key']: (index, item) for index, item in enumerate(tasks)}
+    for index, item in enumerate(tasks):
+        for name, value in item['parameters'].items():
+            if not isinstance(value, dict):
+                continue
+            field = 'assetUrl' if name == 'image_url' else 'text'
+            key = _result_reference(value, field)
+            source_index, source = by_key.get(key, (len(tasks), {}))
+            source_capability = source.get('capability')
+            compatible = (source_capability == 'draft_text' if field == 'text'
+                          else source_capability in ('propose_image', 'propose_video'))
+            media_type = item['parameters'].get('post_type')
+            if field == 'assetUrl' and ((media_type == 'image' and source_capability != 'propose_image')
+                                       or (media_type == 'reel' and source_capability != 'propose_video')):
+                compatible = False
+            if source_index >= index or key not in item['dependsOn'] or not compatible:
+                raise ValueError('Referência exige resultado tipado de tarefa anterior e dependência direta em dependsOn.')
 
 
 _PLAN_FIELDS = frozenset({'id', 'conversationId', 'title', 'goal', 'status', 'version', 'tasks', 'createdAt', 'updatedAt'})
@@ -378,8 +423,19 @@ class PlanTools:
                   conta act_ seguida de 1..32 dígitos. Backend verifica acesso e BRL.
                 - manual: {instructions}, texto de 1 a 4000 caracteres para trabalho
                   fora do escopo; somente a pessoa confirma sua conclusão na interface.
-                Não invente campos, endpoints, fotos ou URLs; dependsOn ordena as etapas,
-                não interpola parâmetros usando resultados futuros. Propostas sensíveis
+                Para reutilizar saídas, um parâmetro pode ser exatamente
+                {"$result":{"task":"key-anterior","field":"text"}}: permitido em prompt
+                de draft_text/propose_image/propose_video e caption de propose_post,
+                somente vindo de draft_text. image_url de propose_post pode usar
+                {"$result":{"task":"key-da-arte","field":"assetUrl"}} vindo de
+                propose_image/propose_video (image exige imagem; reel exige vídeo).
+                Origem deve aparecer antes na lista e como dependência direta em
+                dependsOn, mesmo que já haja caminho transitivo. Arrays, outros campos,
+                templates, expressões e código não aceitam referências. O backend
+                resolve só resultados concluídos, busca asset pelo ID no tenant atual
+                e revalida comprimentos, mídia e horário. Não invente fotos ou URLs
+                nem peça UUID/URL de uma etapa que o próprio plano vai gerar.
+                Propostas sensíveis
                 aguardam aprovação separada mesmo após a aprovação inicial do plano.
 
         Returns:

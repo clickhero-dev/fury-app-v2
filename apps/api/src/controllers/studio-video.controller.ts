@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError, errorBody } from '../middleware/errorHandler.js';
 import { StudioVideoService, VIDEO_ASPECT_RATIOS, VIDEO_DURATIONS } from '../services/studio/studio-video.service.js';
 import { getDelegatedUser } from '../middleware/chat-delegation.middleware.js';
 
@@ -33,7 +33,7 @@ export class StudioVideoController {
 
   private tenantId(req: Request): string {
     const tenantId = (req as any).tenant?.tenantId as string | undefined;
-    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Cliente não identificado na sessão. Entre novamente.');
     return tenantId;
   }
 
@@ -83,7 +83,7 @@ export class StudioVideoController {
     try {
       const jobId = z.string().uuid().safeParse(req.params.jobId);
       if (!jobId.success) {
-        res.status(404).json({ error: 'Vídeo não encontrado.' });
+        res.status(404).json(errorBody('VIDEO_NOT_FOUND', 'Vídeo não encontrado.'));
         return;
       }
       res.json(await this.service.getJob(this.tenantId(req), jobId.data));

@@ -73,6 +73,8 @@ import { SuperAdminController } from './controllers/superadmin.controller.js';
 import { PartnerRepository } from './repository/partner.repository.js';
 import { PartnerController } from './controllers/partner.controller.js';
 import { PermissionsController } from './controllers/permissions.controller.js';
+import { PartnerPlanController } from './controllers/partner-plan.controller.js';
+import { PartnerPlanRepository } from './repository/partner-plan.repository.js';
 import { RbacRepository } from './repository/rbac.repository.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
@@ -102,10 +104,11 @@ import { ChatMediaController } from './controllers/chat-media.controller.js';
 import { ChatMediaValidator } from './services/chat/chat-media-validator.js';
 import { ChatTranscriptionService } from './services/chat/chat-transcription.service.js';
 import { ChatAttachmentService } from './services/chat/chat-attachment.service.js';
+import { ChatAttachmentPromotionService } from './services/chat/chat-attachment-promotion.service.js';
 import { ChatAttachmentReader } from './services/chat/chat-attachment-reader.js';
 import { OpenRouterChatMediaClient } from './services/chat/openrouter-chat-media.client.js';
 import { ChatAttachmentRepository } from './repository/chat-attachment.repository.js';
-import { createChatPrivateStorage } from './services/storage/chat-private-storage.js';
+import { createChatStudioStorage } from './services/storage/chat-studio-storage.js';
 import { createChatPlanRuntime } from './services/chat/chat-plan-runtime.js';
 import { getChatPlanQueue } from './workers/chat-plan.worker.js';
 
@@ -183,6 +186,7 @@ export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
+const partnerRepository = new PartnerRepository();
 export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
@@ -211,8 +215,9 @@ const chatMediaProvider = new OpenRouterChatMediaClient();
 export const chatTranscriptionService = new ChatTranscriptionService(chatMediaValidator, chatMediaProvider);
 export const chatAttachmentService = new ChatAttachmentService(
   (tenantId, userId) => new ChatAttachmentRepository(tenantId, userId),
-  createChatPrivateStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
+  createChatStudioStorage(), chatMediaValidator, new ChatAttachmentReader(chatMediaProvider),
 );
+export const chatAttachmentPromotionService = new ChatAttachmentPromotionService(chatAttachmentService, brandKitService, brandKitPhotoService);
 export const chatPlanRuntime = createChatPlanRuntime({
   baseUrl: process.env.INTERNAL_NODE_API_ORIGIN ?? `http://127.0.0.1:${process.env.PORT || '3000'}`,
   secret: process.env.CHAT_DELEGATION_SECRET ?? '',
@@ -220,7 +225,7 @@ export const chatPlanRuntime = createChatPlanRuntime({
 });
 
 export const controllers = {
-  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService),
+  chatMedia: new ChatMediaController(chatTranscriptionService, chatAttachmentService, chatAttachmentPromotionService),
   chatPlan: chatPlanRuntime.controller,
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
@@ -257,9 +262,10 @@ export const controllers = {
   ),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
-  superadmin: new SuperAdminController(superAdminRepository),
-  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
-  permissions: new PermissionsController(new RbacRepository(), new PartnerRepository()),
+  superadmin: new SuperAdminController(superAdminRepository, partnerRepository),
+  partners: new PartnerController(partnerRepository, superAdminRepository),
+  permissions: new PermissionsController(new RbacRepository(), partnerRepository),
+  partnerPlans: new PartnerPlanController(new PartnerPlanRepository()),
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),

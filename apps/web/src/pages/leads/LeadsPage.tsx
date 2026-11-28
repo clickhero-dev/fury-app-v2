@@ -8,6 +8,7 @@ import { useLeadStatus, LEAD_STATUS_OPTIONS } from '@/hooks/useLeadStatus';
 import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-format';
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 import { getLatestSync } from '../../lib/format-last-sync';
+import { errorMessage as describeError } from '@/lib/error-message';
 
 const PAGE_SIZE = 12;
 
@@ -78,24 +79,29 @@ function StatusBadge({ status }: { status: string }) {
 
 function CopyButton({ value, label }: { value: string | null; label: string }) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (!value) return null;
 
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(value);
+      setFailed(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
+      setFailed(true);
+      setTimeout(() => setFailed(false), 4000);
     }
   };
+  const failText = `Não foi possível copiar ${label}: o navegador bloqueou a área de transferência`;
 
   return (
     <button
       type="button"
       onClick={onCopy}
-      aria-label={copied ? `${label} copiado` : `Copiar ${label}`}
-      title={copied ? 'Copiado!' : `Copiar ${label}`}
+      aria-label={failed ? failText : copied ? `${label} copiado` : `Copiar ${label}`}
+      title={failed ? failText : copied ? 'Copiado!' : `Copiar ${label}`}
       className={`flex size-6 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${
         copied ? 'text-success' : 'text-text-tertiary hover:bg-surface-secondary hover:text-text-primary'
       }`}
@@ -225,8 +231,13 @@ export function LeadsPage() {
   );
   const leadStatusMutation = useLeadStatus();
 
+  const [statusError, setStatusError] = useState('');
   const onLeadStatusChange = (leadId: string, status: string) => {
-    leadStatusMutation.mutate({ id: leadId, status: status as (typeof LEAD_STATUS_OPTIONS)[number] });
+    setStatusError('');
+    leadStatusMutation.mutate(
+      { id: leadId, status: status as (typeof LEAD_STATUS_OPTIONS)[number] },
+      { onError: (err) => setStatusError(describeError(err, 'Não foi possível mudar o status do cliente')) },
+    );
   };
 
   const onSelectCampaign = (id: string) => {
@@ -247,6 +258,8 @@ export function LeadsPage() {
         title="Clientes"
         description="Pessoas que preencheram o formulário dos seus anúncios, buscadas direto do Meta Ads."
       />
+
+      {statusError && <p role="alert" className="text-sm text-error">{statusError}</p>}
 
       {/* Filtro por campanha de Formulário */}
       <div className="flex items-center gap-2.5">
